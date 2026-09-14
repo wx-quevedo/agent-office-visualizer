@@ -31,13 +31,13 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@opencode-ai/plugin": "1.18.4"
+    "@opencode-ai/plugin": "1.18.30"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.1.1",
-    "eslint": "^10.7.0",
+    "@types/node": "^26.5.1",
+    "eslint": "^10.10.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.70.0"
   }
 }
