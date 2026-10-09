@@ -30,6 +30,14 @@ _VALID_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 # beyond the local machine (QA-014).
 _LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
+def _is_tailnet(host):
+    import ipaddress
+    try:
+        return ipaddress.ip_address(host) in ipaddress.ip_network("100.64.0.0/10")
+    except Exception:
+        return False
+
+
 
 def _allowed_ws_origins() -> frozenset[str]:
     """Origins permitted for WebSocket connections, derived from settings.
@@ -42,7 +50,7 @@ def _allowed_ws_origins() -> frozenset[str]:
     return frozenset(
         origin.rstrip("/")
         for origin in get_settings().BACKEND_CORS_ORIGINS
-        if urlparse(origin).hostname in _LOCALHOST_HOSTS
+        if urlparse(origin).hostname in _LOCALHOST_HOSTS or _is_tailnet(urlparse(origin).hostname)
     )
 
 

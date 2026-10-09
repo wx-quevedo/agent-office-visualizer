@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["<TAILSCALE_IP>"],
   // Enable static export for production builds
   output: "export",
   // Disable image optimization (not supported in static export)

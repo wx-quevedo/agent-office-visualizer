@@ -14,7 +14,7 @@ def is_safe_transcript_path(path: str | Path) -> bool:
     try:
         resolved = Path(path).expanduser().resolve()
         claude_dir = Path.home().joinpath(".claude").resolve()
-        return resolved.suffix == ".jsonl" and resolved.is_relative_to(claude_dir)
+        return resolved.suffix == ".jsonl" and (resolved.is_relative_to(claude_dir) or resolved.is_relative_to(Path.home().joinpath(".claude-demo").resolve()))
     except Exception:
         return False
 

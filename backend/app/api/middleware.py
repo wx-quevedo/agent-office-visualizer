@@ -23,6 +23,14 @@ settings = get_settings()
 
 _LOCALHOST_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
 
+def _is_tailnet(host):
+    import ipaddress
+    try:
+        return ipaddress.ip_address(host) in ipaddress.ip_network("100.64.0.0/10")
+    except Exception:
+        return False
+
+
 
 class LocalhostOnlyMiddleware(BaseHTTPMiddleware):
     """Reject HTTP requests from non-localhost origins.
@@ -37,7 +45,7 @@ class LocalhostOnlyMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         client_host = request.client.host if request.client else None
-        if client_host not in _LOCALHOST_HOSTS:
+        if client_host not in _LOCALHOST_HOSTS and not _is_tailnet(client_host):
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Access denied: localhost only"},

@@ -160,7 +160,7 @@ try:
                 and hasattr(real_stdin, "isatty")
                 and not real_stdin.isatty()
             ):
-                raw_input = real_stdin.read()
+                raw_input = real_stdin.buffer.read().decode("utf-8", errors="replace")
                 if raw_input.strip():
                     raw_data = cast(dict[str, Any], json.loads(raw_input))
         except Exception as exc:
