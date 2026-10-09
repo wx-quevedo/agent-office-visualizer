@@ -2,11 +2,14 @@
 
 BACKEND_STATIC_DIR := ../backend/static
 
+# Port for the Next.js server (override: make dev FRONTEND_PORT=3100)
+FRONTEND_PORT ?= 3000
+
 # Detect package manager: prefer bun if available, otherwise use npm
 PKG_MGR := $(shell command -v bun >/dev/null 2>&1 && echo "bun" || echo "npm")
 
 dev:
-	$(PKG_MGR) run dev
+	$(PKG_MGR) run dev -- --port $(FRONTEND_PORT)
 
 build:
 	$(PKG_MGR) run build
@@ -19,7 +22,7 @@ build-static:
 	@echo "Static build copied to $(BACKEND_STATIC_DIR)"
 
 start:
-	$(PKG_MGR) run start
+	$(PKG_MGR) run start -- --port $(FRONTEND_PORT)
 
 lint:
 	$(PKG_MGR) run lint

@@ -51,7 +51,40 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-09 | claude-office instalado y funcionando con ambas cuentas, en PC e iPhone (Tailscale) |
 | 2026-10-09 | Investigación de herramientas similares y catálogo de estados del avatar (en `docs/proyecto/`) |
 | 2026-10-09 | Creación del repositorio propio a partir de claude-office |
-| 2026-10-09 | Commit inicial `be4c8e3`: base claude-office 0.24.1 (`3522c16`) con los 5 ajustes locales, PROJECT.md y `docs/proyecto/` |
+| 2026-10-09 | Commit inicial `7dcaffb`: base claude-office 0.24.1 (`3522c16`) con los 5 ajustes locales, PROJECT.md y `docs/proyecto/` |
+| 2026-10-09 | Puertos configurables (`BACKEND_PORT`, `FRONTEND_PORT`, `NEXT_PUBLIC_BACKEND_PORT`) y `make dev-local` en 3100/8100, con resúmenes IA desactivados. Probado junto a la oficina diaria con el escenario `complex` (hash en el registro del commit siguiente) |
+
+## Cómo levantar
+
+Copia de desarrollo en 3100 (frontend) y 8100 (backend), en paralelo a la oficina diaria de `<project path>` en 3000/8000. Comandos para Git Bash:
+
+```bash
+cd /e/visualizador-agentes
+
+# Solo la primera vez: dependencias (NO instala hooks en Claude)
+make install
+
+# Solo la primera vez: configuración local (no se versiona)
+cp backend/.env.example backend/.env           # CORS para 3100 y SUMMARY_BACKEND=disabled
+cp frontend/.env.example frontend/.env.local   # NEXT_PUBLIC_BACKEND_PORT=8100
+
+# Levantar backend (8100) y frontend (3100); Ctrl+C para detener
+make dev-local
+```
+
+Verificar y generar agentes simulados (en otra terminal):
+
+```bash
+curl http://localhost:8100/health
+CLAUDE_OFFICE_API_URL=http://localhost:8100/api/v1/events uv run python scripts/simulate_events.py complex
+```
+
+Abrir http://localhost:3100 (desde el iPhone: http://<TAILSCALE_IP>:3100).
+
+- No usar `make install-all`, `make hooks-install` ni `make opencode-install`: instalan hooks y plugins en las cuentas reales.
+- `make dev` en esta carpeta usa 3000/8000 y choca con la oficina diaria; usar siempre `make dev-local`.
+- Los puertos se cambian con `make dev-local DEV_BACKEND_PORT=... DEV_FRONTEND_PORT=...` (y `NEXT_PUBLIC_BACKEND_PORT` en `frontend/.env.local`).
+- El log del backend imprime el enlace con `?token=` usando 3000/8000; en desarrollo, cambiar el puerto a 3100 a mano.
 
 ## Problemas y soluciones
 
@@ -64,10 +97,10 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | iPhone cargaba la página sin datos | Next.js en modo desarrollo bloqueaba sus recursos; se agregó `allowedDevOrigins` |
 | La PC dependía de Tailscale para ver la oficina | El frontend usa el host de la página para buscar el backend |
 | En Windows, la recarga del backend detiene el frontend | Pendiente: reiniciar `make dev` tras cambios de código del backend |
+| Next.js 16.3 genera `frontend/AGENTS.md` y `frontend/CLAUDE.md` al arrancar | Pendiente: decidir si se versionan o se desactiva con `agentRules: false` en `next.config.ts`; por ahora sin versionar |
 
 ## Próximos pasos
 
-1. Levantar la copia de desarrollo en puertos propios (sin chocar con la oficina diaria) y con datos simulados.
-2. Confirmar las decisiones pendientes del catálogo de estados.
-3. Implementar por fases: agente más grande, estados de espera con "a quién espera", ausencia y regreso, indicadores de esfuerzo, avisos.
-4. App móvil con notificaciones.
+1. Confirmar las decisiones pendientes del catálogo de estados.
+2. Implementar por fases: agente más grande, estados de espera con "a quién espera", ausencia y regreso, indicadores de esfuerzo, avisos.
+3. App móvil con notificaciones.

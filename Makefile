@@ -1,4 +1,4 @@
-.PHONY: install install-all dev backend frontend simulate checkall lint fmt test typecheck gen-types \
+.PHONY: install install-all dev dev-local backend frontend simulate checkall lint fmt test typecheck gen-types \
 	hooks-install hooks-uninstall hooks-reinstall hooks-status hooks-logs hooks-logs-follow hooks-logs-clear \
 	hooks-debug-on hooks-debug-off clean clean-db clean-all \
 	opencode-install opencode-uninstall opencode-reinstall opencode-build \
@@ -23,6 +23,13 @@ install-all: install hooks-install opencode-install		# Install everything includ
 
 dev:			# Start backend and frontend in parallel
 	@make -j 2 backend frontend
+
+# Development copy ports (run next to the daily office on 3000/8000)
+DEV_BACKEND_PORT ?= 8100
+DEV_FRONTEND_PORT ?= 3100
+
+dev-local:			# Start backend and frontend on the dev ports (3100/8100)
+	@NEXT_PUBLIC_BACKEND_PORT=$(DEV_BACKEND_PORT) make -j 2 backend frontend 		BACKEND_PORT=$(DEV_BACKEND_PORT) FRONTEND_PORT=$(DEV_FRONTEND_PORT)
 
 backend:			# Start backend dev server
 	make -C backend dev

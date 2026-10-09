@@ -6,8 +6,15 @@
  * console; initApiKeyFromBrowser captures it into sessionStorage.
  */
 
+/** Backend port used when NEXT_PUBLIC_API_URL / NEXT_PUBLIC_WS_URL are unset. */
+export const BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT || "8000";
+
+/** Host the page was loaded from (so LAN/Tailscale clients reach the same machine). */
+export const BACKEND_HOST =
+  typeof window !== "undefined" ? window.location.hostname : "localhost";
+
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" ? `http://${window.location.hostname}:8000` : "http://localhost:8000");
+  process.env.NEXT_PUBLIC_API_URL || `http://${BACKEND_HOST}:${BACKEND_PORT}`;
 
 const KEY_STORAGE = "claude-office-api-key";
 

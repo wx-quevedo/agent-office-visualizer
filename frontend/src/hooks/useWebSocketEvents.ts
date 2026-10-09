@@ -24,6 +24,7 @@ import { TypingTracker } from "@/systems/typingTracker";
 import { reconcileState } from "@/systems/stateReconciler";
 import { shouldShowToast } from "@/systems/toastFilter";
 import { WebSocketController } from "@/systems/webSocketController";
+import { BACKEND_HOST, BACKEND_PORT } from "@/utils/api";
 import type { EventType, WebSocketMessage } from "@/types";
 
 // ============================================================================
@@ -203,10 +204,7 @@ export function useWebSocketEvents({
   const controllerRef = useRef<WebSocketController | null>(null);
   if (controllerRef.current === null) {
     const baseUrl =
-      process.env.NEXT_PUBLIC_WS_URL ||
-      (typeof window !== "undefined"
-        ? `ws://${window.location.hostname}:8000`
-        : "ws://localhost:8000");
+      process.env.NEXT_PUBLIC_WS_URL || `ws://${BACKEND_HOST}:${BACKEND_PORT}`;
     controllerRef.current = new WebSocketController({
       sessionId,
       enabled,

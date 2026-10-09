@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useOverviewStore } from "@/stores/overviewStore";
 import type { OverviewEntry } from "@/types";
+import { BACKEND_PORT } from "@/utils/api";
 
 /**
  * Connects to the global `/ws/overview` feed that carries one boss snapshot per
@@ -48,7 +49,7 @@ export function useOverviewWebSocket({ enabled }: { enabled: boolean }): void {
     const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
     const wsUrl =
       process.env.NEXT_PUBLIC_WS_URL ||
-      `${wsScheme}://${window.location.hostname}:8000`;
+      `${wsScheme}://${window.location.hostname}:${BACKEND_PORT}`;
     const ws = new WebSocket(`${wsUrl}/ws/overview`);
     wsRef.current = ws;
 

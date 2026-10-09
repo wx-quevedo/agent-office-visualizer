@@ -14,12 +14,13 @@ Current coordinates (from frontend/src/systems/queuePositions.ts):
 - Boss slots: Left (520, 868), Right (760, 868)
 """
 
+import os
 import time
 from datetime import UTC, datetime
 
 import requests
 
-API_URL = "http://localhost:8000/api/v1/events"
+API_URL = os.environ.get("CLAUDE_OFFICE_API_URL", "http://localhost:8000/api/v1/events")
 SESSION_ID = "test_single_agent"
 
 
