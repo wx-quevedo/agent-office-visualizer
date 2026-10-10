@@ -28,6 +28,9 @@ export interface PreferencesState {
   toastAutoDismissLow: number;
   toastAutoDismissInfo: number;
 
+  // Office view
+  showSubagentCharacters: boolean;
+
   // Actions
   loadPreferences: () => Promise<void>;
   setClockType: (type: ClockType) => Promise<void>;
@@ -43,6 +46,7 @@ export interface PreferencesState {
   setToastFilterArrival: (enabled: boolean) => Promise<void>;
   setToastAutoDismissLow: (ms: number) => Promise<void>;
   setToastAutoDismissInfo: (ms: number) => Promise<void>;
+  setShowSubagentCharacters: (enabled: boolean) => Promise<void>;
 }
 
 // ============================================================================
@@ -63,6 +67,8 @@ const DEFAULT_TOAST_FILTER_TASK_COMPLETE = true;
 const DEFAULT_TOAST_FILTER_ARRIVAL = false;
 const DEFAULT_TOAST_AUTO_DISMISS_LOW = 5000;
 const DEFAULT_TOAST_AUTO_DISMISS_INFO = 3000;
+// Subagents are shown as a count over the main agent unless opted in.
+const DEFAULT_SHOW_SUBAGENT_CHARACTERS = false;
 
 // ============================================================================
 // API HELPERS
@@ -109,6 +115,7 @@ export const usePreferencesStore = create<PreferencesState>()((set, get) => ({
   toastFilterArrival: DEFAULT_TOAST_FILTER_ARRIVAL,
   toastAutoDismissLow: DEFAULT_TOAST_AUTO_DISMISS_LOW,
   toastAutoDismissInfo: DEFAULT_TOAST_AUTO_DISMISS_INFO,
+  showSubagentCharacters: DEFAULT_SHOW_SUBAGENT_CHARACTERS,
   isLoaded: false,
 
   loadPreferences: async () => {
@@ -146,6 +153,10 @@ export const usePreferencesStore = create<PreferencesState>()((set, get) => ({
       toastAutoDismissInfo: prefs.toastAutoDismissInfo
         ? Number(prefs.toastAutoDismissInfo)
         : DEFAULT_TOAST_AUTO_DISMISS_INFO,
+      showSubagentCharacters:
+        prefs.showSubagentCharacters === undefined
+          ? DEFAULT_SHOW_SUBAGENT_CHARACTERS
+          : prefs.showSubagentCharacters === "true",
       isLoaded: true,
     });
   },
@@ -236,6 +247,11 @@ export const usePreferencesStore = create<PreferencesState>()((set, get) => ({
     set({ toastAutoDismissInfo: ms });
     await setPreference("toastAutoDismissInfo", String(ms));
   },
+
+  setShowSubagentCharacters: async (enabled) => {
+    set({ showSubagentCharacters: enabled });
+    await setPreference("showSubagentCharacters", String(enabled));
+  },
 }));
 
 // ============================================================================
@@ -264,3 +280,5 @@ export const selectToastAutoDismissLow = (state: PreferencesState) =>
   state.toastAutoDismissLow;
 export const selectToastAutoDismissInfo = (state: PreferencesState) =>
   state.toastAutoDismissInfo;
+export const selectShowSubagentCharacters = (state: PreferencesState) =>
+  state.showSubagentCharacters;

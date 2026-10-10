@@ -63,7 +63,7 @@ No son estados: se dibujan encima de cualquier estado para mostrar cuánto y có
 
 ## Decisiones confirmadas (2026-10-09)
 
-| Decisión | Decisión | Por qué |
+| Tema | Decisión | Por qué |
 | --- | --- | --- |
 | Cuándo un comando cuenta como "espera un programa" | Más de 30 s sin terminar | Los comandos rápidos no deben cambiar el estado a cada rato |
 | Cuándo estás "desconectado" | Sin la oficina abierta y 10 min sin responder a ningún agente | Es lo único que se puede medir sin instalar nada más |

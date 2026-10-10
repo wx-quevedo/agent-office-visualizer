@@ -19,7 +19,7 @@ import {
 } from "@/stores/gameStore";
 import type { Position } from "@/types";
 import { agentMachineService } from "@/machines/agentMachineService";
-import { TRASH_CAN_OFFSET } from "@/constants/positions";
+import { BOSS_SCALE, TRASH_CAN_OFFSET } from "@/constants/positions";
 
 // ============================================================================
 // CONSTANTS
@@ -161,7 +161,9 @@ export function useCompactionAnimation(): CompactionAnimationState {
       const currentBossDesk = storeState.boss.position;
       const currentTrashCanPosition: Position = {
         x: currentBossDesk.x + TRASH_CAN_OFFSET.x,
-        y: currentBossDesk.y + TRASH_CAN_OFFSET.y - 30,
+        // Boss body center sits so its feet (40px below center at 1x) land
+        // on the can lid; scales with the 2x boss.
+        y: currentBossDesk.y + TRASH_CAN_OFFSET.y + 10 - 40 * BOSS_SCALE,
       };
 
       if (currentPhase === "walking_to_trash") {

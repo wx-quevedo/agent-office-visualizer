@@ -277,6 +277,8 @@ const en = {
   "settings.commandBar": "Command Bar (⌘K)",
   "settings.clickToFocus": "Click to Focus",
   "settings.toastFilters": "Toast Notifications",
+  "settings.officeView": "Office View",
+  "settings.showSubagentCharacters": "Show subagents as characters",
   "settings.toastAutoDismiss": "Auto-dismiss Timing",
   "settings.filterPermission": "Permission requests",
   "settings.filterError": "Errors and stops",

@@ -46,11 +46,28 @@ export const PLANT_POSITION = { x: 118, y: 970 };
 // BOSS AREA
 // ============================================================================
 
-/** Boss area rug position (centered under boss desk) */
-export const BOSS_RUG_POSITION = { x: 640, y: 940 };
+/**
+ * Draw scale of the main agent (boss) and its desk, relative to the original
+ * claude-office art. The agent is the protagonist, so it is drawn at 2x.
+ * Everything placed around the boss (rug, trash can, queue slots, nav-grid
+ * obstacles) is derived from this value and BOSS_POSITION.
+ */
+export const BOSS_SCALE = 2;
 
-/** Trash can offset from boss desk position */
-export const TRASH_CAN_OFFSET = { x: 110, y: 65 };
+/**
+ * Boss anchor (body center at the desk). Raised from y=900 so the 2x desk
+ * still fits above the bottom edge of the 1024px canvas.
+ */
+export const BOSS_POSITION = { x: 640, y: 795 };
+
+/** Boss area rug position (centered under boss desk) */
+export const BOSS_RUG_POSITION = { x: 640, y: 870 };
+
+/** Boss area rug sprite scale (0.3 at 1x; kept inside the canvas) */
+export const BOSS_RUG_SCALE = 0.5;
+
+/** Trash can offset from boss desk position (right of the 2x desk) */
+export const TRASH_CAN_OFFSET = { x: 170, y: 180 };
 
 // ============================================================================
 // DESK GRID

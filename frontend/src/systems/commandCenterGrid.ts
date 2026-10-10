@@ -16,10 +16,12 @@ import {
   TOP_WALL_H,
   EXIT_DOOR_BASE_Y,
   EXIT_DOOR_X,
+  FURNITURE_SCALE,
   slotPosition,
 } from "@/components/command/layout";
 
 const TILE = 32;
+const FOOTPRINT_HALF_W = 48;
 const W = Math.ceil(CANVAS_WIDTH / TILE); // 40
 const H = Math.ceil(CANVAS_HEIGHT / TILE); // 32
 
@@ -65,8 +67,15 @@ class CommandCenterGrid implements PathGrid {
       // A furniture footprint just below each slot's standing spot.
       for (let slot = 0; slot < MAX_SLOTS; slot++) {
         const p = slotPosition(zone, slot);
-        const halfW = zone.kind === "lounge" ? 50 : 46;
-        this.mark(p.x - halfW, p.y + 8, p.x + halfW, p.y + 40);
+        // 48px (not the full scaled desk/couch width) keeps the footprint on
+        // tiles 2-4 / 6-9 of each 10-tile column, leaving 2-tile lanes.
+        const halfW = FOOTPRINT_HALF_W;
+        this.mark(
+          p.x - halfW,
+          p.y + 8 * FURNITURE_SCALE,
+          p.x + halfW,
+          p.y + 40 * FURNITURE_SCALE,
+        );
       }
     }
   }

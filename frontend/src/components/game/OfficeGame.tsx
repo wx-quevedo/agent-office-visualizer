@@ -64,6 +64,8 @@ import {
   PRINTER_STATION_POSITION,
   PLANT_POSITION,
   BOSS_RUG_POSITION,
+  BOSS_RUG_SCALE,
+  BOSS_SCALE,
   TRASH_CAN_OFFSET,
   DESKS_PER_ROW,
   MIN_DESK_COUNT,
@@ -75,7 +77,22 @@ import {
   AgentLabel,
   Bubble as AgentBubble,
 } from "./AgentSprite";
-import { BossSprite, BossBubble, MobileBoss } from "./BossSprite";
+import {
+  BossSprite,
+  BossBubble,
+  MobileBoss,
+  BOSS_BUBBLE_X_OFFSET,
+  BOSS_BUBBLE_Y_OFFSET,
+} from "./BossSprite";
+import {
+  SubagentCountBadge,
+  SUBAGENT_BADGE_HEIGHT,
+} from "./shared/SubagentCountBadge";
+import {
+  usePreferencesStore,
+  selectShowSubagentCharacters,
+} from "@/stores/preferencesStore";
+import type { AgentAnimationState } from "@/stores/gameStore";
 import { useNavigationStore } from "@/stores/navigationStore";
 import { LOBBY_FLOOR_ID } from "@/types/navigation";
 import { ELEVATOR_POSITION, isInElevatorZone } from "@/systems/queuePositions";
@@ -99,6 +116,26 @@ import { OfficeBackground } from "./OfficeBackground";
 
 // Register PixiJS components
 extend({ Container, Text, Graphics, Sprite });
+
+// ============================================================================
+// SUBAGENT VISIBILITY
+// ============================================================================
+
+const NO_AGENTS: Map<string, AgentAnimationState> = new Map();
+
+/** Phases after the backend removed the agent (SubagentStop received). */
+const DEPARTED_PHASES = new Set<AgentAnimationState["phase"]>([
+  "departing",
+  "in_departure_queue",
+  "walking_to_elevator",
+  "in_elevator",
+]);
+
+/** Boss label center (BossSprite draws it at y=-63 inside the scaled art). */
+const BOSS_LABEL_Y = -63 * BOSS_SCALE;
+/** Count badge sits centered just above the boss label. */
+const BOSS_BADGE_Y =
+  BOSS_LABEL_Y - 12 - (SUBAGENT_BADGE_HEIGHT * BOSS_SCALE) / 2 - 2;
 
 // ============================================================================
 // SUB-COMPONENTS
@@ -212,7 +249,21 @@ export function OfficeGame(): ReactNode {
   }, []);
 
   // Subscribe to store state
-  const agents = useGameStore(useShallow(selectAgents));
+  const allAgents = useGameStore(useShallow(selectAgents));
+  // By default subagents are not drawn as characters: the boss shows a count
+  // instead. The "show subagents as characters" preference restores the
+  // original claude-office behaviour. Everything below renders `agents`.
+  const showSubagentCharacters = usePreferencesStore(
+    selectShowSubagentCharacters,
+  );
+  const agents = showSubagentCharacters ? allAgents : NO_AGENTS;
+  const activeSubagentCount = useMemo(() => {
+    let count = 0;
+    for (const agent of allAgents.values()) {
+      if (!DEPARTED_PHASES.has(agent.phase)) count++;
+    }
+    return count;
+  }, [allAgents]);
   const boss = useGameStore(selectBoss);
   const todos = useGameStore(selectTodos);
   const debugMode = useGameStore(selectDebugMode);
@@ -368,7 +419,7 @@ export function OfficeGame(): ReactNode {
                       anchor={0.5}
                       x={BOSS_RUG_POSITION.x}
                       y={BOSS_RUG_POSITION.y}
-                      scale={0.3}
+                      scale={BOSS_RUG_SCALE}
                     />
                   )}
 
@@ -746,9 +797,23 @@ export function OfficeGame(): ReactNode {
                         />
                       </pixiContainer>
                     ))}
+                  {/* Active subagent count over the boss (replaces subagent characters) */}
+                  {!showSubagentCharacters &&
+                    compactionAnimation.phase === "idle" && (
+                      <SubagentCountBadge
+                        count={activeSubagentCount}
+                        x={boss.position.x}
+                        y={boss.position.y + BOSS_BADGE_Y}
+                        scale={BOSS_SCALE}
+                      />
+                    )}
                   {boss.bubble.content && (
                     <pixiContainer x={boss.position.x} y={boss.position.y}>
-                      <BossBubble content={boss.bubble.content} yOffset={-80} />
+                      <BossBubble
+                        content={boss.bubble.content}
+                        xOffset={BOSS_BUBBLE_X_OFFSET}
+                        yOffset={BOSS_BUBBLE_Y_OFFSET}
+                      />
                     </pixiContainer>
                   )}
                 </>

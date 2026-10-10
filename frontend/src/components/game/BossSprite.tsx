@@ -16,6 +16,7 @@ import { ICON_MAP } from "./shared/iconMap";
 import { drawBubble, drawIconBadge } from "./shared/drawBubble";
 import { drawRightArm, drawLeftArm } from "./shared/drawArm";
 import { truncateBubbleText } from "@/utils/bubbleText";
+import { BOSS_SCALE } from "@/constants/positions";
 
 // ============================================================================
 // TYPES
@@ -46,6 +47,17 @@ export interface BossSpriteProps {
 const BOSS_WIDTH = 48; // 1.5 blocks × 32px
 const BOSS_HEIGHT = 80; // 2.5 blocks × 32px
 const STROKE_WIDTH = 4;
+
+/**
+ * Bubble anchor relative to the boss position. The boss art is drawn at
+ * BOSS_SCALE, but bubbles stay at 1x (readable text, same size as agents'),
+ * so they are placed above-right of the scaled head and label.
+ */
+export const BOSS_BUBBLE_X_OFFSET = 70 * BOSS_SCALE; // clears the count badge
+export const BOSS_BUBBLE_Y_OFFSET = -70 * BOSS_SCALE;
+
+/** Label text resolution: the label is scaled up with the boss. */
+const LABEL_RESOLUTION = 2 * BOSS_SCALE;
 
 // State colors for the boss (kept for reference, not currently used)
 const _STATE_COLORS: Record<BossState, number> = {
@@ -103,9 +115,10 @@ function drawFallbackDesk(g: Graphics): void {
 interface BubbleProps {
   content: BubbleContent;
   yOffset: number;
+  xOffset?: number;
 }
 
-function Bubble({ content, yOffset }: BubbleProps): ReactNode {
+function Bubble({ content, yOffset, xOffset = 45 }: BubbleProps): ReactNode {
   const { type = "thought", icon } = content;
   const text = truncateBubbleText(content.text);
 
@@ -155,7 +168,7 @@ function Bubble({ content, yOffset }: BubbleProps): ReactNode {
   );
 
   return (
-    <pixiContainer y={yOffset} x={45}>
+    <pixiContainer y={yOffset} x={xOffset}>
       <pixiGraphics draw={(g) => drawBubble(g, bWidth, bHeight, type)} />
       {/* Icon badge on top-left corner of bubble */}
       {iconEmoji && (
@@ -253,124 +266,131 @@ function BossSpriteComponent({
     [bossArmParams, leftArmOffset],
   );
 
-  const bubbleOffset = -80;
-
   return (
     <pixiContainer x={position.x} y={position.y}>
-      {/* Chair - behind everything */}
-      {chairTexture ? (
-        <pixiSprite
-          texture={chairTexture}
-          anchor={0.5}
-          x={5}
-          y={30}
-          scale={0.1386}
-        />
-      ) : (
-        <pixiGraphics draw={drawFallbackChair} />
-      )}
-
-      {/* Boss character (body + accessories) - hidden when away from desk */}
-      {!isAway && (
-        <pixiContainer y={6}>
-          {/* Boss body - in front of chair, behind desk */}
-          <pixiGraphics draw={drawBossCallback} />
-
-          {/* Sunglasses - boss always looks cool (drawn before arms) */}
-          {sunglassesTexture && (
-            <pixiSprite
-              texture={sunglassesTexture}
-              anchor={0.5}
-              x={0}
-              y={-19}
-              scale={{ x: 0.036, y: 0.04 }}
-              tint={0x000000}
-            />
-          )}
-        </pixiContainer>
-      )}
-
-      {/* Desk surface - in front of boss */}
-      {deskTexture ? (
-        <pixiSprite
-          texture={deskTexture}
-          anchor={{ x: 0.5, y: 0 }}
-          y={30}
-          scale={0.105}
-        />
-      ) : (
-        <pixiGraphics draw={drawFallbackDesk} />
-      )}
-
-      {/* Keyboard - on desk surface */}
-      {keyboardTexture && (
-        <pixiSprite
-          texture={keyboardTexture}
-          anchor={0.5}
-          x={0}
-          y={42}
-          scale={0.04}
-        />
-      )}
-
-      {/* Arms - hidden when away from desk */}
-      {!isAway && (
-        <pixiContainer y={6}>
-          <pixiGraphics draw={drawRightArmCallback} />
-          <pixiGraphics draw={drawLeftArmCallback} />
-        </pixiContainer>
-      )}
-
-      {/* Headset - hidden when away from desk */}
-      {!isAway && headsetTexture && (
-        <pixiSprite
-          texture={headsetTexture}
-          anchor={0.5}
-          x={0}
-          y={6 - 20}
-          scale={{ x: 0.66825, y: 0.675 }}
-        />
-      )}
-
-      {/* Monitor - left side of desk */}
-      {monitorTexture && (
-        <pixiSprite
-          texture={monitorTexture}
-          anchor={0.5}
-          x={-45}
-          y={27}
-          scale={0.08}
-        />
-      )}
-
-      {/* Boss label - hidden when away from desk */}
-      {!isAway && (
-        <pixiContainer y={-63} scale={0.5}>
-          <pixiText
-            text="Claude"
+      {/* Boss art (chair, body, desk, monitor, label, marquee) at BOSS_SCALE.
+          Body is vector Graphics and sprites come from high-res textures
+          scaled down, so scaling the container keeps the pixel art sharp. */}
+      <pixiContainer scale={BOSS_SCALE}>
+        {/* Chair - behind everything */}
+        {chairTexture ? (
+          <pixiSprite
+            texture={chairTexture}
             anchor={0.5}
-            style={{
-              fontFamily: "monospace",
-              fontSize: 24,
-              fill: 0xffffff,
-              fontWeight: "bold",
-              stroke: { width: 4, color: 0x000000 },
-            }}
-            resolution={2}
+            x={5}
+            y={30}
+            scale={0.1386}
           />
-        </pixiContainer>
-      )}
+        ) : (
+          <pixiGraphics draw={drawFallbackChair} />
+        )}
 
-      {/* Task marquee on desk - scrolling user prompt */}
-      {currentTask && (
-        <pixiContainer x={0} y={70}>
-          <MarqueeText text={currentTask} width={115} color="#00ff88" />
-        </pixiContainer>
-      )}
+        {/* Boss character (body + accessories) - hidden when away from desk */}
+        {!isAway && (
+          <pixiContainer y={6}>
+            {/* Boss body - in front of chair, behind desk */}
+            <pixiGraphics draw={drawBossCallback} />
+
+            {/* Sunglasses - boss always looks cool (drawn before arms) */}
+            {sunglassesTexture && (
+              <pixiSprite
+                texture={sunglassesTexture}
+                anchor={0.5}
+                x={0}
+                y={-19}
+                scale={{ x: 0.036, y: 0.04 }}
+                tint={0x000000}
+              />
+            )}
+          </pixiContainer>
+        )}
+
+        {/* Desk surface - in front of boss */}
+        {deskTexture ? (
+          <pixiSprite
+            texture={deskTexture}
+            anchor={{ x: 0.5, y: 0 }}
+            y={30}
+            scale={0.105}
+          />
+        ) : (
+          <pixiGraphics draw={drawFallbackDesk} />
+        )}
+
+        {/* Keyboard - on desk surface */}
+        {keyboardTexture && (
+          <pixiSprite
+            texture={keyboardTexture}
+            anchor={0.5}
+            x={0}
+            y={42}
+            scale={0.04}
+          />
+        )}
+
+        {/* Arms - hidden when away from desk */}
+        {!isAway && (
+          <pixiContainer y={6}>
+            <pixiGraphics draw={drawRightArmCallback} />
+            <pixiGraphics draw={drawLeftArmCallback} />
+          </pixiContainer>
+        )}
+
+        {/* Headset - hidden when away from desk */}
+        {!isAway && headsetTexture && (
+          <pixiSprite
+            texture={headsetTexture}
+            anchor={0.5}
+            x={0}
+            y={6 - 20}
+            scale={{ x: 0.66825, y: 0.675 }}
+          />
+        )}
+
+        {/* Monitor - left side of desk */}
+        {monitorTexture && (
+          <pixiSprite
+            texture={monitorTexture}
+            anchor={0.5}
+            x={-45}
+            y={27}
+            scale={0.08}
+          />
+        )}
+
+        {/* Boss label - hidden when away from desk */}
+        {!isAway && (
+          <pixiContainer y={-63} scale={0.5}>
+            <pixiText
+              text="Claude"
+              anchor={0.5}
+              style={{
+                fontFamily: "monospace",
+                fontSize: 24,
+                fill: 0xffffff,
+                fontWeight: "bold",
+                stroke: { width: 4, color: 0x000000 },
+              }}
+              resolution={LABEL_RESOLUTION}
+            />
+          </pixiContainer>
+        )}
+
+        {/* Task marquee on desk - scrolling user prompt */}
+        {currentTask && (
+          <pixiContainer x={0} y={70}>
+            <MarqueeText text={currentTask} width={115} color="#00ff88" />
+          </pixiContainer>
+        )}
+      </pixiContainer>
 
       {/* Bubble - only render if renderBubble is true and boss is at desk */}
       {renderBubble && bubble && !isAway && (
-        <Bubble content={bubble} yOffset={bubbleOffset} />
+        <Bubble
+          content={bubble}
+          xOffset={BOSS_BUBBLE_X_OFFSET}
+          yOffset={BOSS_BUBBLE_Y_OFFSET}
+        />
       )}
     </pixiContainer>
   );
@@ -406,7 +426,11 @@ function MobileBossComponent({
   );
 
   return (
-    <pixiContainer x={position.x} y={position.y + jumpOffset} scale={scale}>
+    <pixiContainer
+      x={position.x}
+      y={position.y + jumpOffset}
+      scale={scale * BOSS_SCALE}
+    >
       {/* Boss body */}
       <pixiGraphics draw={drawBossCallback} />
 
@@ -445,7 +469,7 @@ function MobileBossComponent({
             fontWeight: "bold",
             stroke: { width: 4, color: 0x000000 },
           }}
-          resolution={2}
+          resolution={LABEL_RESOLUTION}
         />
       </pixiContainer>
     </pixiContainer>

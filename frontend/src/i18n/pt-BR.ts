@@ -279,6 +279,8 @@ const ptBR: Record<TranslationKey, string> = {
   "settings.commandBar": "Barra de Comandos (⌘K)",
   "settings.clickToFocus": "Clique para Focar",
   "settings.toastFilters": "Notificações Toast",
+  "settings.officeView": "Visualização do escritório",
+  "settings.showSubagentCharacters": "Mostrar subagentes como personagens",
   "settings.toastAutoDismiss": "Tempo de Auto-descarte",
   "settings.filterPermission": "Pedidos de permissão",
   "settings.filterError": "Erros e paradas",

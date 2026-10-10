@@ -4,14 +4,21 @@ import { memo, useCallback, type ReactNode } from "react";
 import { Graphics, Texture } from "pixi.js";
 import type { Position } from "@/types";
 import { useMotionStore, selectMotionPos } from "@/systems/commandCenterMotion";
-import { ZONE_BY_KEY } from "./layout";
+import { PEER_SCALE, ZONE_BY_KEY } from "./layout";
 import type { CommandPeer } from "./useCommandCenterPeers";
+import {
+  SubagentCountBadge,
+  SUBAGENT_BADGE_HEIGHT,
+} from "@/components/game/shared/SubagentCountBadge";
 
-// Body geometry (compact relative to the office BossSprite).
-const BODY_W = 40;
-const BODY_H = 58;
+// Body geometry at 1x (compact relative to the office BossSprite). The body
+// art is drawn inside a container scaled by PEER_SCALE; labels stay at 1x.
+const BASE_BODY_W = 40;
+const BASE_BODY_H = 58;
 const HEAD_R = 13;
-const HEAD_CY = -BODY_H + HEAD_R + 2;
+const HEAD_CY = -BASE_BODY_H + HEAD_R + 2;
+// On-screen body size (used to place the 1x labels around the scaled body).
+const BODY_H = BASE_BODY_H * PEER_SCALE;
 const NAMEPLATE_Y = -BODY_H - 22;
 const TODO_PROGRESS_Y = NAMEPLATE_Y + 9;
 
@@ -46,7 +53,7 @@ function CommandCenterPeerComponent({
     (g: Graphics) => {
       g.clear();
       // Status disc under the feet (stays grounded while the body bobs).
-      g.ellipse(0, 4, BODY_W / 2 + 4, 7);
+      g.ellipse(0, 2, BASE_BODY_W / 2 + 4, 4);
       g.fill({ color: accent, alpha: isNeedsYou ? 0.55 : 0.32 });
     },
     [accent, isNeedsYou],
@@ -56,9 +63,9 @@ function CommandCenterPeerComponent({
     (g: Graphics) => {
       g.clear();
       // Body capsule.
-      g.roundRect(-BODY_W / 2, -BODY_H, BODY_W, BODY_H, 14);
+      g.roundRect(-BASE_BODY_W / 2, -BASE_BODY_H, BASE_BODY_W, BASE_BODY_H, 14);
       g.fill({ color: 0x2d3748 });
-      g.roundRect(-BODY_W / 2, -BODY_H, BODY_W, BODY_H, 14);
+      g.roundRect(-BASE_BODY_W / 2, -BASE_BODY_H, BASE_BODY_W, BASE_BODY_H, 14);
       g.stroke({ color: accent, width: isNeedsYou ? 4 : 2.5, alpha: 0.95 });
       // Head.
       g.circle(0, HEAD_CY, HEAD_R);
@@ -84,14 +91,6 @@ function CommandCenterPeerComponent({
     },
     [peer.todoDone, peer.todoTotal, accent],
   );
-
-  const drawBadge = useCallback((g: Graphics) => {
-    g.clear();
-    g.roundRect(0, 0, 26, 16, 8);
-    g.fill({ color: 0x111827 });
-    g.roundRect(0, 0, 26, 16, 8);
-    g.stroke({ color: 0xf59e0b, width: 1.5, alpha: 0.9 });
-  }, []);
 
   // Office-style nameplate behind the project label.
   const shortLabel =
@@ -130,9 +129,9 @@ function CommandCenterPeerComponent({
       cursor="pointer"
       onPointerTap={handleTap}
     >
-      <pixiGraphics draw={drawShadow} />
+      <pixiGraphics draw={drawShadow} scale={PEER_SCALE} />
 
-      <pixiContainer>
+      <pixiContainer scale={PEER_SCALE}>
         <pixiGraphics draw={drawBody} />
 
         {/* Sunglasses */}
@@ -175,25 +174,13 @@ function CommandCenterPeerComponent({
         />
       </pixiContainer>
 
-      {/* Subagent count badge */}
-      {peer.subagentCount > 0 && (
-        <pixiContainer x={BODY_W / 2 - 2} y={-BODY_H + 4}>
-          <pixiGraphics draw={drawBadge} />
-          <pixiContainer x={13} y={8} scale={0.5}>
-            <pixiText
-              text={`+${peer.subagentCount}`}
-              anchor={0.5}
-              resolution={2}
-              style={{
-                fontFamily: "monospace",
-                fontSize: 18,
-                fill: 0xf59e0b,
-                fontWeight: "bold",
-              }}
-            />
-          </pixiContainer>
-        </pixiContainer>
-      )}
+      {/* Active subagent count, centered above the nameplate */}
+      <SubagentCountBadge
+        count={peer.subagentCount}
+        x={0}
+        y={NAMEPLATE_Y - 8 - (SUBAGENT_BADGE_HEIGHT * PEER_SCALE) / 2 - 4}
+        scale={PEER_SCALE}
+      />
 
       {/* Todo progress bar */}
       {peer.todoTotal > 0 && (

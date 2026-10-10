@@ -279,6 +279,8 @@ const es: Record<TranslationKey, string> = {
   "settings.commandBar": "Barra de Comandos (⌘K)",
   "settings.clickToFocus": "Clic para Enfocar",
   "settings.toastFilters": "Notificaciones Toast",
+  "settings.officeView": "Vista de oficina",
+  "settings.showSubagentCharacters": "Mostrar subagentes como personajes",
   "settings.toastAutoDismiss": "Tiempo de Auto-descarte",
   "settings.filterPermission": "Solicitudes de permiso",
   "settings.filterError": "Errores y paradas",

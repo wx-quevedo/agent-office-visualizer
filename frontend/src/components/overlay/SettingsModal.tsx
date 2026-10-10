@@ -125,6 +125,14 @@ export default function SettingsModal({
     (s) => s.setToastFilterArrival,
   );
 
+  // Office view settings
+  const showSubagentCharacters = usePreferencesStore(
+    (s) => s.showSubagentCharacters,
+  );
+  const setShowSubagentCharacters = usePreferencesStore(
+    (s) => s.setShowSubagentCharacters,
+  );
+
   const { t } = useTranslation();
 
   const handleDirtyChange = useCallback((dirty: boolean) => {
@@ -395,6 +403,20 @@ export default function SettingsModal({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Office View Settings */}
+          <div className="pt-4 border-t border-slate-800">
+            <label className="block text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">
+              {t("settings.officeView")}
+            </label>
+            <SettingsToggle
+              label={t("settings.showSubagentCharacters")}
+              checked={showSubagentCharacters}
+              onChange={() =>
+                setShowSubagentCharacters(!showSubagentCharacters)
+              }
+            />
           </div>
 
           {/* Attention Settings */}

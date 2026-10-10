@@ -9,6 +9,8 @@ import {
   MAX_SLOTS,
   EXIT_DOOR_BASE_Y,
   EXIT_DOOR_X,
+  COUCH_SCALE,
+  FURNITURE_SCALE,
   slotPosition,
   type ZoneDef,
 } from "./layout";
@@ -65,7 +67,7 @@ function DeskComponent({
 }): ReactNode {
   const acc = accessory(t, ITEM_SEQUENCE[slot % ITEM_SEQUENCE.length]);
   return (
-    <pixiContainer x={x} y={y} zIndex={y - 2}>
+    <pixiContainer x={x} y={y} zIndex={y - 2} scale={FURNITURE_SCALE}>
       {t.chair && (
         <pixiSprite
           texture={t.chair}
@@ -146,7 +148,7 @@ function CouchComponent({ x, y }: { x: number; y: number }): ReactNode {
     g.fill({ color: 0x577089 });
   }, []);
   return (
-    <pixiContainer x={x} y={y} zIndex={y - 2}>
+    <pixiContainer x={x} y={y} zIndex={y - 2} scale={COUCH_SCALE}>
       <pixiGraphics draw={draw} />
     </pixiContainer>
   );

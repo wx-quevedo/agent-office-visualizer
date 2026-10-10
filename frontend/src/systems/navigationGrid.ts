@@ -7,6 +7,11 @@
 
 import { Position } from "@/types";
 import { ELEVATOR_ZONE } from "./queuePositions";
+import {
+  BOSS_POSITION,
+  BOSS_SCALE,
+  TRASH_CAN_OFFSET,
+} from "@/constants/positions";
 
 // Grid configuration
 export const TILE_SIZE = 32;
@@ -58,11 +63,12 @@ const ELEVATOR_Y = ELEVATOR_ZONE.minY; // 90
 const ELEVATOR_WIDTH = ELEVATOR_ZONE.maxX - ELEVATOR_ZONE.minX; // 112
 const ELEVATOR_HEIGHT = ELEVATOR_ZONE.maxY - ELEVATOR_ZONE.minY; // 210
 
-const BOSS_DESK_X = 640;
-// Boss at y=900, desk drawn 20px below with 80px height → desk center at y=960
-const BOSS_DESK_Y = 960; // Grid-aligned: 30*32 = 960
-const BOSS_DESK_HALF_WIDTH = 80 + OBSTACLE_PADDING;
-const BOSS_DESK_HALF_HEIGHT = 40 + OBSTACLE_PADDING;
+// Boss desk sprite (BossSprite): local y 30..104 (desk.png 704px * 0.105) and
+// ~140px wide at 1x, scaled by BOSS_SCALE around the boss anchor.
+const BOSS_DESK_X = BOSS_POSITION.x;
+const BOSS_DESK_Y = BOSS_POSITION.y + 67 * BOSS_SCALE; // desk center
+const BOSS_DESK_HALF_WIDTH = 70 * BOSS_SCALE + OBSTACLE_PADDING;
+const BOSS_DESK_HALF_HEIGHT = 37 * BOSS_SCALE + OBSTACLE_PADDING;
 
 // Printer station (bottom left corner) - only bottom portion blocked
 const PRINTER_X = 50;
@@ -71,8 +77,8 @@ const PRINTER_HALF_WIDTH = 50 + OBSTACLE_PADDING;
 const PRINTER_HALF_HEIGHT = 12;
 
 // Trash can (right of boss desk)
-const TRASH_CAN_X = 640 + 110; // Boss position.x + offset
-const TRASH_CAN_Y = 900 + 65 + 20; // Boss position.y + offset + bottom adjustment
+const TRASH_CAN_X = BOSS_POSITION.x + TRASH_CAN_OFFSET.x;
+const TRASH_CAN_Y = BOSS_POSITION.y + TRASH_CAN_OFFSET.y + 20; // + bottom adjustment
 const TRASH_CAN_HALF_WIDTH = 20 + OBSTACLE_PADDING;
 const TRASH_CAN_HALF_HEIGHT = 15;
 

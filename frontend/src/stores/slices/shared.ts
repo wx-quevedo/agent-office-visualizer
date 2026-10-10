@@ -3,9 +3,10 @@
  * Used by bossSlice, bubbleSlice, agentSlice, and the gameStore reset variants.
  */
 import type { Position } from "@/types";
+import { BOSS_POSITION as BOSS_ANCHOR } from "@/constants/positions";
 import type { BubbleState, BossAnimationState } from "./types";
 
-export const BOSS_POSITION: Position = { x: 640, y: 900 };
+export const BOSS_POSITION: Position = BOSS_ANCHOR;
 
 export const createEmptyBubbleState = (): BubbleState => ({
   content: null,
