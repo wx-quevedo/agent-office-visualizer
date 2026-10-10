@@ -99,6 +99,31 @@ NEW_EVENT_TYPES: frozenset[str] = frozenset({"post_tool_use_failure"})
 _LAST_MESSAGE_TAIL = 300
 _ERROR_MAX = 500
 
+# Blocks Claude Code or extensions inject into the user's prompt (e.g. Claude
+# in Chrome's <browser_instruction>); removed before truncating so the summary
+# shows what the user typed.
+_INJECTED_TAGS = (
+    "browser_instruction",
+    "system-reminder",
+    "ide_selection",
+    "ide_opened_file",
+    "ide_diagnostics",
+    "command-message",
+    "command-name",
+    "command-args",
+    "local-command-stdout",
+    "local-command-stderr",
+    "local-command-caveat",
+    "user-prompt-submit-hook",
+)
+_TAG_ALT = "|".join(re.escape(t) for t in _INJECTED_TAGS)
+_INJECTED_BLOCK = re.compile(r"<(" + _TAG_ALT + r")\b[^>]*>.*?</\1>", re.DOTALL)
+
+
+def strip_injected_blocks(prompt: str) -> str:
+    """The user's own text, without injected blocks."""
+    return _INJECTED_BLOCK.sub("", prompt).strip()
+
 
 def _add_tool_agent(raw_data: dict[str, Any], data: dict[str, Any]) -> None:
     """Record which subagent called a tool (Claude Code common fields).
@@ -328,7 +353,8 @@ def _handle_user_prompt_submit(
         except ET.ParseError:
             pass  # Fall through to regular prompt handling
 
-    # Regular user prompt
+    # Regular user prompt (without injected blocks)
+    prompt = strip_injected_blocks(prompt)
     if len(prompt) > 50:
         prompt = prompt[:47] + "..."
     data["prompt"] = prompt

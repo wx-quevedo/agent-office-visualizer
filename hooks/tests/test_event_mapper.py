@@ -255,3 +255,17 @@ class TestHookDataForStateEngine:
         payload = map_event("session_start", {"session_id": SESSION_ID}, SESSION_ID)
         assert payload is not None
         assert payload["data"]["reports_tool_failures"] is True
+
+
+def test_prompt_without_injected_blocks() -> None:
+    payload = map_event(
+        "user_prompt_submit",
+        {
+            "session_id": SESSION_ID,
+            "prompt": "<browser_instruction># Claude in Chrome\nlargo</browser_instruction>\n\n"
+            "Corre el comando ping",
+        },
+        SESSION_ID,
+    )
+    assert payload is not None
+    assert payload["data"]["prompt"] == "Corre el comando ping"

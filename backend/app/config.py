@@ -107,8 +107,9 @@ class Settings(BaseSettings):
     # Short-lived states: "recibe encargo", "regresa al trabajo".
     STATE_PROMPT_SECONDS: float = 3
     STATE_RETURN_SECONDS: float = 5
-    # A subagent without activity for this long is considered finished.
-    STATE_SUBAGENT_EXPIRY_SECONDS: float = 1800
+    # Open sessions still "working" with no event for this long are reconciled
+    # with the tail of their transcript (lost PostToolUse/Stop events).
+    STATE_RECONCILE_AFTER_SECONDS: float = 120
     # How often to check that each session's Claude Code process still exists.
     STATE_PROCESS_CHECK_SECONDS: float = 30
     # Sessions without a known process (older hook) close after this long

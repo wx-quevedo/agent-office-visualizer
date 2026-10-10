@@ -23,6 +23,19 @@ STOP_NAMES = frozenset(
     {"code.exe", "explorer.exe", "windowsterminal.exe", "services.exe", "wininit.exe"}
 )
 _MAX_DEPTH = 15
+# Claude Code's auto-update renames the running executable, e.g.
+# "claude.exe.old.1791575871902.47796"; the process keeps that image name.
+_OLD_SUFFIX = ".old."
+
+
+def is_claude_process_name(name: str) -> bool:
+    """True for claude.exe/node.exe, also after an auto-update renamed the file."""
+    lowered = name.lower()
+    if _OLD_SUFFIX in lowered:
+        lowered = lowered.split(_OLD_SUFFIX, 1)[0]
+    return lowered in CLAUDE_PROCESS_NAMES
+
+
 _FILETIME_UNIX_EPOCH = 116444736000000000
 
 
@@ -102,10 +115,9 @@ def _find_windows() -> tuple[int, float, str] | None:
         # Windows reused its PID: the chain is broken.
         if parent_ctime is None or (ctime is not None and parent_ctime > ctime):
             return None
-        lowered = parent_name.lower()
-        if lowered in CLAUDE_PROCESS_NAMES:
+        if is_claude_process_name(parent_name):
             return parent_pid, parent_ctime, parent_name
-        if lowered in STOP_NAMES:
+        if parent_name.lower() in STOP_NAMES:
             return None
         current = parent
         depth += 1

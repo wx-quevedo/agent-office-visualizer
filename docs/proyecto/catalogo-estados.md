@@ -30,10 +30,10 @@ Sobre la cabeza aparece un ícono de quién lo detiene, y parpadea más rápido 
 | # | Estado | Cómo se ve | Dato que lo dispara | Detección |
 | --- | --- | --- | --- | --- |
 | 13 | Te espera: permiso | "?" rojo, mano levantada, brillo rojo | `PermissionRequest` | Segura |
-| 14 | Te espera: respuesta | Mira hacia ti con un globo de diálogo | Pregunta explícita: `AskUserQuestion` o `ExitPlanMode` pendiente, o `Stop` cuyo último mensaje del asistente termina en "?" | Segura |
+| 14 | Te espera: respuesta | Mira hacia ti con un globo de diálogo | Pregunta explícita: `AskUserQuestion` o `ExitPlanMode` pendiente, o `Stop` cuyo último párrafo del mensaje del asistente contiene una pregunta. AskUserQuestion y ExitPlanMode cuentan aunque Claude Code los pida como permiso | Segura |
 | 15 | Espera un programa | Reloj de arena sobre el monitor | `Bash` que lleva más de 30 s sin terminar (compilar, instalar, pruebas) | Deducida |
 | 16 | Espera una subida o descarga | Barra de progreso con flecha | `Bash` con comandos de red: `git push`, `scp`, `rsync`, `docker push`, `eas submit` | Deducida por comando |
-| 17 | Espera a otros agentes | Mira hacia sus subagentes; número de agentes trabajando | `SubagentStart` sin su `SubagentStop`; un subagente sin actividad por 30 min se da por terminado | Segura |
+| 17 | Espera a otros agentes | Mira hacia sus subagentes; número de agentes trabajando | `SubagentStart` sin su `SubagentStop`; termina con su `SubagentStop`, el `Stop` del agente principal o la muerte del proceso, sin límite de tiempo | Segura |
 
 ## Ausencia y regreso
 
@@ -76,8 +76,8 @@ No son estados: se dibujan encima de cualquier estado para mostrar cuánto y có
 
 | Tema | Decisión | Por qué |
 | --- | --- | --- |
-| Cuándo un agente "te espera: respuesta" (14) | Solo con pregunta explícita: `AskUserQuestion` o `ExitPlanMode` pendiente, o el último mensaje del asistente termina en "?". Si no, `Stop` lleva a 11 y tras 5 min a 18 o 19 según la presencia | Un agente que solo terminó no debe quedar esperándote para siempre |
+| Cuándo un agente "te espera: respuesta" (14) | Solo con pregunta explícita: `AskUserQuestion` o `ExitPlanMode` pendiente, o el último párrafo del mensaje del asistente contiene una pregunta (ajustado tras la prueba en vivo). Si no, `Stop` lleva a 11 y tras 5 min a 18 o 19 según la presencia | Un agente que solo terminó no debe quedar esperándote para siempre |
 | Descanso | 10 min desde la última señal tuya (último navegador visto o último encargo); un reinicio del backend lo atrasa | Se puede medir sin instalar nada más |
-| Subagentes colgados | Un subagente sin actividad por 30 min (configurable) se da por terminado | Sesiones cerradas a la fuerza no deben dejar subagentes eternos |
+| Subagentes colgados | Sin límite de tiempo: un subagente sigue activo hasta su `SubagentStop`, el `Stop` del agente principal o la muerte del proceso (antes: 30 min sin actividad, descartado tras la prueba en vivo) | Un subagente real puede durar mucho; una sesión cerrada ya los oculta |
 | Agente cuya sesión de Claude Code se cerró | No está activo: pasa a 21 "Cerrado" aunque tenga una pregunta pendiente; la pregunta se guarda como dato | Una sesión cerrada no puede esperar a nadie |
 | Reabrir una sesión cerrada | Vuelve al trabajo (20) y, si su pregunta seguía sin respuesta, pasa a 14 | La pregunta sigue vigente cuando la sesión vuelve |

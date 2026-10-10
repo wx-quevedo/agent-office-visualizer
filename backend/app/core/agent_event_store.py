@@ -161,22 +161,41 @@ class AgentEventStore:
         with closing(self._connect()) as conn:
             return int(conn.execute("SELECT COUNT(*) FROM events").fetchone()[0])
 
-    def iter_recent(self, since: datetime) -> Iterator[dict[str, Any]]:
+    def iter_recent(self, since: datetime) -> Iterator[tuple[dict[str, Any], str]]:
         """Payloads of every event of the sessions active since ``since``.
 
         Whole sessions are returned (not only their recent events) so state
         that depends on older events, such as SessionStart, is rebuilt too.
-        Rows come in arrival order.
+        Rows come in arrival order, as ``(payload, origin)``.
         """
         with closing(self._connect()) as conn:
             rows = conn.execute(
-                "SELECT payload FROM events WHERE session_id IN ("
+                "SELECT payload, origin FROM events WHERE session_id IN ("
                 " SELECT session_id FROM events GROUP BY session_id"
                 " HAVING MAX(event_ts) >= ?) ORDER BY id",
                 (_iso(since),),
             )
-            for (payload,) in rows:
-                yield json.loads(payload)
+            for payload, origin in rows:
+                yield json.loads(payload), origin
+
+    def delete_sessions(self, prefixes: list[str]) -> dict[str, int]:
+        """Delete every event of the sessions whose id starts with a prefix.
+
+        Used to remove test sessions. Returns ``{session_id: deleted_events}``.
+        """
+        deleted: dict[str, int] = {}
+        with closing(self._connect()) as conn, conn:
+            for prefix in prefixes:
+                if not prefix:
+                    continue
+                match = "substr(session_id, 1, length(?)) = ?"
+                for sid, n in conn.execute(
+                    f"SELECT session_id, COUNT(*) FROM events WHERE {match} GROUP BY session_id",
+                    (prefix, prefix),
+                ).fetchall():
+                    deleted[sid] = n
+                conn.execute(f"DELETE FROM events WHERE {match}", (prefix, prefix))
+        return deleted
 
     def delete_older_than(self, cutoff: datetime) -> int:
         """Retention: drop events received before ``cutoff``."""

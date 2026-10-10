@@ -17,6 +17,7 @@ from __future__ import annotations
 import bisect
 import logging
 import re
+import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -25,10 +26,15 @@ from typing import Any, cast
 from app.core import token_tracker as _token_tracker
 from app.core.agent_event_store import AgentEventStore
 from app.core.transcript_tail import (
-    ends_with_question,
+    TranscriptTotals,
+    asks_question,
+    clean_prompt,
     last_assistant_text,
     last_usage,
     resolve_transcript,
+    tail_first_ts,
+    turn_progress,
+    user_text_near,
 )
 from app.models.events import AnyEvent, EventType
 
@@ -169,7 +175,7 @@ class Thresholds:
     rest_after_disconnect: float = 600
     prompt: float = 3
     return_: float = 5
-    subagent_expiry: float = 1800
+    reconcile_after: float = 120
     process_check: float = 30
     no_pid_close: float = 3600
     exit_visible: float = 120
@@ -187,7 +193,7 @@ class Thresholds:
             rest_after_disconnect=s.STATE_REST_AFTER_DISCONNECT_SECONDS,
             prompt=s.STATE_PROMPT_SECONDS,
             return_=s.STATE_RETURN_SECONDS,
-            subagent_expiry=s.STATE_SUBAGENT_EXPIRY_SECONDS,
+            reconcile_after=s.STATE_RECONCILE_AFTER_SECONDS,
             process_check=s.STATE_PROCESS_CHECK_SECONDS,
             no_pid_close=s.STATE_NO_PID_CLOSE_HOURS * 3600,
             exit_visible=s.STATE_EXIT_VISIBLE_SECONDS,
@@ -211,6 +217,8 @@ _MAIN_IDS = frozenset({"", "main"})
 # still-pending call means that call already ended (for producers that do not
 # send PostToolUseFailure). Calls of one message start together.
 _PARALLEL_TOOL_WINDOW = timedelta(seconds=2)
+# Retries (one per second, from tick) to read a text from the transcript.
+_TEXT_ATTEMPTS = 30
 
 
 def _aware(ts: datetime) -> datetime:
@@ -247,6 +255,13 @@ class Record:
     # Stop: whether Claude's last message asks the user something.
     question: bool | None = None
     question_text: str | None = None
+    # Where the event came from: hook, poller (classic transcript poller),
+    # importacion (first-start import) or conciliacion (never stored).
+    origin: str = "hook"
+    # UserPromptSubmit whose text was only injected blocks (old hook
+    # truncation): resolved later from the transcript.
+    prompt_pending: bool = False
+    text_attempts: int = 0
     # Claude Code process that owns the session (hook >= this project).
     claude_pid: int | None = None
     claude_pid_created: float | None = None
@@ -283,9 +298,12 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
             first: object = questions[0] if questions else None
             if isinstance(first, dict):
                 command = str(cast(dict[str, Any], first).get("question") or "") or None
+    raw_prompt: str | None = getattr(d, "prompt", None)
+    prompt = clean_prompt(raw_prompt)
     text = (
-        getattr(d, "prompt", None)
-        or getattr(d, "error", None)
+        prompt
+        if raw_prompt
+        else getattr(d, "error", None)
         or getattr(d, "message", None)
         or getattr(d, "task_description", None)
         or getattr(d, "summary", None)
@@ -309,6 +327,7 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
         reports_failures=bool(d.reports_tool_failures),
         claude_pid=d.claude_pid,
         claude_pid_created=d.claude_pid_created,
+        prompt_pending=bool(raw_prompt) and prompt is None,
     )
 
 
@@ -327,6 +346,33 @@ def _is_permission_notification(rec: Record) -> bool:
 
 def _times_by_key() -> dict[str, datetime]:
     return {}
+
+
+def _asks_user(rec: Record) -> bool:
+    """Permission prompt that is really a question (AskUserQuestion, ExitPlanMode)."""
+    if rec.tool_name in ASK_USER_TOOLS:
+        return True
+    return bool(rec.text and any(tool in rec.text for tool in ASK_USER_TOOLS))
+
+
+@dataclass
+class Reconciliation:
+    """What the transcript says when events were lost (never stored as events)."""
+
+    at: datetime
+    evidence_ts: datetime | None
+    tool_ids: frozenset[str]
+    turn_end: datetime | None = None
+    text: str | None = None
+    question: bool = False
+
+    def summary(self) -> str:
+        parts: list[str] = []
+        if self.tool_ids:
+            parts.append(f"herramientas terminadas según la transcripción: {len(self.tool_ids)}")
+        if self.turn_end:
+            parts.append(f"turno terminado a las {self.turn_end.isoformat()}")
+        return "; ".join(parts) or "sin cambios"
 
 
 def _records_by_key() -> dict[str, Record]:
@@ -391,7 +437,7 @@ _CLEARS_PENDING = frozenset(
 )
 
 
-def derive(records: Iterable[Record]) -> _Derived:
+def derive(records: Iterable[Record], recon: Reconciliation | None = None) -> _Derived:
     """Fold an ordered record log into clock-independent session facts."""
     dv = _Derived()
     native_to_start: dict[str, str] = {}
@@ -399,6 +445,11 @@ def derive(records: Iterable[Record]) -> _Derived:
     for rec in records:
         et = rec.event_type
         dv.last_record = rec
+        # Synthetic stops from the classic transcript poller (zombie timeout)
+        # do not end a subagent: only its SubagentStop, the main agent's Stop
+        # or the death of the process do.
+        if rec.origin == "poller" and et in (EventType.SUBAGENT_STOP, EventType.CLEANUP):
+            continue
         # CLEANUP is synthesized by the backend (stamped when it runs), not
         # agent activity: it closes subagents but must not reset idle timers.
         if et != EventType.CLEANUP:
@@ -419,6 +470,7 @@ def derive(records: Iterable[Record]) -> _Derived:
             dv.question = None
         elif et == EventType.STOP:
             dv.question = rec if rec.question else None
+            dv.active_subagents.clear()  # the main agent's Stop ends its subagents
         if rec.claude_pid:
             dv.process = (rec.claude_pid, rec.claude_pid_created)
 
@@ -502,7 +554,10 @@ def derive(records: Iterable[Record]) -> _Derived:
             dv.pending_tools.clear()
 
         if et == EventType.PERMISSION_REQUEST or _is_permission_notification(rec):
-            dv.pending_permission = rec
+            # AskUserQuestion/ExitPlanMode show up as a permission prompt but
+            # they are questions: their pending tool call gives state 14.
+            if not _asks_user(rec):
+                dv.pending_permission = rec
         elif et in _RESOLVES_PERMISSION:
             dv.pending_permission = None
 
@@ -520,8 +575,33 @@ def derive(records: Iterable[Record]) -> _Derived:
             continue
         dv.last_main = rec
 
+    if recon is not None:
+        _apply_reconciliation(dv, recon)
     dv.active_minutes = len(minutes)
     return dv
+
+
+def _apply_reconciliation(dv: _Derived, recon: Reconciliation) -> None:
+    """Close what the transcript shows finished; no event is invented or stored."""
+    for key in [k for k, r in dv.pending_tools.items() if r.tool_use_id in recon.tool_ids]:
+        del dv.pending_tools[key]
+    if recon.turn_end is not None and (dv.last_main is None or recon.turn_end >= dv.last_main.ts):
+        stop = Record(
+            ts=recon.turn_end,
+            seq=-1,
+            event_type=str(EventType.STOP),
+            text=recon.text,
+            question=recon.question,
+            question_text=recon.text[-200:] if recon.text else None,
+            origin="conciliacion",
+        )
+        dv.last_main = stop
+        dv.pending_tools.clear()
+        dv.pending_permission = None
+        dv.active_subagents.clear()
+        dv.question = stop if recon.question else None
+        if dv.last_ts is None or recon.turn_end > dv.last_ts:
+            dv.last_ts = recon.turn_end
 
 
 @dataclass
@@ -540,6 +620,11 @@ class SessionLog:
     # Set when the registered Claude Code process is found gone.
     closed_process_at: datetime | None = None
     closed_pid: int | None = None
+    # Reconciliation with the transcript (annotation only).
+    recon: Reconciliation | None = None
+    # Accumulated tokens of the transcript (read incrementally, in background).
+    totals: TranscriptTotals | None = None
+    totals_samples: list[tuple[datetime, int]] = field(default_factory=_samples)
     _derived: _Derived | None = None
     # Memory for state 20 ("regresa al trabajo").
     prev_state: int | None = None
@@ -556,10 +641,13 @@ class SessionLog:
             del self.records[: len(self.records) - _MAX_RECORDS_PER_SESSION]
         self._derived = None
 
+    def invalidate(self) -> None:
+        self._derived = None
+
     @property
     def derived(self) -> _Derived:
         if self._derived is None:
-            self._derived = derive(self.records)
+            self._derived = derive(self.records, self.recon)
         return self._derived
 
 
@@ -596,12 +684,13 @@ def _evidence(rec: Record | None, **extra: Any) -> dict[str, Any]:
 
 
 def active_subagents(dv: _Derived, now: datetime, th: Thresholds) -> dict[str, Record]:
-    """Subagents without SubagentStop that had activity within the expiry window."""
-    return {
-        aid: rec
-        for aid, rec in dv.active_subagents.items()
-        if (now - dv.subagent_activity.get(aid, rec.ts)).total_seconds() < th.subagent_expiry
-    }
+    """Subagents still running: no SubagentStop and no Stop of the main agent yet.
+
+    There is no time limit; a closed session (process gone, SessionEnd) hides
+    them in the view.
+    """
+    del now, th
+    return dict(dv.active_subagents)
 
 
 def closure_of(log: SessionLog, now: datetime, th: Thresholds) -> tuple[str, datetime] | None:
@@ -790,6 +879,7 @@ class AgentStateEngine:
         self.clock = clock or (lambda: datetime.now(UTC))
         self.browsers_provider = browsers_provider or (lambda: 0)
         self.process_alive = process_alive or _default_process_alive
+        self._totals_busy: dict[str, bool] = {}
         self._last_process_check: datetime | None = None
         self.sessions: dict[str, SessionLog] = {}
         self.started_at = self.clock()
@@ -816,14 +906,15 @@ class AgentStateEngine:
                     event.session_id,
                 )
         try:
-            self.ingest(event)
+            self.ingest(event, origin)
         except Exception:
             logger.exception("Agent state engine failed to ingest %s", event.event_type)
 
-    def ingest(self, event: AnyEvent) -> None:
+    def ingest(self, event: AnyEvent, origin: str = "hook") -> None:
         """Add one event to its session log (memory only)."""
         self._seq += 1
         rec = record_from_event(event, self._seq)
+        rec.origin = origin
         log = self.sessions.get(event.session_id)
         if log is None:
             log = self.sessions[event.session_id] = SessionLog(event.session_id)
@@ -835,6 +926,12 @@ class AgentStateEngine:
             self._detect_question(rec, event, log)
         self._update_tokens(log, event, rec.ts)
         log.add(rec)
+        # Real events newer than what the transcript showed replace the
+        # reconciliation.
+        if log.recon is not None and (
+            log.recon.evidence_ts is None or rec.ts > log.recon.evidence_ts
+        ):
+            log.recon = None
         # A newer event (or a new Claude Code process) reopens a session that
         # was closed because its process ended.
         if log.closed_process_at is not None and (
@@ -854,14 +951,22 @@ class AgentStateEngine:
         """
         text = getattr(event.data, "last_assistant_message", None)
         if not text and log.transcript_path:
+            # The Stop hook can fire before the final message is written: take
+            # it only if the transcript already shows this turn's end;
+            # otherwise leave it unknown and retry from tick().
             path, _ = resolve_transcript(log.transcript_path)
             if path is not None:
                 try:
-                    text = last_assistant_text(path)
+                    _, turn_end, _ = turn_progress(path)
                 except OSError:
-                    text = None
-        rec.question = ends_with_question(text)
-        rec.question_text = text[-200:] if text else None
+                    turn_end = None
+                if turn_end is not None and turn_end[0] >= rec.ts - timedelta(seconds=30):
+                    text = turn_end[1]
+        if text:
+            rec.question = asks_question(text)
+            rec.question_text = text[-200:]
+        else:
+            rec.question = None
 
     def _update_tokens(self, log: SessionLog, event: AnyEvent, ts: datetime) -> None:
         """Latest message usage (= context size), from the event or the transcript tail."""
@@ -886,6 +991,7 @@ class AgentStateEngine:
             if usage is None:
                 return
             total = int(usage["input_tokens"]) + int(usage["output_tokens"])
+            self._scan_totals(log, path)
             model = usage.get("model")
             if isinstance(model, str):
                 log.context_window = _token_tracker._context_window_for_model(model)  # pyright: ignore[reportPrivateUsage]
@@ -895,6 +1001,141 @@ class AgentStateEngine:
             log.token_samples.append((ts, total))
         log.context_tokens = total
         log.token_problem = None
+
+    def _scan_totals(self, log: SessionLog, path: Any) -> None:
+        """Update the accumulated tokens of the transcript in a background thread."""
+        if log.totals is None or log.totals.path != path:
+            log.totals = TranscriptTotals(path)
+        totals = log.totals
+        if self._totals_busy.get(log.session_id):
+            return
+        self._totals_busy[log.session_id] = True
+
+        def run() -> None:
+            try:
+                value = totals.scan()
+                log.totals_samples.append((self.clock(), value))
+            except Exception:
+                logger.exception("Could not read token totals of %s", log.session_id)
+            finally:
+                self._totals_busy[log.session_id] = False
+
+        threading.Thread(target=run, name="agent-token-totals", daemon=True).start()
+
+    # -- pending texts and reconciliation ----------------------------------
+
+    def resolve_pending_texts(self) -> None:
+        """Retry what the transcript did not have yet when the event arrived.
+
+        Prompts whose text was only injected blocks are matched by time with
+        the user entries of the transcript tail (up to _TEXT_ATTEMPTS tries).
+        The question of a Stop without text is resolved for the latest Stop
+        only, since the tail shows the latest turn.
+        """
+        for log in self.sessions.values():
+            if not log.transcript_path or not log.records:
+                continue
+            prompts = [
+                r for r in log.records if r.prompt_pending and r.text_attempts < _TEXT_ATTEMPTS
+            ]
+            last_stop = next(
+                (r for r in reversed(log.records) if r.event_type == EventType.STOP), None
+            )
+            needs_stop = (
+                last_stop is not None
+                and last_stop.question is None
+                and last_stop.text_attempts < _TEXT_ATTEMPTS
+            )
+            if not (prompts or needs_stop):
+                continue
+            path, _ = resolve_transcript(log.transcript_path)
+            if path is None:
+                continue
+            changed = False
+            try:
+                for rec in prompts:
+                    rec.text_attempts += 1
+                    text = user_text_near(path, rec.ts)
+                    if text:
+                        rec.text = text
+                        rec.prompt_pending = False
+                        changed = True
+                if needs_stop and last_stop is not None:
+                    last_stop.text_attempts += 1
+                    _, turn_end, _ = turn_progress(path)
+                    text = turn_end[1] if turn_end else last_assistant_text(path)
+                    if text:
+                        last_stop.question = asks_question(text)
+                        last_stop.question_text = text[-200:]
+                        changed = True
+            except OSError:
+                continue
+            if changed:
+                log.invalidate()
+
+    def reconcile(self, now: datetime | None = None) -> int:
+        """Reconcile live sessions stuck in a working/waiting state with their transcript.
+
+        A session qualifies when it is open, has no new event for
+        STATE_RECONCILE_AFTER_SECONDS and is still working (a tool without
+        PostToolUse, thinking after a prompt or a tool) or waiting on a
+        program/upload. If the transcript tail shows the tool finished or the
+        turn ended, the state is updated and annotated; nothing is stored.
+        """
+        now = now or self.clock()
+        count = 0
+        for log in self.sessions.values():
+            if not log.transcript_path or closure_of(log, now, self.th) is not None:
+                continue
+            dv = log.derived
+            if dv.last_ts is None or (now - dv.last_ts).total_seconds() < self.th.reconcile_after:
+                continue
+            last = dv.last_main
+            working = bool(dv.pending_tools) or (
+                last is not None
+                and last.event_type
+                not in (EventType.STOP, EventType.SESSION_START, EventType.SESSION_END)
+            )
+            if not working or dv.pending_permission is not None:
+                continue
+            path, _ = resolve_transcript(log.transcript_path)
+            if path is None:
+                continue
+            try:
+                finished, turn_end, last_ts = turn_progress(path)
+                first_ts = tail_first_ts(path)
+            except OSError:
+                continue
+            pending_ids = {r.tool_use_id for r in dv.pending_tools.values() if r.tool_use_id}
+            # Tools older than everything in the tail, while the transcript has
+            # newer activity, finished long ago (their result is just not in
+            # the last 256 KB).
+            moved_on = last_ts is not None and last_ts > dv.last_ts
+            older = {
+                r.tool_use_id
+                for r in dv.pending_tools.values()
+                if r.tool_use_id and moved_on and first_ts is not None and r.ts < first_ts
+            }
+            closed = frozenset((pending_ids & finished) | older)
+            ended = turn_end if turn_end and (last is None or turn_end[0] >= last.ts) else None
+            if not closed and ended is None:
+                continue
+            log.recon = Reconciliation(
+                at=now,
+                evidence_ts=last_ts,
+                tool_ids=closed,
+                turn_end=ended[0] if ended else None,
+                text=ended[1] if ended else None,
+                question=asks_question(ended[1]) if ended else False,
+            )
+            log.invalidate()
+            count += 1
+            logger.info(
+                "Agent state engine reconciled %s with its transcript: %s",
+                log.session_id,
+                log.recon.summary(),
+            )
+        return count
 
     # -- presence ------------------------------------------------------------
 
@@ -950,6 +1191,8 @@ class AgentStateEngine:
         ):
             self._last_process_check = now
             self.check_processes(now)
+            self.reconcile(now)
+        self.resolve_pending_texts()
         presence = self.presence(now)
         agents: list[dict[str, Any]] = []
         for log in list(self.sessions.values()):
@@ -1080,6 +1323,9 @@ class AgentStateEngine:
             "pregunta_pendiente": pending_question(dv),
             "cierre": {"motivo": closure[0], "desde": closure[1].isoformat()} if closure else None,
             "proceso": {"pid": dv.process[0], "creado": dv.process[1]} if dv.process else None,
+            "conciliado": {"en": log.recon.at.isoformat(), "detalle": log.recon.summary()}
+            if log.recon
+            else None,
             "indicadores": self._indicators(log, now),
             "eventos_recientes": [
                 {
@@ -1104,10 +1350,27 @@ class AgentStateEngine:
         context_tokens: int | None = None
         context_pct: float | None = None
         token_reason = log.token_problem
-        if log.token_samples and token_reason is None:
-            # The transcript reports the latest message usage (= context size).
-            # Growth of that number approximates tokens processed; drops come
-            # from compaction and are ignored.
+        totals = log.totals
+        if totals is not None and token_reason is None:
+            # Accumulated work: output + new input tokens of every message of
+            # the transcript (cache reads excluded). Context = latest message.
+            if totals.ready:
+                tokens_total = totals.total
+                samples = log.totals_samples
+                base = next((v for ts, v in reversed(samples) if ts <= window_start), None)
+                if base is None and samples:
+                    base = samples[0][1]
+                tokens_per_min = (
+                    round((tokens_total - base) / minutes, 1) if base is not None else None
+                )
+            else:
+                token_reason = "Calculando el acumulado de la transcripción"
+            context_tokens = log.context_tokens
+            if context_tokens is not None and log.context_window:
+                context_pct = round(min(1.0, context_tokens / log.context_window) * 100, 1)
+        elif log.token_samples and token_reason is None:
+            # Producers that send token counts in the event (no transcript):
+            # growth of the context size approximates tokens processed.
             samples = log.token_samples
             tokens_total = samples[0][1]
             recent_growth = 0
@@ -1191,15 +1454,16 @@ async def bootstrap(engine: AgentStateEngine) -> dict[str, int]:
         )
         return result
     loaded = 0
-    for payload in store.iter_recent(since):
+    for payload, origin in store.iter_recent(since):
         try:
             event = EventAdapter.validate_python(payload)
         except ValueError:
             logger.warning("Agent event log: skipped an unreadable event")
             continue
-        engine.ingest(event)
+        engine.ingest(event, origin)
         loaded += 1
     result["cargados"] = loaded
+    result["conciliados"] = engine.reconcile()
     return result
 
 

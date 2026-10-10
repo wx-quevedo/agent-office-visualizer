@@ -32,3 +32,14 @@ def test_result_shape_on_windows() -> None:
         assert pid > 0
         assert created > 1_600_000_000
         assert name.lower() in CLAUDE_PROCESS_NAMES
+
+
+def test_auto_updated_executable_is_still_claude() -> None:
+    from claude_office_hooks.process_info import is_claude_process_name
+
+    # Claude Code's auto-update renames the running file; the CLI keeps it.
+    assert is_claude_process_name("claude.exe.old.1791575871902.47796")
+    assert is_claude_process_name("claude.exe")
+    assert is_claude_process_name("node.exe")
+    assert not is_claude_process_name("Code.exe")
+    assert not is_claude_process_name("claudette.exe")

@@ -95,7 +95,7 @@ def test_iter_recent_returns_whole_active_sessions(store: AgentEventStore) -> No
     store.append(ev("live", "user_prompt_submit", 60, prompt="x"))
     store.flush()
     loaded = list(store.iter_recent(NOW - timedelta(hours=24)))
-    assert [(p["session_id"], p["event_type"]) for p in loaded] == [
+    assert [(p["session_id"], p["event_type"]) for p, _origin in loaded] == [
         ("live", "session_start"),
         ("live", "user_prompt_submit"),
     ]

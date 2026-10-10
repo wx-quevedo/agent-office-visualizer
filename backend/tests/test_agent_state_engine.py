@@ -70,6 +70,20 @@ def engine(clock: FakeClock, browsers: Browsers) -> AgentStateEngine:
     return AgentStateEngine(Thresholds(), clock=clock, browsers_provider=browsers)
 
 
+def wait_totals(engine: AgentStateEngine, timeout: float = 30) -> None:
+    """Wait for the background transcript totals of every session."""
+    import time
+
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        logs = list(engine.sessions.values())
+        if all(log.totals is None or log.totals.ready for log in logs) and not any(
+            engine._totals_busy.values()  # pyright: ignore[reportPrivateUsage]
+        ):
+            return
+        time.sleep(0.05)
+
+
 def feed(engine: AgentStateEngine, *events: AnyEvent) -> None:
     for e in events:
         engine.ingest(e)
@@ -574,33 +588,38 @@ def test_backend_cleanup_is_not_activity(engine: AgentStateEngine, clock: FakeCl
 # ---------------------------------------------------------------------------
 
 
-def test_subagent_expires_after_30_min_without_activity(
-    engine: AgentStateEngine, clock: FakeClock
-) -> None:
-    feed(engine, start(0), ev("subagent_start", 1, agent_id="subagent_a"))
-    assert state_at(engine, clock, 1 + 1799) == (17, "agentes")
-    st = state_at(engine, clock, 1 + 1801)
-    assert st[1] is None
-    assert engine.tick()["agentes"][0]["subagentes_activos"] == 0
+def test_subagent_has_no_time_limit(clock: FakeClock, browsers: Browsers) -> None:
+    engine = AgentStateEngine(
+        Thresholds(), clock=clock, browsers_provider=browsers, process_alive=lambda p, c: True
+    )
+    feed(
+        engine,
+        ev("session_start", 0, claude_pid=7, claude_pid_created=1.0),
+        ev("subagent_start", 1, agent_id="subagent_a", claude_pid=7, claude_pid_created=1.0),
+    )
+    assert state_at(engine, clock, 3 * 3600) == (17, "agentes")
+    assert engine.tick()["agentes"][0]["subagentes_activos"] == 1
 
 
-def test_subagent_activity_keeps_it_alive(engine: AgentStateEngine, clock: FakeClock) -> None:
+def test_main_stop_ends_its_subagents(engine: AgentStateEngine, clock: FakeClock) -> None:
     feed(
         engine,
         start(0),
-        ev("subagent_start", 1, agent_id="subagent_t1"),
-        ev("subagent_info", 2, native_agent_id="n1"),
-        ev(
-            "pre_tool_use",
-            1500,
-            tool_name="Read",
-            tool_use_id="x1",
-            agent_id="main",
-            tool_agent_id="n1",
-        ),
+        ev("subagent_start", 1, agent_id="subagent_a"),
+        ev("stop", 5, last_assistant_message="Listo."),
     )
-    assert state_at(engine, clock, 2500) == (17, "agentes")
-    assert state_at(engine, clock, 1500 + 1801)[1] is None
+    assert state_at(engine, clock, 6) == (11, None)
+    assert engine.tick()["agentes"][0]["subagentes_activos"] == 0
+
+
+def test_poller_zombie_stop_does_not_end_a_subagent(
+    engine: AgentStateEngine, clock: FakeClock
+) -> None:
+    feed(engine, start(0), ev("subagent_start", 1, agent_id="subagent_a"))
+    engine.ingest(ev("subagent_stop", 100, agent_id="subagent_a"), origin="poller")
+    assert state_at(engine, clock, 101) == (17, "agentes")
+    engine.ingest(ev("subagent_stop", 200, agent_id="subagent_a"), origin="hook")
+    assert engine.tick()["agentes"][0]["subagentes_activos"] == 0
 
 
 def test_errors_in_a_row_from_post_tool_use_failure(
@@ -725,6 +744,7 @@ def test_tokens_from_tail_of_a_large_transcript(
         f.write(json.dumps(last) + "\n")
     monkeypatch.setattr("app.core.transcript_tail.is_safe_transcript_path", lambda _p: True)
     feed(engine, ev("session_start", 0, transcript_path=str(transcript)))
+    wait_totals(engine)
     ind = engine.tick()["agentes"][0]["indicadores"]
     assert ind["tokens_contexto"] == 401_000
     assert ind["contexto_usado_pct"] == 40.1
