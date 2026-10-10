@@ -95,6 +95,23 @@ class Settings(BaseSettings):
     # catching zombies quickly.
     ZOMBIE_SUBAGENT_TIMEOUT_SECONDS: int = 90
 
+    # Agent state engine thresholds (docs/proyecto/catalogo-estados.md).
+    # A Bash command without its PostToolUse for this long = "espera un programa".
+    STATE_PROGRAM_WAIT_SECONDS: float = 30
+    # No events for this long (and not waiting) = "inactivo" / "descansando".
+    STATE_IDLE_SECONDS: float = 300
+    # A UserPromptSubmit within this window keeps the user "conectado".
+    STATE_PRESENCE_WINDOW_SECONDS: float = 600
+    # The user must be disconnected this long before an idle agent rests.
+    STATE_REST_AFTER_DISCONNECT_SECONDS: float = 600
+    # Short-lived states: "recibe encargo", "terminó el turno", "regresa al trabajo".
+    STATE_PROMPT_SECONDS: float = 3
+    STATE_TURN_DONE_SECONDS: float = 10
+    STATE_RETURN_SECONDS: float = 5
+    # Ended sessions stay listed ("se va") this long; older sessions are dropped.
+    STATE_EXIT_VISIBLE_SECONDS: float = 120
+    STATE_SESSION_MAX_AGE_HOURS: float = 24
+
     # API key for authenticating hook requests. When set, all requests
     # must include this value in the X-API-Key header. When empty, a
     # per-launch random token is generated for state-changing endpoints

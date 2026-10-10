@@ -21,6 +21,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.config import get_settings
+from app.core.agent_state_engine import get_state_engine
 from app.core.beads_poller import get_beads_poller, has_beads, init_beads_poller
 from app.core.broadcast_service import (
     broadcast_error,
@@ -501,6 +502,13 @@ class EventProcessor:
                 resolved_room_id = assignment.room_id
 
         await self._persist_event(event, resolved_floor_id, resolved_room_id)
+
+        # Catalog state engine (new canvas): independent of the classic
+        # StateMachine and must never break the classic pipeline.
+        try:
+            get_state_engine().ingest(event)
+        except Exception:
+            logger.exception("Agent state engine failed to ingest %s", event.event_type)
 
         # Replay from DB *before* acquiring the lock: the restore is async I/O
         # that can take hundreds of ms for a long session, and holding the lock

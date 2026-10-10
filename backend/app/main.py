@@ -16,8 +16,9 @@ from rich.logging import RichHandler
 from sqlalchemy import delete, select, update
 
 from app.api.middleware import ApiKeyMiddleware, LocalhostOnlyMiddleware
-from app.api.routes import events, floors, preferences, sessions, websockets
+from app.api.routes import agents_state, events, floors, preferences, sessions, websockets
 from app.config import get_settings
+from app.core.agent_state_engine import bootstrap_from_db, get_state_engine, run_tick_loop
 from app.core.event_processor import EventProcessor, get_event_processor
 from app.core.summary_service import get_summary_service
 from app.db.database import Base, get_engine
@@ -81,8 +82,21 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         )
     )
 
+    # Catalog state engine: reload recent sessions, then recompute every second
+    # so time-based states (program wait, idle, rest) change without events.
+    state_engine = get_state_engine()
+    try:
+        loaded = await bootstrap_from_db(state_engine)
+        logger.info("Agent state engine loaded %d recent events from the DB", loaded)
+    except Exception:
+        logger.exception("Agent state engine bootstrap failed")
+    state_ticker = asyncio.create_task(run_tick_loop(state_engine))
+
     yield
 
+    state_ticker.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await state_ticker
     # Cancel any pending debounced overview broadcast so shutdown is clean.
     await get_event_processor().shutdown()
     idle_evictor.cancel()
@@ -185,6 +199,7 @@ app.add_middleware(
 app.add_middleware(LocalhostOnlyMiddleware)
 app.add_middleware(ApiKeyMiddleware)
 
+app.include_router(agents_state.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(events.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(floors.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(preferences.router, prefix=f"{settings.API_V1_STR}")

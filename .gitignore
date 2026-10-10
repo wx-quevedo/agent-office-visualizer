@@ -113,3 +113,13 @@ frontend/public/sprites/paid/
 .superpowers
 docs/superpowers
 .cc2cc-session-id
+
+# autoskills (reinstalar con: npx autoskills -a claude-code, ver PROJECT.md)
+/.agents/
+/skills-lock.json
+/.claude/skills/frontend-design
+/.claude/skills/python-testing-patterns
+/.claude/skills/fastapi-python
+/.claude/skills/vitest
+/.claude/skills/react-best-practices
+/.claude/skills/next-best-practices

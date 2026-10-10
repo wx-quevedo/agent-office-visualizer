@@ -41,6 +41,7 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 | 2026-10-09 | Subagentes como un número sobre el agente | No quitan protagonismo al agente |
 | 2026-10-09 | Descanso: videojuego, lectura y siesta, rotando | Variedad sin distraer de los que esperan |
 | 2026-10-09 | Tamaño del agente: el doble del actual | El agente es lo principal |
+| 2026-10-09 | Cambio de enfoque: de claude-office se conservan los hooks, el backend, el registro de sesiones y el WebSocket; el lienzo se construye desde cero. La vista actual queda como "vista clásica" y no se toca | Validar primero, con datos en bruto, que los eventos alcanzan para el catálogo de estados; los gráficos se diseñan después sobre datos confiables |
 
 ## Ajustes heredados de la instalación diaria
 
@@ -62,7 +63,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-09 | Commit inicial `7dcaffb`: base claude-office 0.24.1 (`3522c16`) con los 5 ajustes locales, PROJECT.md y `docs/proyecto/` |
 | 2026-10-09 | Puertos configurables (`BACKEND_PORT`, `FRONTEND_PORT`, `NEXT_PUBLIC_BACKEND_PORT`) y `make dev-local` en 3100/8100, con resúmenes IA desactivados. Probado junto a la oficina diaria con el escenario `complex`. Commit `b690783` |
 | 2026-10-09 | Registro de decisiones del catálogo de estados, `frontend/AGENTS.md` y `frontend/CLAUDE.md` versionados. Autoskills sin instalar: la herramienta no permite elegir skills sueltas sin terminal interactiva. Commit `ffdd9aa` |
-| 2026-10-09 | Fase 1 "el agente como protagonista": boss al doble de tamaño en oficina y Command Center (escritorio, alfombra, colas, obstáculos y basurero recolocados); subagentes como número sobre el agente; opción "Mostrar subagentes como personajes" en Ajustes (apagada por defecto). Skills de autoskills reunidas en `.agents/skills` y `.claude/skills` de la raíz (hash en el registro del commit siguiente) |
+| 2026-10-09 | Fase 1 "el agente como protagonista": boss al doble de tamaño en oficina y Command Center (escritorio, alfombra, colas, obstáculos y basurero recolocados); subagentes como número sobre el agente; opción "Mostrar subagentes como personajes" en Ajustes (apagada por defecto). Skills de autoskills reunidas en `.agents/skills` y `.claude/skills` de la raíz. Commit `a786511` |
+| 2026-10-09 | Motor de estados del catálogo (`backend/app/core/agent_state_engine.py`), endpoint `GET /api/v1/agents/state` y página sin estilos `/datos`. Probado con el simulador y con los eventos reales de las dos cuentas (copia de `visualizer.db`). Skills de autoskills fuera de git (hash en el registro del commit siguiente) |
 
 ## Cómo levantar
 
@@ -95,6 +97,30 @@ Abrir http://localhost:3100 (desde el iPhone: http://<TAILSCALE_IP>:3100).
 - `make dev` en esta carpeta usa 3000/8000 y choca con la oficina diaria; usar siempre `make dev-local`.
 - Los puertos se cambian con `make dev-local DEV_BACKEND_PORT=... DEV_FRONTEND_PORT=...` (y `NEXT_PUBLIC_BACKEND_PORT` en `frontend/.env.local`).
 - El log del backend imprime el enlace con `?token=` usando 3000/8000; en desarrollo, cambiar el puerto a 3100 a mano.
+- En Windows usar `127.0.0.1` en lugar de `localhost` para scripts que hagan muchas peticiones: `localhost` prueba primero IPv6 y tarda unos 2 s por petición.
+
+Datos en bruto del motor de estados: http://localhost:3100/datos (se actualiza cada 2 s) o `curl http://127.0.0.1:8100/api/v1/agents/state`.
+
+Skills de autoskills (no se versionan: `.agents/`, `skills-lock.json` y sus enlaces en `.claude/skills/` están en `.gitignore`). Para reinstalarlas, desde una terminal interactiva (el selector no funciona sin terminal y, sin ella, instala todas las sugeridas):
+
+```bash
+cd /e/visualizador-agentes
+npx autoskills -a claude-code    # dejar marcadas: frontend-design, python-testing-patterns, fastapi-python
+cd frontend
+npx autoskills -a claude-code    # dejar marcadas: vitest, react-best-practices, next-best-practices
+```
+
+Las de `frontend/` quedan en `frontend/.agents` y `frontend/.claude`; para usarlas desde la raíz, mover `frontend/.agents/skills/<nombre>` a `.agents/skills/` y crear en `.claude/skills/<nombre>` una unión de directorio (`New-Item -ItemType Junction`), porque los enlaces simbólicos piden administrador en Windows.
+
+## Motor de estados
+
+`backend/app/core/agent_state_engine.py` calcula, por sesión activa, el estado del catálogo (`docs/proyecto/catalogo-estados.md`) a partir de los eventos que ya recibe el backend, sin depender de la vista clásica. Se recalcula cada segundo.
+
+- Umbrales (segundos, configurables en `backend/.env`): `STATE_PROGRAM_WAIT_SECONDS=30` (espera un programa), `STATE_IDLE_SECONDS=300` (inactivo), `STATE_PRESENCE_WINDOW_SECONDS=600` (presencia por encargo reciente), `STATE_REST_AFTER_DISCONNECT_SECONDS=600` (descanso), `STATE_PROMPT_SECONDS=3` (recibe encargo), `STATE_TURN_DONE_SECONDS=10` (terminó el turno, luego te espera respuesta), `STATE_RETURN_SECONDS=5` (regresa al trabajo), `STATE_EXIT_VISIBLE_SECONDS=120` (se va), `STATE_SESSION_MAX_AGE_HOURS=24`.
+- Comandos de red ("espera una subida o descarga"), en Bash o PowerShell: `git push/pull/fetch/clone`, `scp`, `rsync`, `sftp`, `docker`/`podman push/pull`, `eas submit/build/update`, `npm`/`pnpm`/`yarn publish`, `gh release upload/download`, `curl -T`/`--upload-file`, `curl -o`/`-O` (descarga), `wget`, `aws s3 cp/sync/mv`, `gsutil cp/rsync`, `rclone copy/sync/move`, `huggingface-cli`/`hf upload/download`, `firebase`/`vercel`/`netlify deploy`.
+- Herramientas → estado: `Read`, `Grep`, `Glob`, `LS`, `NotebookRead`, `ToolSearch`, `Skill` = 4; `Edit`, `Write`, `MultiEdit`, `NotebookEdit` = 5; `Bash`, `PowerShell`, `BashOutput`, `KillShell`, `TaskOutput`, `TaskStop`, `Monitor` = 6; `WebSearch`, `WebFetch` = 7; `mcp__*` = 8; `TodoWrite`, `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`, `EnterPlanMode` = 9; `AskUserQuestion`, `ExitPlanMode` = 14 (te espera respuesta); otras = 3.
+- Presencia: "conectado" si hay un navegador en cualquier WebSocket o un `UserPromptSubmit` en los últimos 10 min. El descanso exige 10 min desde la última evidencia del usuario (último navegador visto o último encargo); como antes de arrancar el backend no se sabe, la hora de arranque cuenta como evidencia.
+- Interpretaciones propias: después de un `PostToolUse` el agente está "pensando" (3); `Stop` muestra 11 durante 10 s y luego 14; un agente que espera (13 a 17) no pasa a inactivo ni a descansar; una herramienta sin `PostToolUse` se da por terminada si el agente principal inicia otra más de 2 s después; los `cleanup` que genera el backend no cuentan como actividad; un subagente que termina después de `Stop` no saca al agente de "te espera".
 
 ## Problemas y soluciones
 
@@ -107,6 +133,13 @@ Abrir http://localhost:3100 (desde el iPhone: http://<TAILSCALE_IP>:3100).
 | iPhone cargaba la página sin datos | Next.js en modo desarrollo bloqueaba sus recursos; se agregó `allowedDevOrigins` |
 | La PC dependía de Tailscale para ver la oficina | El frontend usa el host de la página para buscar el backend |
 | En Windows, la recarga del backend detiene el frontend | Pendiente: reiniciar `make dev` tras cambios de código del backend |
+| En Windows, la recarga automática del backend a veces se traba y sigue respondiendo el proceso viejo | Detener 3100/8100 y volver a `make dev-local` |
+| Peticiones a `localhost` tardan unos 2 s en Windows | `localhost` prueba IPv6 primero y uvicorn solo escucha IPv4; usar `127.0.0.1` |
+| El hook no envía `PostToolUseFailure`: no hay datos de errores y una herramienta fallida queda sin cierre | Pendiente: mapear `PostToolUseFailure` en los hooks; el motor cierra la herramienta cuando empieza otra y devuelve `errores_seguidos = null` con el motivo |
+| El hook marca como `agent_id="main"` las herramientas que usan los subagentes | Pendiente: enviar el `agent_id` real del subagente desde el hook |
+| Transcripciones de más de 50 MB (vive-demo 428 MB, SkyNest 75 MB): token_tracker no las lee | El motor devuelve tokens en `null` con el motivo; pendiente leer solo la cola del archivo para los tokens |
+| `Stop` sin nuevo encargo = "te espera respuesta" para siempre: un agente que terminó nunca descansa | Pendiente decidir si "te espera respuesta" requiere una pregunta explícita (notificación de inactividad o `AskUserQuestion`) |
+| Sesiones sin `SessionEnd` (cerradas a la fuerza) quedan activas hasta 24 h, con sus subagentes | Pendiente: dar por terminados los subagentes sin actividad, como hace la vista clásica |
 | Next.js 16.3 genera `frontend/AGENTS.md` y `frontend/CLAUDE.md` al arrancar | Se versionan (decisión 2026-10-09) para que `next dev` no los vuelva a dejar como cambios sueltos |
 | `npm install` del frontend reporta 6 vulnerabilidades (5 altas, 1 crítica) | Pendiente: revisar con `npm audit`; herramienta local, no bloquea |
 | autoskills no permite elegir skills sueltas por línea de comandos; sin terminal interactiva instala todas las sugeridas | Washington las instaló con el selector interactivo; las de `frontend/` se movieron a la raíz (Windows pide administrador para enlaces simbólicos, se usaron uniones de directorio) |
@@ -114,5 +147,6 @@ Abrir http://localhost:3100 (desde el iPhone: http://<TAILSCALE_IP>:3100).
 
 ## Próximos pasos
 
-1. Implementar por fases: agente más grande, estados de espera con "a quién espera", ausencia y regreso, indicadores de esfuerzo, avisos.
-2. App móvil con notificaciones.
+1. Resolver los pendientes del motor de estados (errores de herramientas, `agent_id` de subagentes, tokens de transcripciones grandes, cuándo "te espera respuesta").
+2. Construir el lienzo nuevo sobre `GET /api/v1/agents/state`, dejando la vista clásica intacta.
+3. Avisos (sonido y notificación del sistema) y app móvil con notificaciones.
