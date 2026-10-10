@@ -47,15 +47,19 @@ import {
   STATUS_COLOR,
 } from "./roles";
 import { t } from "../textos";
-import { cuentaCorta } from "../adaptador";
+import { ENTRADA, PASILLO_SOFA, PUERTA } from "../comportamiento";
+import { MarcaCuenta } from "@/components/marca/Marca";
 import { duracion, recortar } from "@/components/oficina/logica";
 import { useSettings } from "../settings";
 
 // ── Agent character (adapted from Agent Office 3D, MIT) ──
-// Sits at the desk while working; when idle walks around the office through
-// the doors. Resting agents (19, you are away) stay in the break room.
-// Labels: project, account and short state; more data on hover; click opens
-// the agent detail of /oficina. No emojis: badges are short texts.
+// The behaviour layer (comportamiento.ts) says where it goes: its desk, a
+// walk around the office, the break room sofa (19) or the entrance door (12,
+// and closed agents walking out). New agents walk in from the door; on the
+// first load they are placed directly. It stands up and sits down with an
+// animation and never teleports. Poses: arm up (13), facing the camera (14),
+// relaxed on the sofa (19). Labels say only what the posture does not show;
+// more data on hover; click opens the agent detail of /oficina. No emojis.
 
 const SPEED = 1.7;
 // Ota→yordamchi bog'lovchi chiziq (sub-agent "daraxti" shoxi). Sariq — "yollandi"
@@ -65,7 +69,6 @@ const LINK_MAT = basicMat("#ffd60a", { transparent: true, opacity: 0.55 });
 function AgentAvatar({ agent }: { agent: AgentView }) {
   const seat = seatFor(agent.seatIndex);
   const preset = characterFor(agent.role, agent.seatIndex, agent.id);
-  const cuenta = cuentaCorta(agent.cuenta);
   const titulo = agent.customName || agent.folderName;
   const select = useOffice((s) => s.select);
   const hover = useOffice((s) => s.hover);
@@ -172,176 +175,145 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
     return () => clearTimeout(t);
   }, [hotNow]);
 
-  // O'tirish nuqtasi (stul markazi — har qanday yo'nalishga mos, collision chetda)
+  // Desk seat point (chair centre).
   const sit = useRef<WP>({ ...sitPoint(seat) });
+  // Agents that appear after the first load walk in from the entrance door.
+  const desdePuerta = useRef(agent.origen === "puerta");
+  // First load while resting (19): already in the break room ("its place").
+  const descansoInicial = useRef(
+    !desdePuerta.current && agent.destino === "sofa" ? agent.descanso : null,
+  );
 
   const group = useRef<THREE.Group>(null);
-  const pos = useRef<WP>({ ...sit.current });
-  const path = useRef<WP[]>([]);
-  const curNode = useRef(nearestNode(sit.current.x, sit.current.z)); // joriy graf tuguni
+  const pos = useRef<WP>(
+    desdePuerta.current
+      ? { ...PUERTA }
+      : descansoInicial.current
+        ? { x: descansoInicial.current.x, z: descansoInicial.current.z }
+        : { ...sit.current },
+  );
+  const path = useRef<WP[]>(desdePuerta.current ? [{ ...ENTRADA }] : []);
+  const curNode = useRef(
+    desdePuerta.current
+      ? nearestNode(ENTRADA.x, ENTRADA.z)
+      : descansoInicial.current
+        ? "lounge_i"
+        : nearestNode(sit.current.x, sit.current.z),
+  );
   const pendingNode = useRef<string | null>(null);
   const pause = useRef(0);
-  const seated = useRef(true);
+  const seated = useRef(
+    !desdePuerta.current && descansoInicial.current?.tipo !== "cerca",
+  );
   const movingRef = useRef(false);
-  const prevDesired = useRef(true);
   const stuck = useRef(0);
-  const speedRef = useRef(0); // haqiqiy yurish tezligi (oyoq sirg'anmasin uchun)
-  const firstIdleTrip = useRef(false); // ishdan endi bo'shadi → tanaffusga
+  const speedRef = useRef(0); // real walking speed (feet do not slide)
+  const firstIdleTrip = useRef(false); // just finished work → coffee break
   const statusRef = useRef(agent.status);
   statusRef.current = agent.status;
-  const restingRef = useRef(agent.resting);
-  restingRef.current = agent.resting;
-  // ── Ijtimoiy hayot (uchrashuv) ──
-  const reportT = useRef(0); // presence bildirish throttle
-  const seekCd = useRef(3 + Math.random() * 4); // keyingi izlashgacha
-  const metAt = useRef(0); // gather nuqtasiga yetgan payt (0 = yetmagan)
+  // Behaviour layer (comportamiento.ts), read every frame without re-render.
+  const destinoRef = useRef(agent.destino);
+  destinoRef.current = agent.destino;
+  const poseRef = useRef(agent.pose);
+  poseRef.current = agent.pose;
+  const descansoRef = useRef(agent.descanso);
+  descansoRef.current = agent.descanso;
+  const descansoAnterior = useRef(agent.descanso);
+  const prevDestino = useRef(agent.destino);
+  // Sitting on the sofa / gliding between the approach point and the seat
+  // (no collision for that last step: the seat is inside the sofa box).
+  const enSofa = useRef(descansoInicial.current?.tipo === "sofa");
+  const deslizar = useRef<{ x: number; z: number; ry: number } | null>(null);
+  // Standing up before walking away (no teleport, no instant stand-up).
+  const levantarse = useRef(0);
+  // Entrance / exit: scale 0→1 at the door, 1→0 when leaving.
+  const escala = useRef(desdePuerta.current ? 0 : 1);
+  const salio = useRef(false);
+  const marcarSalido = useOffice((s) => s.marcarSalido);
+  // ── Social life (idle agents meet) ──
+  const reportT = useRef(0);
+  const seekCd = useRef(3 + Math.random() * 4);
+  const metAt = useRef(0);
   const [emote, setEmote] = useState<"" | "charla">("");
   const emoteRef = useRef<"" | "charla">("");
-  useEffect(() => () => unreport(agent.id), [agent.id]); // ketganda reyestrдан chiqar
+  useEffect(() => () => unreport(agent.id), [agent.id]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05);
     const g = group.current;
     if (!g) return;
-    // Sozlamalarni HAR FREYM store'dan o'qiymiz (reaktiv obuna emas — o'zgarish
-    // darhol ta'sir qiladi, lekin qayta render qilinmaydi).
     const cfg = useSettings.getState();
-    // Sayr o'chirilgan bo'lsa — bo'sh agent ham stolida qoladi.
-    const desiredSit = statusRef.current !== "idle" || !cfg.wander;
+    const destino = destinoRef.current;
+    const pasear = destino === "pasear" && cfg.wander;
+    const desiredSit =
+      destino === "escritorio" || (destino === "pasear" && !cfg.wander);
     const p = pos.current;
 
-    // Uchrashuvlar o'chirilgan bo'lsa — boshlanganini ham tozalaymiz (yarim
-    // yo'lda qotib qolmasin) va yangisini izlamaymiz.
-    if (!cfg.social && meetingOf(agent.id)) {
+    if ((!cfg.social || !pasear) && meetingOf(agent.id)) {
       clearMeeting(agent.id);
       metAt.current = 0;
     }
 
-    // Rejim o'zgarsa — joriy tugunga yetib qayta rejalaymiz (uzoq aylanmasin)
-    if (desiredSit !== prevDesired.current) {
-      prevDesired.current = desiredSit;
-      if (!desiredSit) firstIdleTrip.current = true; // ishni tugatdi → tanaffus
-      if (desiredSit) {
-        clearMeeting(agent.id);
-        metAt.current = 0;
-      } // task keldi → uchrashuvni tashla
+    // Destination changed: finish the current edge and plan again; stand up
+    // first if seated (the pose animates, nobody teleports).
+    if (destino !== prevDestino.current) {
+      if (prevDestino.current === "escritorio" && destino === "pasear")
+        firstIdleTrip.current = true;
+      prevDestino.current = destino;
+      clearMeeting(agent.id);
+      metAt.current = 0;
       if (path.current.length > 1) {
         path.current = path.current.slice(0, 1);
         pendingNode.current = null;
       }
-    }
-
-    // Ijtimoiy izlash — HAR freym (sayr davomida ham). Cooldown tugagach bo'sh
-    // sherik topilsa, joriy yo'lni tashlab hub'ga yo'naladi (keyingi freym
-    // meet-tarmog'i boshqaradi). Aks holda tez-tez qayta urinadi.
-    if (!desiredSit && cfg.social && !meetingOf(agent.id)) {
-      if (seekCd.current > 0) seekCd.current -= dt;
-      else {
-        const m = seekMeeting(agent.id, p.x, p.z, performance.now() / 1000);
-        if (m) {
-          path.current = [];
-          pendingNode.current = null;
-        } else seekCd.current = 1.2 + Math.random(); // sherik hali yo'q — birozdan keyin
-      }
-    }
-    // Uchrashuv bor, lekin sayr yo'lida (sherik — o'z yo'lini tozalamagan) —
-    // joriy qirrani tugatib hub'ga qayta yo'naltiramiz (uzoq sayr qilmasin).
-    {
-      const cm = meetingOf(agent.id);
-      if (
-        cm &&
-        metAt.current === 0 &&
-        pendingNode.current !== cm.point &&
-        path.current.length > 1
-      ) {
-        path.current = path.current.slice(0, 1);
-        pendingNode.current = null;
-      }
-    }
-
-    // Yo'l tugagan — keyingi maqsad. HAR DOIM graf tugunidan (curNode) yo'l
-    // olamiz → yo'llar faqat eshiklardan o'tadi, devor/mebeldan emas.
-    if (path.current.length === 0) {
-      const atSeat =
-        Math.hypot(p.x - sit.current.x, p.z - sit.current.z) < 0.25;
-      if (desiredSit) {
-        if (atSeat) {
-          seated.current = true;
-        } else {
-          const target = nearestNode(sit.current.x, sit.current.z);
-          const route = pathBetween(curNode.current, target);
-          // Yo'l topilmasa — to'g'ridan-to'g'ri stulga (o'z stoli ochiq maydonda).
-          path.current = route.length ? [...route, sit.current] : [sit.current];
-          pendingNode.current = route.length ? target : null;
-        }
-      } else {
+      if (seated.current && !enSofa.current && destino !== "escritorio") {
         seated.current = false;
-        const now = performance.now() / 1000;
-        const meet = meetingOf(agent.id);
-        if (!meet && metAt.current) metAt.current = 0; // uchrashuv tashqaridan tozalandi
-        if (meet) {
-          // ── Uchrashuv: O'Z joyimga (spot) boraman; ikkovimiz yetgach ~6s
-          //    suhbat, keyin tarqaymiz. Sherik ketsa — kutmaymiz. ──
-          const spot = meetSpot(meet);
-          const partner = presenceOf(meet.partner);
-          const bothHere =
-            metAt.current > 0 && partner != null && partner.metAt > 0;
-          const chatSince = bothHere
-            ? Math.max(metAt.current, partner!.metAt)
-            : 0;
-          const chatDone = bothHere && now - chatSince > 6;
-          const partnerGone =
-            partner == null || meetingOf(meet.partner) == null; // yurib turган bo'lsam ham bekor qilaman (R2)
-          if (now > meet.until || chatDone || partnerGone) {
-            clearMeeting(agent.id);
-            metAt.current = 0;
-            seekCd.current = 18 + Math.random() * 20; // yaqinда qayta uchrashmasin
-            pause.current = 0.4 + Math.random();
-          } else if (Math.hypot(p.x - spot.x, p.z - spot.z) < 0.32) {
-            if (metAt.current === 0) metAt.current = now; // joyimga yetdim (sherikni kutaman)
-          } else if (
-            Math.hypot(p.x - NODES[meet.point].x, p.z - NODES[meet.point].z) <
-            1.3
-          ) {
-            // hub'ga yetdim — oxirgi qadamni O'Z joyimga to'g'ri yuraman
-            path.current = [spot];
-            pendingNode.current = null;
-          } else {
-            const from = nearestNode(p.x, p.z);
-            const route = pathBetween(from, meet.point);
-            if (route.length === 0) {
-              curNode.current = from;
-              pause.current = 0.5;
-            } else {
-              path.current = route;
-              curNode.current = from;
-              pendingNode.current = meet.point;
-            }
-          }
-        } else if (pause.current > 0) {
-          pause.current -= dt;
-        } else {
-          const target =
-            firstIdleTrip.current || restingRef.current
-              ? breakRoom()
-              : idleDestination(agent.role);
-          firstIdleTrip.current = false;
-          const route = pathBetween(curNode.current, target);
-          if (route.length === 0) {
-            // Yetib bo'lmaydi — joyimizni qayta aniqlab, biroz kutamiz.
-            curNode.current = nearestNode(p.x, p.z);
-            pause.current = 0.6 + Math.random();
-          } else {
-            path.current = route;
-            pendingNode.current = target;
-          }
-        }
+        levantarse.current = 0.7;
+      }
+      if (enSofa.current && destino !== "sofa") {
+        // get up from the sofa: back to its approach point
+        const d = descansoAnterior.current;
+        if (d) deslizar.current = { x: d.ax, z: d.az, ry: d.ry };
       }
     }
+    if (destino === "sofa" && descansoRef.current)
+      descansoAnterior.current = descansoRef.current;
 
-    // Harakat — faqat yo'l nuqtalari orasida (graf qirralari devor kesmaydi)
     let moving = false;
-    if (path.current.length > 0) {
+
+    if (levantarse.current > 0) {
+      levantarse.current -= dt;
+    } else if (deslizar.current) {
+      // Last step onto / off the sofa, without collision.
+      const d = deslizar.current;
+      const dx = d.x - p.x;
+      const dz = d.z - p.z;
+      const dist = Math.hypot(dx, dz);
+      const paso = Math.min(dist, 0.9 * dt);
+      if (dist > 0.02) {
+        p.x += (dx / dist) * paso;
+        p.z += (dz / dist) * paso;
+      } else {
+        deslizar.current = null;
+        if (destino !== "sofa") {
+          // Off the sofa: back through the corridor to the lounge node.
+          enSofa.current = false;
+          seated.current = false;
+          path.current = [{ ...PASILLO_SOFA }];
+          pendingNode.current = "lounge_i";
+        }
+      }
+      g.rotation.y = dampAngle(g.rotation.y, d.ry, 6, dt);
+    } else if (path.current.length === 0) {
+      planear(dt, desiredSit, pasear);
+    }
+
+    // Walk along the path (graph edges never cross walls).
+    if (
+      !deslizar.current &&
+      levantarse.current <= 0 &&
+      path.current.length > 0
+    ) {
       seated.current = false;
       const t = path.current[0];
       const dx = t.x - p.x;
@@ -354,28 +326,29 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
         if (path.current.length === 0) {
           curNode.current = pendingNode.current ?? nearestNode(p.x, p.z);
           pendingNode.current = null;
-          if (!desiredSit)
-            pause.current = restingRef.current
-              ? 12 + Math.random() * 10
-              : 1.5 + Math.random() * 4;
+          if (pasear) pause.current = 1.5 + Math.random() * 4;
         }
       } else {
-        // QATTIQ to'qnashuv — devor/mebeldan o'tmaydi, sirg'anadi
         const mvx = (dx / dist) * SPEED * dt;
         const mvz = (dz / dist) * SPEED * dt;
-        const res = slide(p.x, p.z, mvx, mvz, 0.16);
-        // Agent-agent collision — bir-birini ustidan arvohdek o'tmaydi. O'q
-        // bo'yicha: agar YANGI joy boshqa agentга tegsa (va hozir tegmayotgan
-        // bo'lsak) — o'sha o'q bo'yicha turamiz. (Ichida qolsa — chiqishga ruxsat.)
+        // The door is inside the outer wall: no collision for that last step.
+        const libre =
+          Math.hypot(t.x - PUERTA.x, t.z - PUERTA.z) < 0.05 ||
+          Math.hypot(p.x - PUERTA.x, p.z - PUERTA.z) < 1.2;
+        const res = libre
+          ? { x: p.x + mvx, z: p.z + mvz }
+          : slide(p.x, p.z, mvx, mvz, 0.16);
         const SEP = 0.42;
         let fx = res.x,
           fz = res.z;
         if (
+          !libre &&
           blockedByAgent(agent.id, fx, p.z, SEP) &&
           !blockedByAgent(agent.id, p.x, p.z, SEP)
         )
           fx = p.x;
         if (
+          !libre &&
           blockedByAgent(agent.id, fx, fz, SEP) &&
           !blockedByAgent(agent.id, fx, p.z, SEP)
         )
@@ -384,21 +357,17 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
         p.x = fx;
         p.z = fz;
         moving = true;
-        speedRef.current = moved / Math.max(dt, 0.001); // m/s — qadam fazasi uchun
+        speedRef.current = moved / Math.max(dt, 0.001);
         g.rotation.y = dampAngle(g.rotation.y, Math.atan2(-dx, -dz), 10, dt);
-        // Tiqilib qolsa — bu nuqtani tashlab, qayta rejalaymiz
         if (moved < SPEED * dt * 0.25) {
           stuck.current += dt;
           if (stuck.current > 0.8) {
             path.current.shift();
             stuck.current = 0;
             if (path.current.length === 0) {
-              // Yetib BORMADIK — shuning uchun joriy tugunni HAQIQIY joydan
-              // olamiz (pendingNode'ni ishlatsak, graf bo'yicha yolg'on joyda
-              // turgan bo'lardik va keyingi yo'l ham noto'g'ri chiqardi).
               curNode.current = nearestNode(p.x, p.z);
               pendingNode.current = null;
-              if (!desiredSit) pause.current = 1 + Math.random() * 3;
+              if (pasear) pause.current = 1 + Math.random() * 3;
             }
           }
         } else {
@@ -407,18 +376,48 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
       }
     }
     movingRef.current = moving;
-    if (!moving) speedRef.current *= Math.max(0, 1 - dt * 6); // to'xtaganda so'nadi
+    if (!moving) speedRef.current *= Math.max(0, 1 - dt * 6);
 
-    if (seated.current) g.rotation.y = dampAngle(g.rotation.y, seat.ry, 8, dt);
+    // Facing while seated: the desk, or the camera when it asked you something.
+    if (seated.current && !enSofa.current && !deslizar.current) {
+      let ry = seat.ry;
+      if (poseRef.current === "mirarCamara") {
+        const c = state.camera.position;
+        ry = Math.atan2(-(c.x - p.x), -(c.z - p.z));
+      }
+      g.rotation.y = dampAngle(g.rotation.y, ry, 4, dt);
+    }
+    // On the sofa: face where the sofa faces.
+    if (enSofa.current && !deslizar.current && descansoRef.current) {
+      g.rotation.y = dampAngle(g.rotation.y, descansoRef.current.ry, 4, dt);
+    }
+    // Standing near the sofa (no seat left): face the sofas.
+    if (
+      !moving &&
+      destino === "sofa" &&
+      descansoRef.current?.tipo === "cerca" &&
+      path.current.length === 0
+    ) {
+      g.rotation.y = dampAngle(g.rotation.y, descansoRef.current.ry, 4, dt);
+    }
     g.position.x = p.x;
     g.position.z = p.z;
 
-    // ── Uchrashuv: joyimga yetsam SHERIKKA qarayman; IKKOVIMIZ yetsa gaplashamiz.
-    //    Emote FAQAT ikkovi ham yetganда (yolg'iz o'zidan emote yo'q). ──
+    // Entrance (grow at the door) and exit (shrink at the door).
+    const enPuerta = Math.hypot(p.x - PUERTA.x, p.z - PUERTA.z) < 0.15;
+    const objetivo = destino === "salida" && enPuerta ? 0 : 1;
+    escala.current += (objetivo - escala.current) * Math.min(1, dt * 5);
+    g.scale.setScalar(Math.max(0.001, escala.current));
+    if (objetivo === 0 && escala.current < 0.03 && !salio.current) {
+      salio.current = true;
+      marcarSalido(agent.id);
+    }
+    if (destino !== "salida") salio.current = false;
+
+    // ── Meeting: face the partner; both arrived → "Charlando" badge. ──
     const mNow = meetingOf(agent.id);
     const partnerNow = mNow ? presenceOf(mNow.partner) : undefined;
     if (mNow && metAt.current > 0) {
-      // Sherik kelgan bo'lsa unga, aks holda hub markaziga (kutish yo'nalishi) qaray
       const tx = partnerNow ? partnerNow.x : NODES[mNow.point].x;
       const tz = partnerNow ? partnerNow.z : NODES[mNow.point].z;
       const dx = tx - p.x,
@@ -426,34 +425,134 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
       if (Math.hypot(dx, dz) > 0.05)
         g.rotation.y = dampAngle(g.rotation.y, Math.atan2(-dx, -dz), 6, dt);
       const bothHere = partnerNow != null && partnerNow.metAt > 0;
-      if (bothHere) {
-        const since = Math.max(metAt.current, partnerNow!.metAt);
-        const el = performance.now() / 1000 - since;
-        // both arrived: they chat (badge "Charlando")
-        const e = el >= 0 ? "charla" : "";
-        if (emoteRef.current !== e) {
-          emoteRef.current = e;
-          setEmote(e);
-        }
-      } else if (emoteRef.current !== "") {
-        emoteRef.current = "";
-        setEmote(""); // sherik hali yo'q — jim kutamiz
+      const e = bothHere ? "charla" : "";
+      if (emoteRef.current !== e) {
+        emoteRef.current = e;
+        setEmote(e);
       }
     } else if (emoteRef.current !== "") {
       emoteRef.current = "";
       setEmote("");
     }
 
-    // Presence reyestri (throttled ~5/s) — metAt bilan (sherik yetganimni bilsin)
     reportT.current -= dt;
     if (reportT.current <= 0) {
       reportT.current = 0.2;
-      report(agent.id, p.x, p.z, statusRef.current === "idle", metAt.current);
+      report(agent.id, p.x, p.z, pasear, metAt.current);
     }
   });
 
+  /** Path finished: choose the next one for the current destination. */
+  function planear(dt: number, desiredSit: boolean, pasear: boolean): void {
+    const p = pos.current;
+    const destino = destinoRef.current;
+    if (desiredSit) {
+      enSofa.current = false;
+      if (Math.hypot(p.x - sit.current.x, p.z - sit.current.z) < 0.25) {
+        seated.current = true;
+      } else {
+        const target = nearestNode(sit.current.x, sit.current.z);
+        const route = pathBetween(curNode.current, target);
+        path.current = route.length ? [...route, sit.current] : [sit.current];
+        pendingNode.current = route.length ? target : null;
+      }
+      return;
+    }
+    if (destino === "sofa") {
+      const d = descansoRef.current;
+      if (!d) return;
+      if (enSofa.current) return; // already seated on the sofa
+      if (Math.hypot(p.x - d.ax, p.z - d.az) < 0.25) {
+        if (d.tipo === "sofa") {
+          enSofa.current = true;
+          seated.current = true;
+          deslizar.current = { x: d.x, z: d.z, ry: d.ry };
+        }
+        return; // standing spot: stay
+      }
+      const route = pathBetween(curNode.current, "lounge_i");
+      // Sofa seats are reached through the corridor (the coffee table is in the way).
+      const via = d.tipo === "sofa" ? [{ ...PASILLO_SOFA }] : [];
+      path.current = [...route, ...via, { x: d.ax, z: d.az }];
+      pendingNode.current = "lounge_i";
+      return;
+    }
+    if (destino === "salida") {
+      if (Math.hypot(p.x - PUERTA.x, p.z - PUERTA.z) < 0.15) return; // at the door
+      if (Math.hypot(p.x - ENTRADA.x, p.z - ENTRADA.z) < 0.25) {
+        path.current = [{ ...PUERTA }];
+        return;
+      }
+      const target = nearestNode(ENTRADA.x, ENTRADA.z);
+      const route = pathBetween(curNode.current, target);
+      path.current = [...route, { ...ENTRADA }, { ...PUERTA }];
+      pendingNode.current = null;
+      return;
+    }
+    // Free: walk around the office (original behaviour).
+    seated.current = false;
+    if (!pasear) return;
+    const cfg = useSettings.getState();
+    if (cfg.social && !meetingOf(agent.id)) {
+      if (seekCd.current > 0) seekCd.current -= dt;
+      else if (!seekMeeting(agent.id, p.x, p.z, performance.now() / 1000))
+        seekCd.current = 1.2 + Math.random();
+    }
+    const now = performance.now() / 1000;
+    const meet = meetingOf(agent.id);
+    if (!meet && metAt.current) metAt.current = 0;
+    if (meet) {
+      const spot = meetSpot(meet);
+      const partner = presenceOf(meet.partner);
+      const bothHere =
+        metAt.current > 0 && partner != null && partner.metAt > 0;
+      const chatSince = bothHere ? Math.max(metAt.current, partner!.metAt) : 0;
+      const chatDone = bothHere && now - chatSince > 6;
+      const partnerGone = partner == null || meetingOf(meet.partner) == null;
+      if (now > meet.until || chatDone || partnerGone) {
+        clearMeeting(agent.id);
+        metAt.current = 0;
+        seekCd.current = 18 + Math.random() * 20;
+        pause.current = 0.4 + Math.random();
+      } else if (Math.hypot(p.x - spot.x, p.z - spot.z) < 0.32) {
+        if (metAt.current === 0) metAt.current = now;
+      } else if (
+        Math.hypot(p.x - NODES[meet.point].x, p.z - NODES[meet.point].z) < 1.3
+      ) {
+        path.current = [spot];
+        pendingNode.current = null;
+      } else {
+        const from = nearestNode(p.x, p.z);
+        const route = pathBetween(from, meet.point);
+        if (route.length === 0) {
+          curNode.current = from;
+          pause.current = 0.5;
+        } else {
+          path.current = route;
+          curNode.current = from;
+          pendingNode.current = meet.point;
+        }
+      }
+    } else if (pause.current > 0) {
+      pause.current -= dt;
+    } else {
+      const target = firstIdleTrip.current
+        ? breakRoom()
+        : idleDestination(agent.role);
+      firstIdleTrip.current = false;
+      const route = pathBetween(curNode.current, target);
+      if (route.length === 0) {
+        curNode.current = nearestNode(p.x, p.z);
+        pause.current = 0.6 + Math.random();
+      } else {
+        path.current = route;
+        pendingNode.current = target;
+      }
+    }
+  }
+
   // Single badge (priority in emotes.ts). Stacked layers over the head:
-  // label → wait bubble → helper bubble → badge; each one above the previous.
+  // label → question balloon → helper bubble → badge; each one above the previous.
   const face = emoteFor({
     meeting: emote,
     status: agent.status,
@@ -461,23 +560,23 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
     hot,
     timed,
   });
-  const espera = agent.permission
-    ? t("burbuja.permiso")
-    : agent.question
-      ? t("burbuja.pregunta")
-      : "";
+  const et = agent.etiqueta;
+  const pregunta = agent.question ? agent.preguntaPendiente : null;
   // Labels of neighbouring desks are staggered so they do not overlap.
-  const escalon = (agent.seatIndex % 3) * 0.75;
+  const escalon =
+    agent.destino === "sofa" && agent.descanso
+      ? (agent.descanso.indice % 2) * 0.55
+      : (agent.seatIndex % 3) * 0.75;
   const labelTop = (selected ? 2.7 : 2.28) + escalon;
-  const permY = labelTop + 0.3;
-  const hireY = (espera ? permY : labelTop) + 0.34;
-  const faceY = (hiring ? hireY : espera ? permY : labelTop) + 0.36;
+  const globoY = labelTop + 0.45;
+  const hireY = (pregunta ? globoY + 0.5 : labelTop) + 0.34;
+  const faceY = (hiring ? hireY : pregunta ? globoY + 0.5 : labelTop) + 0.36;
   const ahora = Date.now();
 
   return (
     <group
       ref={group}
-      position={[sit.current.x, 0, sit.current.z]}
+      position={[pos.current.x, 0, pos.current.z]}
       onClick={(e) => {
         e.stopPropagation();
         select(agent.id);
@@ -508,6 +607,11 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
           sit: seated.current,
           moving: movingRef.current,
           speed: speedRef.current,
+          pose: enSofa.current
+            ? "sofa"
+            : seated.current && poseRef.current === "brazoAlzado"
+              ? "brazoAlzado"
+              : "normal",
         })}
       />
 
@@ -565,21 +669,6 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
         </Html>
       )}
 
-      {/* Waiting for a program or an upload (15, 16) */}
-      {agent.background && (
-        <Html
-          portal={capaEtiquetas}
-          zIndexRange={[60, 20]}
-          position={[0.6, 1.55, 0]}
-          center
-          style={{ pointerEvents: "none" }}
-        >
-          <div style={{ ...CAJA, fontSize: 10.5, borderStyle: "dashed" }}>
-            {t("burbuja.segundoPlano")}
-          </div>
-        </Html>
-      )}
-
       {/* "Called a helper" bubble, for a short time */}
       {hiring && (
         <Html
@@ -595,31 +684,25 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
         </Html>
       )}
 
-      {/* Waiting for you: permission (13) or answer (14) */}
-      {espera && (
+      {/* 14: speech balloon with the pending question (full text on hover) */}
+      {pregunta && !selected && (
         <Html
           portal={capaEtiquetas}
           zIndexRange={[60, 20]}
-          position={[0, permY, 0]}
+          position={[0, globoY, 0]}
           center
           style={{ pointerEvents: "none" }}
         >
-          <div
-            style={{
-              ...CAJA,
-              background: "#111",
-              color: "#fff",
-              borderColor: "#111",
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
-            {espera}
+          <div style={GLOBO}>
+            {recortar(pregunta, 80)}
+            <span style={COLA_BORDE} />
+            <span style={COLA} />
           </div>
         </Html>
       )}
 
-      {/* Label: project · account and short state */}
+      {/* Label: only what the posture does not show (walking = free,
+          seated = working). Demo Org account: isotype; personal: nothing. */}
       {showLabels && !selected && (
         <Html
           portal={capaEtiquetas}
@@ -635,23 +718,23 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
               display: "flex",
               alignItems: "center",
               gap: 5,
-              borderColor: color,
               fontSize: 11,
+              ...(et.espera
+                ? { borderWidth: 2, borderColor: "#111", fontWeight: 600 }
+                : { borderColor: "#9a9a9a" }),
             }}
           >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                background: color,
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ fontWeight: 700 }}>{titulo}</span>
-            {cuenta && <span style={{ color: "#555" }}>{cuenta}</span>}
-            <span style={{ color: "#555" }}>
-              · {t(`estado.${agent.status}`)}
-            </span>
+            <MarcaCuenta cuenta={agent.cuenta} alto={14} />
+            <span style={{ fontWeight: 700 }}>{et.proyecto}</span>
+            {et.espera && <span>· {et.espera}</span>}
+            {et.actividad && (
+              <span style={{ color: "#555" }}>· {et.actividad}</span>
+            )}
+            {et.errores && (
+              <span style={{ color: "#111", fontWeight: 700 }}>
+                · {t("distintivo.conErrores")}
+              </span>
+            )}
           </div>
         </Html>
       )}
@@ -674,15 +757,22 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
               borderLeftColor: color,
               padding: "6px 10px",
               minWidth: 180,
-              maxWidth: 280,
+              maxWidth: 300,
               whiteSpace: "normal",
               textAlign: "left",
               fontSize: 12,
             }}
           >
-            <div style={{ fontWeight: 700 }}>
+            <div
+              style={{
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <MarcaCuenta cuenta={agent.cuenta} alto={16} />
               {titulo}
-              {cuenta ? ` · ${cuenta}` : ""}
             </div>
             <div style={{ fontFamily: MONO, marginTop: 2 }}>
               {agent.estado.numero} · {agent.estado.nombre}
@@ -697,8 +787,7 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
             )}
             {agent.preguntaPendiente && (
               <div style={{ marginTop: 4 }}>
-                <b>{t("detalle.pregunta")}:</b>{" "}
-                {recortar(agent.preguntaPendiente, 180)}
+                <b>{t("detalle.pregunta")}:</b> {agent.preguntaPendiente}
               </div>
             )}
             <div style={{ color: "#555", marginTop: 4, fontSize: 11 }}>
@@ -710,6 +799,44 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
     </group>
   );
 }
+
+/** Speech balloon (14): white box with a tail pointing to the head. */
+const GLOBO: React.CSSProperties = {
+  position: "relative",
+  width: 230,
+  padding: "6px 9px",
+  background: "#fff",
+  color: "#111",
+  border: "2px solid #111",
+  borderRadius: 10,
+  fontFamily: "var(--font-plex-sans), system-ui, sans-serif",
+  fontSize: 11.5,
+  lineHeight: 1.3,
+  whiteSpace: "normal",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+};
+const COLA_BORDE: React.CSSProperties = {
+  position: "absolute",
+  left: "50%",
+  bottom: -10,
+  marginLeft: -9,
+  width: 0,
+  height: 0,
+  borderLeft: "9px solid transparent",
+  borderRight: "9px solid transparent",
+  borderTop: "10px solid #111",
+};
+const COLA: React.CSSProperties = {
+  position: "absolute",
+  left: "50%",
+  bottom: -6,
+  marginLeft: -6,
+  width: 0,
+  height: 0,
+  borderLeft: "6px solid transparent",
+  borderRight: "6px solid transparent",
+  borderTop: "7px solid #fff",
+};
 
 const MONO = "var(--font-plex-mono), 'Courier New', monospace";
 /** Light boxes like /oficina: white, greys and black. */

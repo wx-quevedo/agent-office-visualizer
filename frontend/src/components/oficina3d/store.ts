@@ -1,4 +1,12 @@
 import { create } from "zustand";
+import type {
+  Destino,
+  Etiqueta,
+  Monitor,
+  Pose,
+  PuntoSofa,
+} from "./comportamiento";
+import type { EscritorioCerrado } from "./adaptador";
 
 // ── Scene state of /oficina/3d (replaces the Agent Office 3D store) ──
 // Filled by the adapter from GET /api/v1/agents/state; the scene components
@@ -30,16 +38,22 @@ export interface AgentView {
   role?: string;
   seatIndex: number;
   status: AgentStatus;
+  /** Behaviour layer (comportamiento.ts): where it goes and what it does. */
+  destino: Destino;
+  pose: Pose;
+  /** Drawn badge over the monitor (15 hourglass, 16 progress bar). */
+  monitor: Monitor;
+  /** "puerta": appeared after the first load, walks in from the entrance. */
+  origen: "lugar" | "puerta";
+  /** Resting (19): sofa seat or a standing spot nearby. */
+  descanso: (PuntoSofa & { tipo: "sofa" | "cerca"; indice: number }) | null;
+  etiqueta: Etiqueta;
   /** Waiting for your permission (13). */
   permission: boolean;
   /** Waiting for your answer (14). */
   question: boolean;
   /** Waiting for you for 3+ minutes. */
   stuck: boolean;
-  /** Resting in the break room because you are away (19). */
-  resting: boolean;
-  /** Waiting for a program or an upload (15, 16). */
-  background: boolean;
   permissionMode?: string;
   toolLabel?: string;
   toolCalls: number;
@@ -61,6 +75,13 @@ interface OfficeState {
   selectedId: string | null;
   hoveredId: string | null;
   cameraMode: CameraMode;
+  /** Desks of closed agents (note with the question, or empty and kept). */
+  cerrados: EscritorioCerrado[];
+  /** Agents whose character already went out through the door. */
+  salidos: Set<string>;
+  setCerrados(list: EscritorioCerrado[]): void;
+  marcarSalido(id: string): void;
+  olvidarSalidos(ids: string[]): void;
   /** Opens the agent detail (/oficina?agente=<id>); set by the page. */
   abrir: (id: string) => void;
   setAbrir(f: (id: string) => void): void;
@@ -76,6 +97,22 @@ export const useOffice = create<OfficeState>()((set, get) => ({
   selectedId: null,
   hoveredId: null,
   cameraMode: "iso",
+  cerrados: [],
+  salidos: new Set<string>(),
+  setCerrados: (list) => {
+    if (JSON.stringify(list) !== JSON.stringify(get().cerrados))
+      set({ cerrados: list });
+  },
+  marcarSalido: (id) => {
+    if (get().salidos.has(id)) return;
+    set({ salidos: new Set([...get().salidos, id]) });
+  },
+  olvidarSalidos: (ids) => {
+    if (!ids.some((id) => get().salidos.has(id))) return;
+    set({
+      salidos: new Set([...get().salidos].filter((id) => !ids.includes(id))),
+    });
+  },
   abrir: () => undefined,
   setAbrir: (f) => set({ abrir: f }),
   setAgents: (list) => {

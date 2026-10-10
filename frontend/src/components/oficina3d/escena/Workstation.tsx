@@ -1,6 +1,13 @@
-import { memo, useEffect, useMemo } from "react";
+import { Html } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import type { EscritorioCerrado } from "../adaptador";
+import type { Monitor } from "../comportamiento";
 import type { AgentView } from "../store";
+import { t } from "../textos";
+import { MarcaCuenta } from "@/components/marca/Marca";
+import { capaEtiquetas } from "./capaEtiquetas";
 import { useOffice } from "../store";
 import { clutterLevel } from "./clutter";
 import { useDaylight } from "./daylight";
@@ -256,12 +263,152 @@ function MonitorScreen({ label, color }: { label?: string; color: string }) {
   );
 }
 
+// ── Drawn badges over the monitor (no emojis) ──
+const BADGE_M = stdMat("#2a2f38", { roughness: 0.5 });
+const SAND_M = basicMat("#e0b04a", { toneMapped: false });
+const BAR_BG_M = basicMat("#ffffff", { toneMapped: false });
+const BAR_FG_M = basicMat("#111111", { toneMapped: false });
+const NOTA_M = stdMat("#fbfaf4", { roughness: 0.8 });
+const LINEA_M = basicMat("#555555");
+
+/** 15 — waits for a program: an hourglass that turns over slowly. */
+function RelojDeArena() {
+  const g = useRef<THREE.Group>(null);
+  useFrame((st) => {
+    if (!g.current) return;
+    const ciclo = (st.clock.elapsedTime % 4) / 4; // 3 s still, 1 s turning
+    g.current.rotation.z = ciclo < 0.75 ? 0 : ((ciclo - 0.75) / 0.25) * Math.PI;
+  });
+  return (
+    <group ref={g}>
+      <B p={[0, 0.13, 0]} s={[0.17, 0.025, 0.17]} m={BADGE_M} cast={false} />
+      <B p={[0, -0.13, 0]} s={[0.17, 0.025, 0.17]} m={BADGE_M} cast={false} />
+      <mesh
+        position={[0, 0.06, 0]}
+        rotation={[Math.PI, 0, 0]}
+        geometry={CONO_G}
+        material={SAND_M}
+      />
+      <mesh position={[0, -0.06, 0]} geometry={CONO_G} material={SAND_M} />
+    </group>
+  );
+}
+const CONO_G = new THREE.ConeGeometry(0.07, 0.12, 12);
+
+/** 16 — upload or download: a progress bar that fills up and starts again. */
+function BarraProgreso() {
+  const fg = useRef<THREE.Mesh>(null);
+  useFrame((st) => {
+    if (!fg.current) return;
+    const k = 0.05 + ((st.clock.elapsedTime * 0.25) % 1) * 0.95;
+    fg.current.scale.x = 0.4 * k;
+    fg.current.position.x = -0.2 + 0.2 * k;
+  });
+  return (
+    <group>
+      <B s={[0.46, 0.1, 0.02]} m={BADGE_M} cast={false} />
+      <B p={[0, 0, 0.012]} s={[0.42, 0.065, 0.01]} m={BAR_BG_M} cast={false} />
+      <mesh
+        ref={fg}
+        position={[-0.2, 0, 0.02]}
+        scale={[0.02, 0.05, 0.01]}
+        geometry={UNIT_BOX}
+        material={BAR_FG_M}
+      />
+    </group>
+  );
+}
+
+function DistintivoMonitor({ tipo }: { tipo: Monitor }) {
+  if (!tipo) return null;
+  return (
+    <group position={[0, DESK_TOP + 0.02 + 0.8, -0.22]} scale={2}>
+      {tipo === "reloj" ? <RelojDeArena /> : <BarraProgreso />}
+    </group>
+  );
+}
+
+/** 21 with a pending question: a paper note standing on the desk; hover shows it. */
+function NotaCerrado({ cerrado }: { cerrado: EscritorioCerrado }) {
+  const [ver, setVer] = useState(false);
+  return (
+    <group
+      position={[0.05, DESK_TOP + 0.14, 0.08]}
+      rotation={[-0.35, 0.25, 0]}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setVer(true);
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        setVer(false);
+        document.body.style.cursor = "";
+      }}
+    >
+      <B s={[0.34, 0.26, 0.012]} m={NOTA_M} />
+      {[0.07, 0.02, -0.03, -0.08].map((y, i) => (
+        <B
+          key={y}
+          p={[-0.02 * i, y, 0.008]}
+          s={[0.24 - 0.03 * i, 0.012, 0.004]}
+          m={LINEA_M}
+          cast={false}
+        />
+      ))}
+      {ver && (
+        <Html
+          portal={capaEtiquetas}
+          position={[0, 0.5, 0]}
+          center
+          zIndexRange={[1000, 900]}
+          style={{ pointerEvents: "none" }}
+        >
+          <div
+            style={{
+              padding: "6px 10px",
+              background: "#fff",
+              color: "#111",
+              border: "2px solid #111",
+              fontFamily: "var(--font-plex-sans), system-ui, sans-serif",
+              fontSize: 12,
+              maxWidth: 280,
+              minWidth: 180,
+              boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <MarcaCuenta cuenta={cerrado.cuenta} alto={16} />
+              {cerrado.proyecto}
+            </div>
+            <div style={{ color: "#555", marginTop: 2 }}>
+              {t("nota.cerrado")}
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <b>{t("detalle.pregunta")}:</b> {cerrado.pregunta}
+            </div>
+          </div>
+        </Html>
+      )}
+    </group>
+  );
+}
+
 function Workstation({
   seatIndex,
   agent,
+  cerrado,
 }: {
   seatIndex: number;
   agent?: AgentView;
+  /** Desk of a closed agent (21): a note when it left a question. */
+  cerrado?: EscritorioCerrado;
 }) {
   const seat = seatFor(seatIndex);
   const select = useOffice((s) => s.select);
@@ -278,7 +425,7 @@ function Workstation({
       rotation={[0, seat.ry, 0]}
       onClick={(e) => {
         e.stopPropagation();
-        select(agent ? agent.id : null);
+        select(agent ? agent.id : (cerrado?.sessionId ?? null));
       }}
     >
       {/* Stol usti — oq + qora aksent qirra */}
@@ -336,6 +483,11 @@ function Workstation({
           cast={false}
         />
       </group>
+
+      {/* 15/16: drawn badge over the monitor */}
+      {agent && <DistintivoMonitor tipo={agent.monitor} />}
+      {/* 21 with a pending question: paper note */}
+      {!agent && cerrado?.pregunta && <NotaCerrado cerrado={cerrado} />}
 
       {/* Klaviatura — doim (stolning bir qismi) */}
       <B p={[0, DESK_TOP + 0.04, 0.14]} s={[0.5, 0.02, 0.16]} m={KEY_M} />

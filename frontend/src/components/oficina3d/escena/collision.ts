@@ -100,9 +100,9 @@ r(-14.8, -12.2, 12, 14);
 // Fokus stoli
 r(-7.8, -6.2, 14, 15.2);
 // Dam olish (divanlar + stol)
-r(0.5, 3.5, 14.2, 15.8);
-r(4.6, 6.4, 12, 14);
-r(1.4, 2.6, 12.4, 13.6);
+r(-2.3, -1.3, 10.8, 13.0); // lounge sofa A (port layout)
+r(-2.3, -1.3, 13.3, 15.5); // lounge sofa B (port layout)
+r(-0.3, 0.9, 12.55, 13.75); // lounge coffee table (port layout)
 // glassB stollari
 r(8.7, 10.3, 13.8, 15.2);
 r(11.7, 13.3, 13.8, 15.2);

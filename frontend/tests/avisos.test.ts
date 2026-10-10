@@ -237,7 +237,7 @@ describe("nombres y textos", () => {
     const a = agente("a", 13, { cuenta: "demo" });
     const b = agente("b", 6, { cuenta: "personal" });
     expect(nombreAviso(a, [a, b])).toBe("vive-demo, cuenta Demo Org");
-    expect(nombreAviso(b, [a, b])).toBe("vive-demo, cuenta personal");
+    expect(nombreAviso(b, [a, b])).toBe("vive-demo"); // the personal account is never named
     expect(nombreAviso(a, [a])).toBe("vive-demo");
   });
 

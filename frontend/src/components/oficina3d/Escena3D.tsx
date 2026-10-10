@@ -47,12 +47,17 @@ function ShadowThrottle({ every }: { every: number }) {
 export default function Escena3D({
   zoom = 20,
   vertical = false,
+  centro = [0, 0],
 }: {
   zoom?: number;
   vertical?: boolean;
+  /** Point of the floor the camera looks at (x, z). */
+  centro?: [number, number];
 }) {
+  const [cx, cz] = centro;
   const order = useOffice((s) => s.order);
   const agents = useOffice((s) => s.agents);
+  const cerrados = useOffice((s) => s.cerrados);
   const hover = useOffice((s) => s.hover);
   const quality = useSettings((s) => s.quality);
   const shadows = useSettings((s) => s.shadows);
@@ -110,14 +115,14 @@ export default function Escena3D({
         <OrthographicCamera
           key={vertical ? "vertical" : "iso"}
           makeDefault
-          position={vertical ? [46, 36, 6] : [34, 27, 34]}
+          position={vertical ? [46 + cx, 36, 6 + cz] : [34 + cx, 27, 34 + cz]}
           zoom={zoom}
           near={-300}
           far={800}
         />
         <OrbitControls
           makeDefault
-          target={[0, 0.8, 0]}
+          target={[cx, 0.8, cz]}
           enablePan
           minZoom={8}
           maxZoom={70}
@@ -132,7 +137,17 @@ export default function Escena3D({
           const occ = order
             .map((id) => agents[id])
             .find((a) => a && a.seatIndex === i);
-          return <Workstation key={`seat-${i}`} seatIndex={i} agent={occ} />;
+          const cerrado = occ
+            ? undefined
+            : cerrados.find((c) => c.seatIndex === i);
+          return (
+            <Workstation
+              key={`seat-${i}`}
+              seatIndex={i}
+              agent={occ}
+              cerrado={cerrado}
+            />
+          );
         })}
         {/* Overflow agents (11+) bring their own desk. */}
         {order
@@ -143,6 +158,16 @@ export default function Escena3D({
               key={`ov-${a!.id}`}
               seatIndex={a!.seatIndex}
               agent={a!}
+            />
+          ))}
+        {/* Overflow desks of closed agents (note or kept empty). */}
+        {cerrados
+          .filter((c) => c.seatIndex >= SEAT_COUNT)
+          .map((c) => (
+            <Workstation
+              key={`ovc-${c.sessionId}`}
+              seatIndex={c.seatIndex}
+              cerrado={c}
             />
           ))}
         {capaLista &&

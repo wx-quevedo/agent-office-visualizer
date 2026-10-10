@@ -19,6 +19,7 @@ import {
 } from "react";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
 import { useAvisos } from "@/components/avisos/useAvisos";
+import { LogoDemoOrg, MarcaCuenta } from "@/components/marca/Marca";
 import {
   CONTADORES,
   GRUPOS,
@@ -82,8 +83,14 @@ function enlace(a: Agente): string {
   return `/oficina?agente=${encodeURIComponent(a.agente.session_id)}`;
 }
 
-function cuenta(a: Agente): string {
-  return a.agente.cuenta ?? "cuenta ?";
+/** Project name with the Demo Org isotype (the personal account has no mark). */
+function Proyecto({ a, className }: { a: Agente; className: string }) {
+  return (
+    <div className={`${className} ${s.conMarca}`}>
+      <MarcaCuenta cuenta={a.agente.cuenta} />
+      {nombreProyecto(a)}
+    </div>
+  );
 }
 
 // -- small pieces --------------------------------------------------------------
@@ -148,9 +155,9 @@ function Indicadores({
 function Cabecera({ a }: { a: Agente }) {
   return (
     <>
-      <div className={s.proyecto}>{nombreProyecto(a)}</div>
+      <Proyecto a={a} className={s.proyecto} />
       <div className={`${s.meta} ${s.mono}`}>
-        {cuenta(a)} · {sesionCorta(a.agente.session_id)}
+        {sesionCorta(a.agente.session_id)}
       </div>
       <EstadoTexto a={a} />
     </>
@@ -219,11 +226,9 @@ function EscritorioChico({ a, ahora }: { a: Agente; ahora: number }) {
     <Link href={enlace(a)} className={`${s.escritorio} ${s.escritorioChico}`}>
       <Avatar tam={48} />
       <div className={s.cuerpo}>
-        <div className={s.proyecto}>{nombreProyecto(a)}</div>
+        <Proyecto a={a} className={s.proyecto} />
         <EstadoTexto a={a} />
-        <div className={s.meta}>
-          {cuenta(a)} · {hace(a.estado.desde, ahora)}
-        </div>
+        <div className={s.meta}>{hace(a.estado.desde, ahora)}</div>
       </div>
     </Link>
   );
@@ -239,11 +244,13 @@ function notaCerrado(a: Agente, ahora: number): string {
 function FilaCerrado({ a, ahora }: { a: Agente; ahora: number }) {
   return (
     <Link href={enlace(a)} className={s.filaCerrado}>
-      <b>{nombreProyecto(a)}</b>
+      <b className={s.conMarca}>
+        <MarcaCuenta cuenta={a.agente.cuenta} />
+        {nombreProyecto(a)}
+      </b>
       <span className={s.mono}>
         21 · Cerrado ({a.cierre?.motivo ?? "sin motivo"})
       </span>
-      <span className={s.meta}>{cuenta(a)}</span>
       <span className={s.meta}>{notaCerrado(a, ahora)}</span>
     </Link>
   );
@@ -342,8 +349,8 @@ function EscritorioSala({ a, ahora }: { a: Agente; ahora: number }) {
       <div className={s.cuerpo}>
         <EstadoTexto a={a} />
         <div className={`${s.meta} ${s.mono}`}>
-          {cuenta(a)} · {sesionCorta(a.agente.session_id)} ·{" "}
-          {hace(a.estado.desde, ahora)}
+          <MarcaCuenta cuenta={a.agente.cuenta} />{" "}
+          {sesionCorta(a.agente.session_id)} · {hace(a.estado.desde, ahora)}
         </div>
         <div className={s.linea1} title={linea}>
           {recortar(linea, 200)}
@@ -425,7 +432,10 @@ function Detalle({
               href={enlace(o)}
               className={s.listaItem}
             >
-              <span>{nombreProyecto(o)}</span>
+              <span className={s.conMarca}>
+                <MarcaCuenta cuenta={o.agente.cuenta} />
+                {nombreProyecto(o)}
+              </span>
               <span className={s.mono}>{o.estado.numero}</span>
             </Link>
           ))}
@@ -434,11 +444,13 @@ function Detalle({
           <div className={s.panelCabeza}>
             <Avatar tam={140} />
             <div className={s.cuerpo}>
-              <div className={s.panelProyecto}>{nombreProyecto(a)}</div>
+              <div className={`${s.panelProyecto} ${s.conMarca}`}>
+                {a.agente.cuenta === "demo" && <LogoDemoOrg alto={30} />}
+                {nombreProyecto(a)}
+              </div>
               <div className={`${s.meta} ${s.mono}`}>
-                {cuenta(a)} · {sesionCorta(a.agente.session_id)} · PID{" "}
-                {a.proceso?.pid ?? "—"} ·{" "}
-                {a.agente.proyecto ?? "ruta desconocida"}
+                {sesionCorta(a.agente.session_id)} · PID {a.proceso?.pid ?? "—"}{" "}
+                · {a.agente.proyecto ?? "ruta desconocida"}
               </div>
               <EstadoTexto a={a} className={s.estadoGrande} />
               <div className={s.etiquetas}>

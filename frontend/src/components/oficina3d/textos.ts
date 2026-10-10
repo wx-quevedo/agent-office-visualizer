@@ -5,7 +5,7 @@ const TEXTOS = {
   "barra.titulo": "Oficina de agentes",
   "barra.teEsperan": "Te esperan",
   "barra.trabajando": "Trabajando",
-  "barra.inactivos": "Inactivos",
+  "barra.libres": "Libres",
   "barra.vistaCajas": "Vista de cajas",
   "barra.avisos": "Avisos",
   "barra.avisosActivos": "activos",
@@ -16,19 +16,7 @@ const TEXTOS = {
     "Arrastra para girar · rueda o pellizco para acercar · clic en un agente para ver su detalle",
   "barra.sinAgentes": "No hay agentes abiertos.",
 
-  "estado.idle": "Inactivo",
-  "estado.thinking": "Pensando",
-  "estado.working": "Trabajando",
-  "estado.review": "Te espera",
-  "estado.blocked": "Con errores",
-  "estado.collab": "Con ayudantes",
-  "estado.waiting": "Esperando",
-
-  "burbuja.permiso": "Te pide permiso",
-  "burbuja.pregunta": "Te hizo una pregunta",
   "burbuja.ayudante": "Llamó a un ayudante",
-  "burbuja.segundoPlano": "En segundo plano",
-  "burbuja.sinPermisos": "Sin permisos",
   ayudante: "Ayudante",
 
   "distintivo.error": "Error",
@@ -37,6 +25,10 @@ const TEXTOS = {
   "distintivo.pensando": "Pensando mucho",
   "distintivo.listo": "Listo",
   "distintivo.charla": "Charlando",
+  "distintivo.conErrores": "Con errores",
+
+  "nota.cerrado":
+    "Se cerró con esta pregunta pendiente; la nota se queda hasta que reabras la sesión.",
 
   "detalle.enEsteEstado": "En este estado",
   "detalle.pregunta": "Pregunta pendiente",

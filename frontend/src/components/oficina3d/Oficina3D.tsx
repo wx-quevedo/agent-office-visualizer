@@ -15,7 +15,12 @@ import {
   useEstadoOficina,
   useLatidoPresencia,
 } from "@/components/oficina/useEstadoOficina";
-import { adaptar, contar3d } from "./adaptador";
+import {
+  adaptar,
+  contar3d,
+  estadoInicial,
+  type EstadoAdaptador,
+} from "./adaptador";
 import { cargarDistribucion } from "./distribucion";
 import Escena3D from "./Escena3D";
 import { useSettings } from "./settings";
@@ -25,13 +30,29 @@ import s from "./oficina3d.module.css";
 
 const ANGOSTA = 700;
 
+function leerEncuadre(search: string): {
+  zoom?: number;
+  centro?: [number, number];
+} {
+  const q = new URLSearchParams(search);
+  const zoom = Number(q.get("zoom"));
+  const c = (q.get("centro") ?? "").split(",").map(Number);
+  return {
+    zoom: Number.isFinite(zoom) && zoom > 0 ? Math.min(zoom, 120) : undefined,
+    centro:
+      c.length === 2 && c.every(Number.isFinite) ? [c[0], c[1]] : undefined,
+  };
+}
+
 export default function Oficina3D() {
   const router = useRouter();
   const { datos, error } = useEstadoOficina();
   useLatidoPresencia();
   const [panelAvisos, setPanelAvisos] = useState(false);
   const [angosta, setAngosta] = useState(false);
-  const puestos = useRef<Record<string, number>>({});
+  const memoria = useRef<EstadoAdaptador>(estadoInicial());
+  // Optional framing from the URL (?zoom=60&centro=x,z), handy for close-ups.
+  const [encuadre] = useState(() => leerEncuadre(window.location.search));
   const setAgents = useOffice((st) => st.setAgents);
   const setAbrir = useOffice((st) => st.setAbrir);
 
@@ -72,13 +93,18 @@ export default function Oficina3D() {
     return () => window.removeEventListener("resize", medir);
   }, []);
 
-  // Engine state → scene (stable desks by session_id; closed agents out).
+  // Engine state → scene: behaviour per state, stable desks, walking in and
+  // out through the door, closed desks (note or kept empty for one hour).
+  const salidos = useOffice((st) => st.salidos);
   useEffect(() => {
     if (!datos) return;
-    const r = adaptar(datos.agentes, puestos.current, Date.now());
-    puestos.current = r.puestos;
+    const office = useOffice.getState();
+    const r = adaptar(datos.agentes, memoria.current, Date.now(), salidos);
+    memoria.current = r.estado;
     setAgents(r.vistas);
-  }, [datos, setAgents]);
+    office.setCerrados(r.cerrados);
+    office.olvidarSalidos(r.reentradas);
+  }, [datos, salidos, setAgents]);
 
   const n = datos ? contar3d(datos.agentes) : null;
 
@@ -98,7 +124,7 @@ export default function Oficina3D() {
             <b>{n ? n.trabajando : "–"}</b> {t("barra.trabajando")}
           </span>
           <span className={s.contador}>
-            <b>{n ? n.inactivos : "–"}</b> {t("barra.inactivos")}
+            <b>{n ? n.libres : "–"}</b> {t("barra.libres")}
           </span>
         </div>
         <div className={s.acciones}>
@@ -128,12 +154,16 @@ export default function Oficina3D() {
       )}
 
       <main className={s.lienzo}>
-        <Escena3D zoom={angosta ? 10 : 20} vertical={angosta} />
+        <Escena3D
+          zoom={encuadre.zoom ?? (angosta ? 10 : 20)}
+          vertical={angosta}
+          centro={encuadre.centro}
+        />
         {error && <div className={s.aviso}>{t("barra.error")}</div>}
         {!datos && !error && (
           <div className={s.aviso}>{t("barra.cargando")}</div>
         )}
-        {datos && n && n.espera + n.trabajando + n.inactivos === 0 && (
+        {datos && n && n.espera + n.trabajando + n.libres === 0 && (
           <div className={s.aviso}>{t("barra.sinAgentes")}</div>
         )}
         <div className={s.ayuda}>{t("barra.ayuda")}</div>

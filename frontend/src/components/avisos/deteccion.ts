@@ -94,14 +94,17 @@ export function cuentaLegible(cuenta: string | null): string {
   return CUENTAS[cuenta] ?? cuenta;
 }
 
-/** Project folder name; with the account when another agent shares the project. */
+/**
+ * Project folder name. When another agent shares the project, the Demo Org one
+ * says ", cuenta Demo Org"; the personal account is never named.
+ */
 export function nombreAviso(a: Agente, todos: Agente[]): string {
   const p = nombreProyecto(a);
   const repetido = todos.some(
     (o) =>
       o.agente.session_id !== a.agente.session_id && nombreProyecto(o) === p,
   );
-  return repetido ? `${p}, cuenta ${cuentaLegible(a.agente.cuenta)}` : p;
+  return repetido && a.agente.cuenta === "demo" ? `${p}, cuenta Demo Org` : p;
 }
 
 /** Removes a match but keeps the punctuation that closed the sentence. */
@@ -155,7 +158,8 @@ export function construirAviso(
   recordatorio = false,
 ): Aviso {
   const quien = nombreAviso(a, todos);
-  const cuenta = `Cuenta ${cuentaLegible(a.agente.cuenta)}`;
+  // Only the Demo Org account is named; the personal one has no mark.
+  const cuenta = a.agente.cuenta === "demo" ? "Cuenta Demo Org" : "";
   const base = {
     tipo,
     sessionId: a.agente.session_id,

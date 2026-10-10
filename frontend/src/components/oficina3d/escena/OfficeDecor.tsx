@@ -616,13 +616,13 @@ function computeBoardStats() {
   const list = s.order.map((id) => s.agents[id]).filter(Boolean) as AgentView[];
   let espera = 0,
     trabajando = 0,
-    inactivos = 0;
+    libres = 0;
   for (const a of list) {
     if (a.permission || a.question) espera++;
-    else if (a.status === "idle") inactivos++;
+    else if (a.destino !== "escritorio" || a.status === "idle") libres++;
     else trabajando++;
   }
-  return { espera, trabajando, inactivos };
+  return { espera, trabajando, libres };
 }
 function StatsBoard({
   size = [1.85, 1.0] as [number, number],
@@ -640,7 +640,7 @@ function StatsBoard({
         const n = computeBoardStats();
         return prev.espera === n.espera &&
           prev.trabajando === n.trabajando &&
-          prev.inactivos === n.inactivos
+          prev.libres === n.libres
           ? prev
           : n;
       });
@@ -704,12 +704,7 @@ function StatsBoard({
       t("barra.trabajando").toUpperCase(),
       "#30d158",
     );
-    tile(
-      416,
-      `${stats.inactivos}`,
-      t("barra.inactivos").toUpperCase(),
-      "#8b929c",
-    );
+    tile(416, `${stats.libres}`, t("barra.libres").toUpperCase(), "#8b929c");
     // pastki chiziq
     ctx.fillStyle = "rgba(255,255,255,0.08)";
     ctx.fillRect(18, 244, W - 36, 2);
@@ -1159,11 +1154,13 @@ export default function OfficeDecor() {
       {/* DAM OLISH [-3,7] */}
       <Floor x0={-3} x1={7} z0={9.5} z1={16} c={DISTRICT.lounge} />
       <WallX x0={-3} x1={7} z={9.5} door={2} />
-      <Sofa p={[2, 0, 15]} c="#4a5568" />
-      <Sofa p={[5.5, 0, 13]} ry={-Math.PI / 2} c="#556070" />
-      <CoffeeTable p={[2, 0, 13]} />
+      {/* Port: sofas against the far wall facing the camera (seats in
+          comportamiento.ts), TV on the opposite wall, so nothing hides them. */}
+      <Sofa p={[-1.8, 0, 11.9]} ry={Math.PI / 2} c="#4a5568" />
+      <Sofa p={[-1.8, 0, 14.4]} ry={Math.PI / 2} c="#556070" />
+      <CoffeeTable p={[0.3, 0, 13.15]} />
       {/* ekran xona ichiga (divanlar tomonga, -z) qarasin — devorga emas */}
-      <TV p={[2, 1.7, 15.8]} ry={Math.PI} />
+      <TV p={[6.8, 1.7, 13]} ry={-Math.PI / 2} />
 
       {/* SHISHA XONA B [7,15] — ofis */}
       <Floor x0={7} x1={15} z0={9.5} z1={16} c={DISTRICT.glass} />
@@ -1212,6 +1209,33 @@ export default function OfficeDecor() {
 
       {/* Devor rasmlari */}
       <Painting p={[-22.85, 1.7, 0]} ry={Math.PI / 2} c="#c85a3c" />
+      {/* Entrance door (west wall): new agents walk in here, leaving agents walk out */}
+      <group position={[-22.8, 0, 4]}>
+        <Box
+          p={[0.02, 1.08, 0]}
+          s={[0.08, 2.16, 1.5]}
+          c="#2f343c"
+          rough={0.6}
+        />
+        <Box
+          p={[0.07, 1.04, 0]}
+          s={[0.04, 2.04, 1.3]}
+          c="#8a6a4a"
+          rough={0.7}
+        />
+        <Box
+          p={[0.11, 1.02, 0.45]}
+          s={[0.04, 0.05, 0.16]}
+          c="#d9d4c7"
+          rough={0.3}
+        />
+        <Box
+          p={[0.06, 0.005, 0]}
+          s={[1.2, 0.01, 1.6]}
+          c="#3a3f47"
+          rough={0.95}
+        />
+      </group>
       <Painting p={[22.85, 1.7, 0]} ry={-Math.PI / 2} c="#3a7bc8" />
       {/* Shift chiroqlari — ochiq ofis ustida (kechаsi porlaydi) */}
       <PendantLight p={[-4, 0, -3.2]} />

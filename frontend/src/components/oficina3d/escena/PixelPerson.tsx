@@ -50,7 +50,13 @@ interface Props {
   /** "low" — soddalashtirilgan (yuz tafsilotsiz) — kichik yordamchilar uchun. */
   detail?: "high" | "low";
   /** Har freym o'qiladi (re-render'siz poza/harakatni yangilash uchun). */
-  getState?: () => { sit: boolean; moving: boolean; speed?: number };
+  getState?: () => {
+    sit: boolean;
+    moving: boolean;
+    speed?: number;
+    /** Seated variants: relaxed on the sofa (19) or one arm up (13). */
+    pose?: "normal" | "sofa" | "brazoAlzado";
+  };
   /** Rol "energiyasi" (~0.7 xotirjam … 1.3 faol) — bo'sh vaqtда qanchalik
    *  tez-tez atrofga qaraydi/qimirlaydi. Faqat mavjud harakatlarni shkalalaydi
    *  (geometriyaga tegmaydi). Standart 1. */
@@ -261,8 +267,11 @@ export default function PixelPerson({
     const tt = t.current;
     const st = getState ? getState() : { sit: pose === "sit", moving };
     const sit = st.sit;
-    const working = sit && (status === "working" || status === "collab");
-    const thinking = sit && status === "thinking";
+    const sofa = sit && st.pose === "sofa";
+    const brazo = sit && st.pose === "brazoAlzado";
+    const working =
+      sit && !sofa && (status === "working" || status === "collab");
+    const thinking = sit && !sofa && status === "thinking";
     const walk = !sit && st.moving;
 
     // Vaqti-vaqti bilan cho'zilish — faqat HAQIQIY bo'sh (idle) turganда
@@ -293,7 +302,11 @@ export default function PixelPerson({
     const gaitC = Math.cos(wp);
 
     // Tos balandligi — son TIK bo'lganda (mid-stance) eng baland; amplituda wb bilan.
-    const pelvisY = sit ? 0.55 : 0.92 + Math.abs(gaitC) * 0.03 * wb;
+    const pelvisY = sit
+      ? sofa
+        ? 0.5
+        : 0.55
+      : 0.92 + Math.abs(gaitC) * 0.03 * wb;
     if (bodyRef.current)
       bodyRef.current.position.y = damp(
         bodyRef.current.position.y,
@@ -317,28 +330,28 @@ export default function PixelPerson({
     if (hipL.current)
       hipL.current.rotation.x = damp(
         hipL.current.rotation.x,
-        sit ? 1.5 : swing,
+        sit ? (sofa ? 1.2 : 1.5) : swing,
         12,
         dt,
       );
     if (hipR.current)
       hipR.current.rotation.x = damp(
         hipR.current.rotation.x,
-        sit ? 1.5 : -swing,
+        sit ? (sofa ? 1.2 : 1.5) : -swing,
         12,
         dt,
       );
     if (kneeL.current)
       kneeL.current.rotation.x = damp(
         kneeL.current.rotation.x,
-        sit ? -1.5 : kneeSwingL + 0.02,
+        sit ? (sofa ? -0.95 : -1.5) : kneeSwingL + 0.02,
         12,
         dt,
       );
     if (kneeR.current)
       kneeR.current.rotation.x = damp(
         kneeR.current.rotation.x,
-        sit ? -1.5 : kneeSwingR + 0.02,
+        sit ? (sofa ? -0.95 : -1.5) : kneeSwingR + 0.02,
         12,
         dt,
       );
@@ -362,6 +375,8 @@ export default function PixelPerson({
     let lean = 0.03;
     if (stretching)
       lean = -0.22; // orqaga cho'zilish
+    else if (sofa)
+      lean = -0.3; // relaxed, leaning back on the sofa
     else if (working) lean = 0.2 + Math.sin(tt * 9) * 0.012;
     else if (thinking) lean = -0.04;
     else if (walk) lean = 0.11; // yurganda oldinga engashadi
@@ -397,6 +412,8 @@ export default function PixelPerson({
       tilt = 0.2;
       nod = -0.06;
     } else if (working) nod = 0.2 + Math.sin(tt * 4.5) * 0.03;
+    else if (sofa) nod = -0.12;
+    else if (brazo) nod = -0.05;
     else if (status === "review") nod = 0.14;
     // Bo'sh/o'ylanayotganда gohida yon-yonga qaraydi. Faol rollar (yuqori energiya)
     // tez-tez va kengroq qaraydi; xotirjam olimlar kamroq.
@@ -459,6 +476,17 @@ export default function PixelPerson({
       shTR = -2.7;
       elTL = 0.15;
       elTR = 0.15; // qo'llar bosh uzra
+    } else if (sofa) {
+      shTL = 0.35;
+      shTR = 0.35;
+      elTL = 0.55;
+      elTR = 0.55; // hands resting on the lap
+    } else if (brazo) {
+      // Asks for permission: right arm up while it lasts (a slight sway).
+      shTL = 0.5;
+      elTL = 0.22;
+      shTR = -2.85 + Math.sin(tt * 2.2) * 0.05;
+      elTR = 0.12;
     } else if (sit && thinking) {
       shTL = 0.5;
       elTL = 0.25;
