@@ -448,6 +448,25 @@ def test_presence_by_browser(engine: AgentStateEngine, clock: FakeClock) -> None
     assert snap["navegadores_conectados"] == 1
 
 
+def test_presence_by_office_heartbeat(
+    engine: AgentStateEngine, clock: FakeClock, browsers: Browsers
+) -> None:
+    # An open /oficina page (PC or phone) counts like a WebSocket browser.
+    browsers.count = 0
+    feed(engine, start(0))
+    clock.at(100)
+    assert engine.tick()["presencia"]["estado"] == "desconectado"
+    engine.heartbeat("pagina-1", "celular")
+    snap = engine.tick()["presencia"]
+    assert snap["estado"] == "conectado"
+    assert snap["navegadores_conectados"] == 1
+    assert snap["dispositivos"] == ["celular"]
+    clock.at(100 + 76)  # no heartbeat for more than 75 s: the page is closed
+    snap = engine.tick()["presencia"]
+    assert snap["navegadores_conectados"] == 0
+    assert snap["dispositivos"] == []
+
+
 def test_account_from_transcript_path() -> None:
     assert account_for_transcript("C:\\Users\\w\\.claude\\projects\\a.jsonl") == "personal"
     assert account_for_transcript("C:/Users/w/.claude-demo/projects/a.jsonl") == "demo"

@@ -361,7 +361,8 @@ def test_totals_count_each_message_once(tmp_path: Path) -> None:
         ],
     )
     totals = TranscriptTotals(transcript)
-    assert totals.scan() == (50 + 70) + (10 + 1000 + 5 + 100)
+    # Output tokens only: cache creation re-writes the same context.
+    assert totals.scan() == 50 + 70
     with open(transcript, "a", encoding="utf-8") as f:
         f.write(
             json.dumps(
@@ -376,7 +377,32 @@ def test_totals_count_each_message_once(tmp_path: Path) -> None:
             )
             + "\n"
         )
-    assert totals.scan() == 1235 + 10  # only the appended line is read
+    assert totals.scan() == 120 + 9  # only the appended line is read
+
+
+def test_totals_count_only_since_the_session_arrived(tmp_path: Path) -> None:
+    # A resumed conversation carries weeks of history in its transcript.
+    transcript = tmp_path / "t.jsonl"
+    old = {"input_tokens": 1, "cache_creation_input_tokens": 90_000, "output_tokens": 500}
+    new = {"input_tokens": 1, "cache_creation_input_tokens": 90_000, "output_tokens": 40}
+    write_transcript(
+        transcript,
+        [
+            {
+                "type": "assistant",
+                "timestamp": "2026-08-29T10:00:00Z",
+                "message": {"id": "m1", "usage": old, "content": []},
+            },
+            {
+                "type": "assistant",
+                "timestamp": "2026-10-09T19:43:00Z",
+                "message": {"id": "m2", "usage": new, "content": []},
+            },
+        ],
+    )
+    since = datetime(2026, 10, 9, 19, 42, 41, tzinfo=UTC)
+    assert TranscriptTotals(transcript, since=since).scan() == 40
+    assert TranscriptTotals(transcript).scan() == 540
 
 
 def test_view_shows_total_and_context_separately(
@@ -420,7 +446,35 @@ def test_view_shows_total_and_context_separately(
         time.sleep(0.02)
     ind = agent(engine)["indicadores"]
     assert ind["tokens_contexto"] == 5 + 1010 + 70
-    assert ind["tokens_totales"] == (50 + 70) + (10 + 1000 + 5)
+    assert ind["tokens_totales"] == 50 + 70
+
+
+def test_view_counts_tokens_since_the_first_event(
+    engine: AgentStateEngine, tmp_path: Path, safe_paths: None
+) -> None:
+    # Resumed conversation: the transcript has history from before T0.
+    transcript = tmp_path / "t.jsonl"
+    usage = {"input_tokens": 1, "cache_creation_input_tokens": 50_000, "output_tokens": 0}
+    write_transcript(
+        transcript,
+        [
+            {
+                "type": "assistant",
+                "timestamp": "2026-08-29T10:00:00Z",
+                "message": {"id": "m1", "content": [], "usage": {**usage, "output_tokens": 900}},
+            },
+            {
+                "type": "assistant",
+                "timestamp": "2026-10-10T15:00:30Z",
+                "message": {"id": "m2", "content": [], "usage": {**usage, "output_tokens": 30}},
+            },
+        ],
+    )
+    engine.ingest(ev("session_start", 0, transcript_path=str(transcript)))
+    end = time.monotonic() + 10
+    while time.monotonic() < end and not engine.sessions[SID].totals_samples:
+        time.sleep(0.02)
+    assert agent(engine)["indicadores"]["tokens_totales"] == 30
 
 
 # 7. Test sessions are removed from the engine log -----------------------------

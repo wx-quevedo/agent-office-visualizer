@@ -219,6 +219,8 @@ _MAIN_IDS = frozenset({"", "main"})
 _PARALLEL_TOOL_WINDOW = timedelta(seconds=2)
 # Retries (one per second, from tick) to read a text from the transcript.
 _TEXT_ATTEMPTS = 30
+# A /oficina page that sent a heartbeat within this many seconds is "open".
+_HEARTBEAT_TTL = 75
 
 
 def _aware(ts: datetime) -> datetime:
@@ -880,6 +882,9 @@ class AgentStateEngine:
         self.browsers_provider = browsers_provider or (lambda: 0)
         self.process_alive = process_alive or _default_process_alive
         self._totals_busy: dict[str, bool] = {}
+        # /oficina heartbeats: client id -> (last seen, device "pc"/"celular").
+        self._heartbeats: dict[str, tuple[datetime, str]] = {}
+        self._devices: list[str] = []
         self._last_process_check: datetime | None = None
         self.sessions: dict[str, SessionLog] = {}
         self.started_at = self.clock()
@@ -991,7 +996,7 @@ class AgentStateEngine:
             if usage is None:
                 return
             total = int(usage["input_tokens"]) + int(usage["output_tokens"])
-            self._scan_totals(log, path)
+            self._scan_totals(log, path, ts)
             model = usage.get("model")
             if isinstance(model, str):
                 log.context_window = _token_tracker._context_window_for_model(model)  # pyright: ignore[reportPrivateUsage]
@@ -1002,10 +1007,21 @@ class AgentStateEngine:
         log.context_tokens = total
         log.token_problem = None
 
-    def _scan_totals(self, log: SessionLog, path: Any) -> None:
-        """Update the accumulated tokens of the transcript in a background thread."""
-        if log.totals is None or log.totals.path != path:
-            log.totals = TranscriptTotals(path)
+    def _scan_totals(self, log: SessionLog, path: Any, ts: datetime) -> None:
+        """Update the accumulated tokens of the transcript in a background thread.
+
+        Counted since the first event of the session (the event being ingested
+        is not in the records yet, so its time is the floor of a new session).
+        """
+        first = log.derived.first_ts
+        since = min(first, ts) if first is not None else ts
+        if (
+            log.totals is None
+            or log.totals.path != path
+            or (log.totals.since is not None and since < log.totals.since)
+        ):
+            log.totals = TranscriptTotals(path, since=since)
+            log.totals_samples.clear()
         totals = log.totals
         if self._totals_busy.get(log.session_id):
             return
@@ -1139,6 +1155,22 @@ class AgentStateEngine:
 
     # -- presence ------------------------------------------------------------
 
+    def heartbeat(self, client: str, device: str) -> None:
+        """A page (/oficina) is open on a PC or phone; counts as a browser."""
+        device = device if device in ("pc", "celular") else "pc"
+        self._heartbeats[client[:64]] = (self.clock(), device)
+        if len(self._heartbeats) > 200:  # bound memory
+            oldest = min(self._heartbeats, key=lambda k: self._heartbeats[k][0])
+            del self._heartbeats[oldest]
+        self._snapshot = None
+
+    def _live_heartbeats(self, now: datetime) -> dict[str, str]:
+        return {
+            c: dev
+            for c, (ts, dev) in self._heartbeats.items()
+            if (now - ts).total_seconds() <= _HEARTBEAT_TTL
+        }
+
     def _open_last_prompt(self, now: datetime) -> datetime | None:
         """Latest UserPromptSubmit among sessions that are not closed."""
         latest: datetime | None = None
@@ -1157,7 +1189,7 @@ class AgentStateEngine:
         last_prompt = self._open_last_prompt(now)
         prompt_recent = last_prompt is not None and (now - last_prompt).total_seconds() < window
         if browsers > 0:
-            reason = f"{browsers} navegador(es) conectado(s) al WebSocket"
+            reason = f"{browsers} navegador(es) conectado(s) (WebSocket o página /oficina)"
             return Presence(True, reason, browsers, last_prompt, None)
         if prompt_recent:
             mins = (now - last_prompt).total_seconds() / 60  # type: ignore[operator]
@@ -1179,9 +1211,12 @@ class AgentStateEngine:
         """Recompute every session at the current time (called every second)."""
         now = self.clock()
         try:
-            browsers = int(self.browsers_provider())
+            ws_browsers = int(self.browsers_provider())
         except Exception:
-            browsers = 0
+            ws_browsers = 0
+        pages = self._live_heartbeats(now)
+        browsers = ws_browsers + len(pages)
+        self._devices = sorted(set(pages.values())) + (["navegador"] if ws_browsers else [])
         if browsers > 0:
             self._last_browser_seen = now
         self._browsers = browsers
@@ -1206,6 +1241,7 @@ class AgentStateEngine:
                 "estado": "conectado" if presence.connected else "desconectado",
                 "motivo": presence.reason,
                 "navegadores_conectados": presence.browsers,
+                "dispositivos": self._devices,
                 "ultimo_encargo": presence.last_prompt.isoformat()
                 if presence.last_prompt
                 else None,
@@ -1352,8 +1388,8 @@ class AgentStateEngine:
         token_reason = log.token_problem
         totals = log.totals
         if totals is not None and token_reason is None:
-            # Accumulated work: output + new input tokens of every message of
-            # the transcript (cache reads excluded). Context = latest message.
+            # Accumulated work: output tokens since the session arrived
+            # (see TranscriptTotals). Context = latest message.
             if totals.ready:
                 tokens_total = totals.total
                 samples = log.totals_samples

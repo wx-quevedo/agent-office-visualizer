@@ -1,0 +1,678 @@
+"use client";
+
+/**
+ * /oficina v1 — the office in plain boxes (no art, no colours, no PixiJS).
+ *
+ * Reads GET /api/v1/agents/state every 2 s and sends a presence heartbeat
+ * (POST /api/v1/agents/presence) every 30 s so an open /oficina counts as the
+ * user being present, on PC or phone. Grouping and ordering live in logica.ts.
+ */
+
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { API_BASE } from "@/utils/api";
+import {
+  CONTADORES,
+  GRUPOS,
+  agruparPorProyecto,
+  agruparPorUrgencia,
+  contar,
+  detalleActual,
+  dispositivo,
+  duracion,
+  esfuerzo,
+  grupoDe,
+  hace,
+  loQuePide,
+  minutosParaDesaparecer,
+  nombreProyecto,
+  numero,
+  recortar,
+  sesionCorta,
+  textoPresencia,
+  tipoEspera,
+  visibles,
+  type Agente,
+  type Estado,
+} from "./logica";
+import s from "./oficina.module.css";
+
+const REFRESCO_MS = 2000;
+const LATIDO_MS = 30000;
+const CLAVE_VISTA = "oficina-vista";
+
+type Vista = "urgencia" | "proyecto";
+
+// Chosen view: localStorage when available, memory otherwise.
+let vistaEnMemoria: Vista | null = null;
+const oyentesVista = new Set<() => void>();
+
+function suscribirVista(f: () => void): () => void {
+  oyentesVista.add(f);
+  return () => oyentesVista.delete(f);
+}
+
+function leerVista(): Vista {
+  if (vistaEnMemoria) return vistaEnMemoria;
+  try {
+    return window.localStorage.getItem(CLAVE_VISTA) === "proyecto"
+      ? "proyecto"
+      : "urgencia";
+  } catch {
+    return "urgencia";
+  }
+}
+
+function guardarVista(v: Vista): void {
+  vistaEnMemoria = v;
+  try {
+    window.localStorage.setItem(CLAVE_VISTA, v);
+  } catch {
+    // private window or blocked storage: the choice is not remembered
+  }
+  oyentesVista.forEach((f) => f());
+}
+
+function enlace(a: Agente): string {
+  return `/oficina?agente=${encodeURIComponent(a.agente.session_id)}`;
+}
+
+function cuenta(a: Agente): string {
+  return a.agente.cuenta ?? "cuenta ?";
+}
+
+// -- small pieces --------------------------------------------------------------
+
+function Avatar({ tam }: { tam: 140 | 88 | 72 | 64 | 48 }) {
+  return (
+    <div className={`${s.avatar} ${s[`avatar${tam}`]}`} aria-hidden="true">
+      avatar
+    </div>
+  );
+}
+
+function EstadoTexto({ a, className }: { a: Agente; className?: string }) {
+  return (
+    <div className={className ?? s.estado}>
+      {a.estado.numero} · {a.estado.nombre}
+    </div>
+  );
+}
+
+function Indicador({ nombre, valor }: { nombre: string; valor: ReactNode }) {
+  return (
+    <span>
+      {nombre} <b>{valor}</b>
+    </span>
+  );
+}
+
+function Indicadores({
+  a,
+  ahora,
+  conEstado,
+}: {
+  a: Agente;
+  ahora: number;
+  conEstado?: boolean;
+}) {
+  const i = a.indicadores;
+  return (
+    <div className={s.indicadores}>
+      <Indicador
+        nombre="Ritmo"
+        valor={numero(i.herramientas_por_minuto, " herr/min")}
+      />
+      <Indicador nombre="Contexto" valor={numero(i.contexto_usado_pct, " %")} />
+      <Indicador nombre="Errores seguidos" valor={numero(i.errores_seguidos)} />
+      <Indicador nombre="Subagentes" valor={a.subagentes_activos} />
+      <Indicador
+        nombre="Trabajó"
+        valor={numero(i.minutos_con_actividad, " min")}
+      />
+      {conEstado && (
+        <Indicador
+          nombre="En este estado"
+          valor={duracion(a.estado.desde, ahora)}
+        />
+      )}
+    </div>
+  );
+}
+
+function Cabecera({ a }: { a: Agente }) {
+  return (
+    <>
+      <div className={s.proyecto}>{nombreProyecto(a)}</div>
+      <div className={`${s.meta} ${s.mono}`}>
+        {cuenta(a)} · {sesionCorta(a.agente.session_id)}
+      </div>
+      <EstadoTexto a={a} />
+    </>
+  );
+}
+
+// -- desks of the urgency view ---------------------------------------------------
+
+function EscritorioEspera({ a, ahora }: { a: Agente; ahora: number }) {
+  const pide = loQuePide(a);
+  return (
+    <Link href={enlace(a)} className={`${s.escritorio} ${s.escritorioEspera}`}>
+      <Avatar tam={88} />
+      <div className={s.cuerpo}>
+        <Cabecera a={a} />
+        <div className={s.etiquetas}>
+          <span className={`${s.etiqueta} ${s.etiquetaNegra}`}>
+            Espera a: ti ({tipoEspera(a)})
+          </span>
+          <span className={s.etiqueta}>
+            Desde hace {duracion(a.estado.desde, ahora)}
+          </span>
+        </div>
+        {pide && (
+          <div className={s.cajaGris}>
+            <small>{pide.titulo}</small>
+            {recortar(pide.texto, 400)}
+          </div>
+        )}
+        <Indicadores a={a} ahora={ahora} />
+      </div>
+    </Link>
+  );
+}
+
+function EscritorioTrabajo({ a, ahora }: { a: Agente; ahora: number }) {
+  const e = esfuerzo(a);
+  const tpm = a.indicadores.tokens_por_minuto;
+  return (
+    <Link href={enlace(a)} className={s.escritorio}>
+      <Avatar tam={72} />
+      <div className={s.cuerpo}>
+        <Cabecera a={a} />
+        <div className={s.cajaMono} title={detalleActual(a)}>
+          {recortar(detalleActual(a), 160)}
+        </div>
+        <div
+          className={s.barra}
+          role="meter"
+          aria-label="Esfuerzo"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(e * 100)}
+          title={`Esfuerzo: ${numero(tpm, " tok/min")}`}
+        >
+          <div style={{ width: `${Math.round(e * 100)}%` }} />
+        </div>
+        <Indicadores a={a} ahora={ahora} conEstado />
+      </div>
+    </Link>
+  );
+}
+
+function EscritorioChico({ a, ahora }: { a: Agente; ahora: number }) {
+  return (
+    <Link href={enlace(a)} className={`${s.escritorio} ${s.escritorioChico}`}>
+      <Avatar tam={48} />
+      <div className={s.cuerpo}>
+        <div className={s.proyecto}>{nombreProyecto(a)}</div>
+        <EstadoTexto a={a} />
+        <div className={s.meta}>
+          {cuenta(a)} · {hace(a.estado.desde, ahora)}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function notaCerrado(a: Agente, ahora: number): string {
+  if (a.pregunta_pendiente) {
+    return `Pregunta pendiente: ${recortar(a.pregunta_pendiente, 120)} Se queda aquí hasta que reabras la sesión.`;
+  }
+  return `Desaparece en ${minutosParaDesaparecer(a, ahora) ?? "?"} min`;
+}
+
+function FilaCerrado({ a, ahora }: { a: Agente; ahora: number }) {
+  return (
+    <Link href={enlace(a)} className={s.filaCerrado}>
+      <b>{nombreProyecto(a)}</b>
+      <span className={s.mono}>
+        21 · Cerrado ({a.cierre?.motivo ?? "sin motivo"})
+      </span>
+      <span className={s.meta}>{cuenta(a)}</span>
+      <span className={s.meta}>{notaCerrado(a, ahora)}</span>
+    </Link>
+  );
+}
+
+function Seccion({
+  titulo,
+  n,
+  children,
+}: {
+  titulo: string;
+  n: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className={s.seccion} aria-label={titulo}>
+      <h2 className={s.seccionTitulo}>
+        {titulo}
+        <span className={s.mono}>{n}</span>
+      </h2>
+      {n === 0 ? <div className={s.vacio}>Nadie.</div> : children}
+    </section>
+  );
+}
+
+function VistaUrgencia({
+  agentes,
+  ahora,
+}: {
+  agentes: Agente[];
+  ahora: number;
+}) {
+  const g = agruparPorUrgencia(agentes, ahora);
+  return (
+    <>
+      {GRUPOS.map(({ id, titulo }) => (
+        <Seccion key={id} titulo={titulo} n={g[id].length}>
+          {id === "espera" && (
+            <div className={s.rejillaEspera}>
+              {g.espera.map((a) => (
+                <EscritorioEspera
+                  key={a.agente.session_id}
+                  a={a}
+                  ahora={ahora}
+                />
+              ))}
+            </div>
+          )}
+          {id === "trabajando" && (
+            <div className={s.rejillaTrabajo}>
+              {g.trabajando.map((a) => (
+                <EscritorioTrabajo
+                  key={a.agente.session_id}
+                  a={a}
+                  ahora={ahora}
+                />
+              ))}
+            </div>
+          )}
+          {id === "inactivos" && (
+            <div className={s.rejillaChica}>
+              {g.inactivos.map((a) => (
+                <EscritorioChico
+                  key={a.agente.session_id}
+                  a={a}
+                  ahora={ahora}
+                />
+              ))}
+            </div>
+          )}
+          {id === "cerrados" && (
+            <div className={s.franjaCerrados}>
+              {g.cerrados.map((a) => (
+                <FilaCerrado key={a.agente.session_id} a={a} ahora={ahora} />
+              ))}
+            </div>
+          )}
+        </Seccion>
+      ))}
+    </>
+  );
+}
+
+// -- rooms by project -------------------------------------------------------------
+
+function EscritorioSala({ a, ahora }: { a: Agente; ahora: number }) {
+  const g = grupoDe(a.estado.numero);
+  const clase =
+    g === "espera" ? s.escritorioEspera : g === "cerrados" ? s.cerrado : "";
+  const linea =
+    loQuePide(a)?.texto ??
+    (g === "cerrados" ? notaCerrado(a, ahora) : detalleActual(a));
+  return (
+    <Link href={enlace(a)} className={`${s.escritorio} ${clase}`}>
+      <Avatar tam={64} />
+      <div className={s.cuerpo}>
+        <EstadoTexto a={a} />
+        <div className={`${s.meta} ${s.mono}`}>
+          {cuenta(a)} · {sesionCorta(a.agente.session_id)} ·{" "}
+          {hace(a.estado.desde, ahora)}
+        </div>
+        <div className={s.linea1} title={linea}>
+          {recortar(linea, 200)}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function VistaProyecto({
+  agentes,
+  ahora,
+}: {
+  agentes: Agente[];
+  ahora: number;
+}) {
+  const salas = agruparPorProyecto(agentes, ahora);
+  if (salas.length === 0) return <div className={s.vacio}>No hay agentes.</div>;
+  return (
+    <div className={s.salas}>
+      {salas.map((sala) => (
+        <section
+          key={sala.proyecto}
+          className={s.sala}
+          aria-label={`Sala ${sala.proyecto}`}
+        >
+          <h2 className={s.salaTitulo}>
+            Sala {sala.proyecto}
+            <span>{sala.resumen}</span>
+          </h2>
+          <div className={s.rejillaSala}>
+            {sala.agentes.map((a) => (
+              <EscritorioSala key={a.agente.session_id} a={a} ahora={ahora} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// -- detail -------------------------------------------------------------------------
+
+function horaCorta(iso: string): string {
+  return new Date(iso).toLocaleTimeString("es", { hour12: false });
+}
+
+function Detalle({
+  a,
+  otros,
+  ahora,
+}: {
+  a: Agente;
+  otros: Agente[];
+  ahora: number;
+}) {
+  const g = grupoDe(a.estado.numero);
+  const pide = loQuePide(a);
+  const i = a.indicadores;
+  const datos: Array<[string, string]> = [
+    ["Trabajó", numero(i.minutos_con_actividad, " min")],
+    ["Ritmo", numero(i.herramientas_por_minuto, " herr/min")],
+    ["Esfuerzo", numero(i.tokens_por_minuto, " tok/min")],
+    ["Contexto", numero(i.contexto_usado_pct, " %")],
+    ["Errores seguidos", numero(i.errores_seguidos)],
+    ["Subagentes", String(a.subagentes_activos)],
+    ["Tokens totales", numero(i.tokens_totales)],
+  ];
+  return (
+    <>
+      <Link href="/oficina" className={s.volver}>
+        Volver a la oficina
+      </Link>
+      <div className={s.detalle}>
+        <nav className={s.lista} aria-label="Otros agentes">
+          {otros.map((o) => (
+            <Link
+              key={o.agente.session_id}
+              href={enlace(o)}
+              className={s.listaItem}
+            >
+              <span>{nombreProyecto(o)}</span>
+              <span className={s.mono}>{o.estado.numero}</span>
+            </Link>
+          ))}
+        </nav>
+        <article className={s.panel} aria-label={`Agente ${nombreProyecto(a)}`}>
+          <div className={s.panelCabeza}>
+            <Avatar tam={140} />
+            <div className={s.cuerpo}>
+              <div className={s.panelProyecto}>{nombreProyecto(a)}</div>
+              <div className={`${s.meta} ${s.mono}`}>
+                {cuenta(a)} · {sesionCorta(a.agente.session_id)} · PID{" "}
+                {a.proceso?.pid ?? "—"} ·{" "}
+                {a.agente.proyecto ?? "ruta desconocida"}
+              </div>
+              <EstadoTexto a={a} className={s.estadoGrande} />
+              <div className={s.etiquetas}>
+                {g === "espera" && (
+                  <span className={`${s.etiqueta} ${s.etiquetaNegra}`}>
+                    Espera a: ti ({tipoEspera(a)})
+                  </span>
+                )}
+                {a.espera && g !== "espera" && (
+                  <span className={s.etiqueta}>Espera: {a.espera.tipo}</span>
+                )}
+                {a.cierre && (
+                  <span className={s.etiqueta}>Cerrado: {a.cierre.motivo}</span>
+                )}
+                <span className={s.etiqueta}>
+                  En este estado {duracion(a.estado.desde, ahora)}
+                </span>
+              </div>
+            </div>
+          </div>
+          {pide && (
+            <div className={s.cajaGris}>
+              <small>{pide.titulo}</small>
+              {pide.texto}
+            </div>
+          )}
+          {!pide && g !== "cerrados" && (
+            <div className={s.cajaMono} title={detalleActual(a)}>
+              {detalleActual(a)}
+            </div>
+          )}
+          <div className={s.cuadricula}>
+            {datos.map(([k, v]) => (
+              <div key={k}>
+                <span>{k}</span>
+                <b>{v}</b>
+              </div>
+            ))}
+          </div>
+          <table className={s.tablaEventos}>
+            <caption className={s.meta} style={{ textAlign: "left" }}>
+              Últimos {Math.min(15, a.eventos_recientes.length)} eventos
+            </caption>
+            <thead>
+              <tr>
+                <th style={{ width: 90 }}>Hora</th>
+                <th style={{ width: "28%" }}>Tipo</th>
+                <th>Texto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {a.eventos_recientes.slice(0, 15).map((e, n) => (
+                <tr key={`${e.hora}-${n}`}>
+                  <td className={s.mono}>{horaCorta(e.hora)}</td>
+                  <td className={s.mono}>{e.tipo}</td>
+                  <td>
+                    {[e.herramienta, e.detalle].filter(Boolean).join(": ") ||
+                      "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </article>
+      </div>
+    </>
+  );
+}
+
+// -- page ---------------------------------------------------------------------------
+
+function nuevoCliente(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `oficina-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+export default function Oficina() {
+  const params = useSearchParams();
+  const agenteId = params.get("agente");
+  const [datos, setDatos] = useState<Estado | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [recibido, setRecibido] = useState<number | null>(null);
+  const [ahora, setAhora] = useState(() => Date.now());
+  const vista = useSyncExternalStore(
+    suscribirVista,
+    leerVista,
+    () => "urgencia" as Vista,
+  );
+
+  // State every 2 s (at most), one request at a time.
+  useEffect(() => {
+    let vivo = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cargar = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/v1/agents/state`, {
+          cache: "no-store",
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = (await r.json()) as Estado;
+        if (!vivo) return;
+        setDatos(d);
+        setError(null);
+        setRecibido(Date.now());
+      } catch (e) {
+        if (vivo) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (vivo) {
+          setAhora(Date.now());
+          timer = setTimeout(cargar, REFRESCO_MS);
+        }
+      }
+    };
+    void cargar();
+    return () => {
+      vivo = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  // Presence heartbeat: an open /oficina counts as the user being present.
+  useEffect(() => {
+    const cliente = nuevoCliente();
+    const latir = () => {
+      const cuerpo = JSON.stringify({
+        cliente,
+        dispositivo: dispositivo(window.innerWidth, navigator.userAgent),
+      });
+      void fetch(`${API_BASE}/api/v1/agents/presence`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: cuerpo,
+      }).catch(() => undefined);
+    };
+    latir();
+    const id = setInterval(latir, LATIDO_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  const agentes = useMemo(
+    () => (datos ? visibles(datos.agentes, ahora) : []),
+    [datos, ahora],
+  );
+  const n = contar(agentes);
+  const elegido = agenteId
+    ? datos?.agentes.find((a) => a.agente.session_id === agenteId)
+    : null;
+
+  const cambiarVista = guardarVista;
+
+  return (
+    <main className={s.pagina}>
+      <header className={s.encabezado}>
+        <div>
+          <h1 className={s.titulo}>Oficina de agentes</h1>
+          <div className={s.linea}>
+            {textoPresencia(datos?.presencia)} ·{" "}
+            <span className={s.mono}>{agentes.length}</span>{" "}
+            {agentes.length === 1 ? "agente" : "agentes"} · actualizado{" "}
+            <span className={s.mono}>
+              {recibido ? hace(new Date(recibido).toISOString(), ahora) : "—"}
+            </span>
+          </div>
+        </div>
+        {!agenteId && (
+          <div
+            className={s.selector}
+            role="group"
+            aria-label="Ordenar la oficina"
+          >
+            <button
+              type="button"
+              aria-pressed={vista === "urgencia"}
+              onClick={() => cambiarVista("urgencia")}
+            >
+              Por urgencia
+            </button>
+            <button
+              type="button"
+              aria-pressed={vista === "proyecto"}
+              onClick={() => cambiarVista("proyecto")}
+            >
+              Por proyecto
+            </button>
+          </div>
+        )}
+      </header>
+
+      {error && (
+        <div className={s.aviso}>
+          No se pudo leer el estado ({error}). Se reintenta cada 2 s.
+        </div>
+      )}
+
+      {!agenteId && (
+        <div className={s.contadores}>
+          {CONTADORES.map((c) => (
+            <div key={c.id} className={s.contador}>
+              <strong>{n[c.id]}</strong>
+              <span>{c.titulo}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {agenteId ? (
+        elegido ? (
+          <Detalle
+            a={elegido}
+            otros={agentes.filter((a) => a.agente.session_id !== agenteId)}
+            ahora={ahora}
+          />
+        ) : (
+          <>
+            <Link href="/oficina" className={s.volver}>
+              Volver a la oficina
+            </Link>
+            <div className={s.aviso}>
+              {datos ? "Ese agente ya no está en la oficina." : "Cargando…"}
+            </div>
+          </>
+        )
+      ) : !datos ? (
+        <div className={s.vacio}>Cargando…</div>
+      ) : vista === "urgencia" ? (
+        <VistaUrgencia agentes={datos.agentes} ahora={ahora} />
+      ) : (
+        <VistaProyecto agentes={datos.agentes} ahora={ahora} />
+      )}
+    </main>
+  );
+}

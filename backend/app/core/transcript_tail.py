@@ -298,16 +298,19 @@ def turn_progress(
 
 
 class TranscriptTotals:
-    """Running token totals of a transcript, read incrementally.
+    """Accumulated work of a session: output tokens since it arrived.
 
     Sums, once per message id (Claude Code repeats the usage on every line of
-    a message), the output tokens and the new input tokens (input + cache
-    creation, without cache reads, which re-send the same context each turn).
+    a message), the output tokens of the messages written since ``since``
+    (the first event the engine saw for the session). Input-side counters are
+    not used: cache creation re-writes the same context after every cache
+    expiry or compaction, and a resumed transcript can hold weeks of history.
     The first call reads the whole file; later calls only the appended bytes.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, since: datetime | None = None) -> None:
         self.path = path
+        self.since = since
         self.offset = 0
         self.seen: set[str] = set()
         self.output = 0
@@ -317,7 +320,7 @@ class TranscriptTotals:
 
     @property
     def total(self) -> int:
-        return self.output + self.new_input
+        return self.output
 
     def scan(self) -> int:
         """Read new complete lines; returns the current total."""
@@ -359,6 +362,10 @@ class TranscriptTotals:
             if not isinstance(usage, dict) or not isinstance(mid, str) or mid in self.seen:
                 continue
             self.seen.add(mid)
+            if self.since is not None:
+                ts = _entry_ts(cast(dict[str, Any], obj))
+                if ts is not None and ts < self.since:
+                    continue
             u = cast(dict[str, Any], usage)
             self.output += int(u.get("output_tokens", 0) or 0)
             self.new_input += int(u.get("input_tokens", 0) or 0) + int(
