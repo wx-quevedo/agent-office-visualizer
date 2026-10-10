@@ -26,12 +26,25 @@ try:
     import argparse
     import json
     import os
+    import threading
+    import time
     import urllib.request
     from typing import Any, cast
 
-    from claude_office_hooks.config import API_URL, TIMEOUT, get_api_key, load_config
+    from claude_office_hooks.config import (
+        ALLOW_REMOTE,
+        API_URL,
+        EXTRA_BUDGET,
+        EXTRA_TIMEOUT,
+        SEND_BUDGET,
+        TIMEOUT,
+        _log_clamp,  # pyright: ignore[reportPrivateUsage]
+        get_api_key,
+        load_config,
+        resolve_extra_urls,
+    )
     from claude_office_hooks.debug_logger import debug_log
-    from claude_office_hooks.event_mapper import map_event
+    from claude_office_hooks.event_mapper import NEW_EVENT_TYPES, map_event
 
     # Derived from package metadata; fallback covers the uninstalled case (ARC-021).
     try:
@@ -45,7 +58,18 @@ try:
     _config = load_config()
     DEBUG = _config.get("CLAUDE_OFFICE_DEBUG", "0") == "1"
 
-    def _open_request(req: "urllib.request.Request") -> Any:
+    # Extra destinations (e.g. the development copy on 8100), from the env var
+    # or the config file. They receive every event, including types the main
+    # destination may not know (NEW_EVENT_TYPES).
+    EXTRA_API_URLS = resolve_extra_urls(
+        os.environ.get(
+            "CLAUDE_OFFICE_EXTRA_API_URLS", _config.get("CLAUDE_OFFICE_EXTRA_API_URLS", "")
+        ),
+        ALLOW_REMOTE,
+        _log_clamp,
+    )
+
+    def _open_request(req: "urllib.request.Request", url: str, timeout: float) -> Any:
         """Open *req* without ever creating an SSL context for http URLs.
 
         On some Windows setups the bundled OpenSSL aborts the whole process
@@ -65,8 +89,8 @@ try:
         ``build_opener()`` is intentionally avoided: it always adds
         ``HTTPSHandler``, which would re-trigger the context creation.
         """
-        if API_URL.lower().startswith("https"):
-            return urllib.request.urlopen(req, timeout=TIMEOUT)
+        if url.lower().startswith("https"):
+            return urllib.request.urlopen(req, timeout=timeout)
         opener = urllib.request.OpenerDirector()
         for handler in (
             urllib.request.ProxyHandler(),
@@ -76,28 +100,58 @@ try:
             urllib.request.HTTPErrorProcessor(),
         ):
             opener.add_handler(handler)
-        return opener.open(req, timeout=TIMEOUT)
+        return opener.open(req, timeout=timeout)
+
+    def _post(url: str, body: bytes, headers: dict[str, str], timeout: float, quiet: bool) -> None:
+        """POST one payload to one destination; never raises."""
+        try:
+            req = urllib.request.Request(url, data=body, headers=headers)
+            with _open_request(req, url, timeout) as response:
+                if response.status >= 300:
+                    log_error(
+                        RuntimeError(f"backend {url} returned HTTP {response.status}"),
+                        "send_event",
+                    )
+        except Exception as exc:
+            # An extra destination that is turned off is expected: not an error.
+            if not quiet:
+                log_error(exc, f"send_event to {url} failed")
 
     def send_event(payload: dict[str, Any]) -> None:
-        """POST *payload* as JSON to the backend API.
+        """POST *payload* to every destination in parallel.
 
-        Silently ignores all errors so the hook never blocks Claude.
+        The main destination gets the event unless its type is one older
+        backends reject; extra destinations get every event. The hook waits up
+        to SEND_BUDGET for the main destination and EXTRA_BUDGET for the extra
+        ones, then returns (pending requests run in daemon threads and are
+        dropped at exit). Errors are always swallowed.
         """
         try:
-            json_data = json.dumps(payload).encode("utf-8")
+            body = json.dumps(payload).encode("utf-8")
             headers: dict[str, str] = {"Content-Type": "application/json"}
             api_key = get_api_key()
             if api_key:
                 headers["X-API-Key"] = api_key
-            req = urllib.request.Request(API_URL, data=json_data, headers=headers)
-            with _open_request(req) as response:
-                if response.status >= 300:
-                    log_error(
-                        RuntimeError(f"backend returned HTTP {response.status}"),
-                        "send_event",
-                    )
+            # (url, request timeout, quiet errors, wait budget)
+            targets: list[tuple[str, float, bool, float]] = []
+            if payload.get("event_type") not in NEW_EVENT_TYPES:
+                targets.append((API_URL, TIMEOUT, False, SEND_BUDGET))
+            for url in EXTRA_API_URLS:
+                if url != API_URL:
+                    targets.append((url, EXTRA_TIMEOUT, True, EXTRA_BUDGET))
+            started = time.monotonic()
+            threads = [
+                (
+                    threading.Thread(target=_post, args=(url, body, headers, t, q), daemon=True),
+                    budget,
+                )
+                for url, t, q, budget in targets
+            ]
+            for th, _ in threads:
+                th.start()
+            for th, budget in threads:
+                th.join(max(0.0, started + budget - time.monotonic()))
         except Exception as exc:
-            # Record the failure but never disrupt the user (always swallow).
             log_error(exc, "send_event failed")
 
     def main() -> None:
@@ -160,7 +214,7 @@ try:
                 and hasattr(real_stdin, "isatty")
                 and not real_stdin.isatty()
             ):
-                raw_input = real_stdin.buffer.read().decode("utf-8", errors="replace")
+                raw_input = real_stdin.buffer.read().decode("utf-8-sig", errors="replace")
                 if raw_input.strip():
                     raw_data = cast(dict[str, Any], json.loads(raw_input))
         except Exception as exc:

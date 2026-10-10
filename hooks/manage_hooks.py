@@ -12,6 +12,7 @@ HOOK_TYPES = [
     "SessionEnd",
     "PreToolUse",
     "PostToolUse",
+    "PostToolUseFailure",
     "UserPromptSubmit",
     "PermissionRequest",
     "Notification",
@@ -65,10 +66,17 @@ def save_settings(path: Path, settings: dict[str, Any]) -> None:
         backup = path.with_suffix(".json.bak")
         if not backup.exists():
             shutil.copy2(path, backup)
+    # Keep the file's own conventions (line endings, trailing newline, non-ASCII
+    # characters as-is) so the only diff is the hook entries that changed.
+    newline, trailing = "\n", "\n"
+    if path.exists():
+        original = path.read_bytes().decode("utf-8", errors="replace")
+        newline = "\r\n" if "\r\n" in original else "\n"
+        trailing = newline if original.endswith("\n") else ""
+    text = json.dumps(settings, indent=2, ensure_ascii=False).replace("\n", newline) + trailing
     tmp = path.with_suffix(".json.tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(settings, f, indent=2)
-        f.write("\n")
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
     os.replace(tmp, path)
 
 
@@ -103,6 +111,7 @@ def create_hook_config(hook_cmd: str, hook_type: str) -> dict[str, Any]:
     if hook_type in [
         "PreToolUse",
         "PostToolUse",
+        "PostToolUseFailure",
         "PermissionRequest",
         "Notification",
         "SubagentStart",

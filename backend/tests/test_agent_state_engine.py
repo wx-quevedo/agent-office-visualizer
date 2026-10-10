@@ -4,7 +4,9 @@ Uses a simulated clock so time-based states (program wait, idle, rest,
 short-lived states) are checked without sleeping.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -151,12 +153,18 @@ def test_10_compactando(engine: AgentStateEngine, clock: FakeClock) -> None:
     assert state_at(engine, clock, 6) == (10, None)
 
 
-def test_11_termino_turno_then_14_te_espera_respuesta(
+def test_11_termino_turno_then_18_without_question(
     engine: AgentStateEngine, clock: FakeClock
 ) -> None:
-    feed(engine, start(0), ev("user_prompt_submit", 1, prompt="x"), ev("stop", 5))
+    feed(
+        engine,
+        start(0),
+        ev("user_prompt_submit", 1, prompt="x"),
+        ev("stop", 5, last_assistant_message="Listo, terminé el cambio."),
+    )
     assert state_at(engine, clock, 6) == (11, None)
-    assert state_at(engine, clock, 30) == (14, "tu_respuesta")
+    assert state_at(engine, clock, 5 + 299) == (11, None)
+    assert state_at(engine, clock, 5 + 301) == (18, None)
 
 
 def test_12_se_va(engine: AgentStateEngine, clock: FakeClock) -> None:
@@ -208,13 +216,51 @@ def test_13_permission_notification(engine: AgentStateEngine, clock: FakeClock) 
     assert state_at(engine, clock, 3) == (13, "tu_permiso")
 
 
-def test_14_idle_notification(engine: AgentStateEngine, clock: FakeClock) -> None:
+def test_idle_notification_does_not_mean_waiting(
+    engine: AgentStateEngine, clock: FakeClock
+) -> None:
     feed(
         engine,
         start(0),
-        ev("notification", 2, notification_type="idle_prompt", message="Claude is waiting"),
+        ev("stop", 1, last_assistant_message="Hecho."),
+        ev("notification", 61, notification_type="idle_prompt", message="Claude is waiting"),
     )
-    assert state_at(engine, clock, 3) == (14, "tu_respuesta")
+    assert state_at(engine, clock, 62) == (11, None)
+
+
+def test_14_stop_with_question(engine: AgentStateEngine, clock: FakeClock) -> None:
+    feed(
+        engine,
+        start(0),
+        ev("stop", 5, last_assistant_message="¿Quieres que también actualice los tests?"),
+    )
+    assert state_at(engine, clock, 6) == (14, "tu_respuesta")
+    assert state_at(engine, clock, 3600) == (14, "tu_respuesta")
+
+
+def test_14_question_read_from_transcript_tail(
+    engine: AgentStateEngine, clock: FakeClock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transcript = tmp_path / "s.jsonl"
+    lines = [
+        {"type": "user", "message": {"role": "user", "content": "hola"}},
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "¿Sigo con la fase 2?**"}],
+                "usage": {"input_tokens": 10, "output_tokens": 5},
+            },
+        },
+    ]
+    transcript.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+    monkeypatch.setattr("app.core.transcript_tail.is_safe_transcript_path", lambda _p: True)
+    feed(
+        engine,
+        ev("session_start", 0, transcript_path=str(transcript)),
+        ev("stop", 5, transcript_path=str(transcript)),
+    )
+    assert state_at(engine, clock, 6) == (14, "tu_respuesta")
 
 
 def test_14_ask_user_question_tool(engine: AgentStateEngine, clock: FakeClock) -> None:
@@ -314,8 +360,23 @@ def test_waiting_agent_does_not_rest(
     engine: AgentStateEngine, clock: FakeClock, browsers: Browsers
 ) -> None:
     browsers.count = 0
-    feed(engine, start(0), ev("user_prompt_submit", 1, prompt="x"), ev("stop", 2))
+    feed(
+        engine,
+        start(0),
+        ev("user_prompt_submit", 1, prompt="x"),
+        ev("stop", 2, last_assistant_message="¿Lo subo?"),
+    )
     assert state_at(engine, clock, 3600) == (14, "tu_respuesta")
+
+
+def test_turn_done_without_question_rests_when_disconnected(
+    engine: AgentStateEngine, clock: FakeClock, browsers: Browsers
+) -> None:
+    browsers.count = 0
+    feed(engine, start(0), ev("stop", 2, last_assistant_message="Terminado."))
+    assert state_at(engine, clock, 100) == (11, None)
+    assert state_at(engine, clock, 400) == (18, None)
+    assert state_at(engine, clock, 700) == (19, None)
 
 
 def test_20_regresa_al_trabajo_when_office_opens(
@@ -478,14 +539,14 @@ def test_parallel_tool_calls_stay_pending(engine: AgentStateEngine, clock: FakeC
     assert state_at(engine, clock, 50) == (15, "programa")
 
 
-def test_background_subagent_after_stop_keeps_waiting_for_you(
+def test_background_subagent_after_stop_keeps_turn_done(
     engine: AgentStateEngine, clock: FakeClock
 ) -> None:
     feed(
         engine,
         start(0),
         ev("subagent_start", 1, agent_id="subagent_a"),
-        ev("stop", 2),
+        ev("stop", 2, last_assistant_message="¿Revisas el resultado?"),
         ev("subagent_stop", 30, agent_id="subagent_a"),
     )
     assert state_at(engine, clock, 40) == (14, "tu_respuesta")
@@ -500,3 +561,165 @@ def test_backend_cleanup_is_not_activity(engine: AgentStateEngine, clock: FakeCl
         ev("cleanup", 1000, agent_id="subagent_a"),
     )
     assert state_at(engine, clock, 1001) == (18, None)
+
+
+# ---------------------------------------------------------------------------
+# Subagent expiry, failures and attribution (hook data)
+# ---------------------------------------------------------------------------
+
+
+def test_subagent_expires_after_30_min_without_activity(
+    engine: AgentStateEngine, clock: FakeClock
+) -> None:
+    feed(engine, start(0), ev("subagent_start", 1, agent_id="subagent_a"))
+    assert state_at(engine, clock, 1 + 1799) == (17, "agentes")
+    st = state_at(engine, clock, 1 + 1801)
+    assert st[1] is None
+    assert engine.tick()["agentes"][0]["subagentes_activos"] == 0
+
+
+def test_subagent_activity_keeps_it_alive(engine: AgentStateEngine, clock: FakeClock) -> None:
+    feed(
+        engine,
+        start(0),
+        ev("subagent_start", 1, agent_id="subagent_t1"),
+        ev("subagent_info", 2, native_agent_id="n1"),
+        ev(
+            "pre_tool_use",
+            1500,
+            tool_name="Read",
+            tool_use_id="x1",
+            agent_id="main",
+            tool_agent_id="n1",
+        ),
+    )
+    assert state_at(engine, clock, 2500) == (17, "agentes")
+    assert state_at(engine, clock, 1500 + 1801)[1] is None
+
+
+def test_errors_in_a_row_from_post_tool_use_failure(
+    engine: AgentStateEngine, clock: FakeClock
+) -> None:
+    feed(
+        engine,
+        ev("session_start", 0, reports_tool_failures=True),
+        pre("Bash", 1, "t1", command="npm test"),
+    )
+    assert engine.tick()["agentes"][0]["indicadores"]["errores_seguidos"] == 0
+    feed(
+        engine,
+        ev(
+            "post_tool_use_failure",
+            2,
+            tool_name="Bash",
+            tool_use_id="t1",
+            agent_id="main",
+            error="Exit code 1",
+            reports_tool_failures=True,
+        ),
+        pre("Bash", 3, "t2", command="npm test"),
+        ev(
+            "post_tool_use_failure",
+            4,
+            tool_name="Bash",
+            tool_use_id="t2",
+            agent_id="main",
+            error="Exit code 1",
+        ),
+    )
+    ind = engine.tick()["agentes"][0]["indicadores"]
+    assert ind["errores_seguidos"] == 2
+    assert ind["errores_motivo"] is None
+    # The failure closed the pending Bash: not "espera un programa".
+    assert state_at(engine, clock, 60) == (3, None)
+    feed(engine, pre("Read", 61, "t3"), post("Read", 62, "t3"))
+    assert engine.tick()["agentes"][0]["indicadores"]["errores_seguidos"] == 0
+
+
+def test_user_interrupt_is_not_an_error(engine: AgentStateEngine, clock: FakeClock) -> None:
+    feed(
+        engine,
+        ev("session_start", 0, reports_tool_failures=True),
+        pre("Bash", 1, "t1", command="sleep 100"),
+        ev(
+            "post_tool_use_failure",
+            2,
+            tool_name="Bash",
+            tool_use_id="t1",
+            agent_id="main",
+            is_interrupt=True,
+        ),
+    )
+    assert engine.tick()["agentes"][0]["indicadores"]["errores_seguidos"] == 0
+
+
+def test_failed_task_call_ends_its_subagent(engine: AgentStateEngine, clock: FakeClock) -> None:
+    feed(
+        engine,
+        start(0),
+        ev("subagent_start", 1, agent_id="subagent_t9", tool_use_id="t9"),
+        ev(
+            "post_tool_use_failure",
+            2,
+            tool_name="Task",
+            tool_use_id="t9",
+            agent_id="main",
+        ),
+    )
+    assert engine.tick()["agentes"][0]["subagentes_activos"] == 0
+
+
+def test_tools_attributed_to_the_subagent_that_used_them(
+    engine: AgentStateEngine, clock: FakeClock
+) -> None:
+    feed(
+        engine,
+        start(0),
+        ev("subagent_start", 1, agent_id="subagent_t1"),
+        ev("subagent_info", 2, native_agent_id="n1"),
+        # Hook: agent_id stays "main" for older consumers, tool_agent_id names
+        # the subagent. The main agent is still waiting on its subagent.
+        ev(
+            "pre_tool_use",
+            3,
+            tool_name="Edit",
+            tool_use_id="x1",
+            agent_id="main",
+            tool_agent_id="n1",
+            tool_agent_type="general-purpose",
+        ),
+    )
+    assert state_at(engine, clock, 4) == (17, "agentes")
+    agent = engine.tick()["agentes"][0]
+    assert agent["herramienta_actual"] == "Task/Agent"
+    assert agent["indicadores"]["herramientas_por_minuto"] == 0.4  # Task + Edit
+
+
+def test_tokens_from_tail_of_a_large_transcript(
+    engine: AgentStateEngine, clock: FakeClock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transcript = tmp_path / "big.jsonl"
+    filler = json.dumps({"type": "user", "message": {"content": "x" * 1000}}) + "\n"
+    last = {
+        "type": "assistant",
+        "message": {
+            "model": "claude-opus-4-7",
+            "content": [{"type": "text", "text": "ok"}],
+            "usage": {
+                "input_tokens": 100,
+                "cache_read_input_tokens": 400_000,
+                "cache_creation_input_tokens": 0,
+                "output_tokens": 900,
+            },
+        },
+    }
+    with open(transcript, "w", encoding="utf-8") as f:
+        for _ in range(60_000):  # ~60 MB, above the old 50 MB limit
+            f.write(filler)
+        f.write(json.dumps(last) + "\n")
+    monkeypatch.setattr("app.core.transcript_tail.is_safe_transcript_path", lambda _p: True)
+    feed(engine, ev("session_start", 0, transcript_path=str(transcript)))
+    ind = engine.tick()["agentes"][0]["indicadores"]
+    assert ind["tokens_contexto"] == 401_000
+    assert ind["contexto_usado_pct"] == 40.1
+    assert ind["tokens_motivo"] is None

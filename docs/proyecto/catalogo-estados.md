@@ -20,7 +20,7 @@ Todos estos estados se detectan con seguridad: cada uno sale directo de un event
 | 8 | Usando una app externa | Ícono de la app sobre el monitor (por ejemplo, ClickUp) | Herramientas de conectores (`mcp__*`) |
 | 9 | Planificando | Escribe en su pizarra la lista de tareas | `TodoWrite` |
 | 10 | Compactando memoria | Vacía o pisa su basurero | `PreCompact` |
-| 11 | Terminó el turno | Se estira; pequeña celebración | `Stop` |
+| 11 | Terminó el turno | Se estira; pequeña celebración | `Stop` sin pregunta explícita; tras 5 min sin eventos pasa a 18 o 19 |
 | 12 | Se va | Sale por el ascensor | `SessionEnd` |
 
 ## Esperando: a quién espera
@@ -30,10 +30,10 @@ Sobre la cabeza aparece un ícono de quién lo detiene, y parpadea más rápido 
 | # | Estado | Cómo se ve | Dato que lo dispara | Detección |
 | --- | --- | --- | --- | --- |
 | 13 | Te espera: permiso | "?" rojo, mano levantada, brillo rojo | `PermissionRequest` | Segura |
-| 14 | Te espera: respuesta | Mira hacia ti con un globo de diálogo | `Notification` de inactividad o `Stop` sin nuevo encargo | Segura |
+| 14 | Te espera: respuesta | Mira hacia ti con un globo de diálogo | Pregunta explícita: `AskUserQuestion` o `ExitPlanMode` pendiente, o `Stop` cuyo último mensaje del asistente termina en "?" | Segura |
 | 15 | Espera un programa | Reloj de arena sobre el monitor | `Bash` que lleva más de 30 s sin terminar (compilar, instalar, pruebas) | Deducida |
 | 16 | Espera una subida o descarga | Barra de progreso con flecha | `Bash` con comandos de red: `git push`, `scp`, `rsync`, `docker push`, `eas submit` | Deducida por comando |
-| 17 | Espera a otros agentes | Mira hacia sus subagentes; número de agentes trabajando | `SubagentStart` sin su `SubagentStop` | Segura |
+| 17 | Espera a otros agentes | Mira hacia sus subagentes; número de agentes trabajando | `SubagentStart` sin su `SubagentStop`; un subagente sin actividad por 30 min se da por terminado | Segura |
 
 ## Ausencia y regreso
 
@@ -70,3 +70,11 @@ No son estados: se dibujan encima de cualquier estado para mostrar cuánto y có
 | Cómo se muestran los subagentes | Un número sobre el agente | Casi no se usan; un número no quita protagonismo al agente |
 | Actividades de descanso | Videojuego, lectura y siesta, rotando | Dan variedad sin distraer de los que esperan |
 | Tamaño del agente | El doble del actual de claude-office | El agente es lo principal |
+
+## Decisiones confirmadas (2026-10-10)
+
+| Tema | Decisión | Por qué |
+| --- | --- | --- |
+| Cuándo un agente "te espera: respuesta" (14) | Solo con pregunta explícita: `AskUserQuestion` o `ExitPlanMode` pendiente, o el último mensaje del asistente termina en "?". Si no, `Stop` lleva a 11 y tras 5 min a 18 o 19 según la presencia | Un agente que solo terminó no debe quedar esperándote para siempre |
+| Descanso | 10 min desde la última señal tuya (último navegador visto o último encargo); un reinicio del backend lo atrasa | Se puede medir sin instalar nada más |
+| Subagentes colgados | Un subagente sin actividad por 30 min (configurable) se da por terminado | Sesiones cerradas a la fuerza no deben dejar subagentes eternos |

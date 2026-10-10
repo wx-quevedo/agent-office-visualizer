@@ -47,6 +47,9 @@ class EventType(StrEnum):
     SESSION_END = "session_end"
     PRE_TOOL_USE = "pre_tool_use"
     POST_TOOL_USE = "post_tool_use"
+    # Claude Code PostToolUseFailure hook. Only sent to the extra destinations
+    # (see hooks/config.py) because older backends reject unknown types.
+    POST_TOOL_USE_FAILURE = "post_tool_use_failure"
     USER_PROMPT_SUBMIT = "user_prompt_submit"
     PERMISSION_REQUEST = "permission_request"
     NOTIFICATION = "notification"
@@ -122,6 +125,14 @@ class EventData(BaseModel):
     # Task-specific fields
     task_id: str | None = None
     task_subject: str | None = None
+    # Agent state engine fields (hook >= this project): see ToolEventData,
+    # LifecycleEventData and EventDataBase.
+    error: str | None = None
+    is_interrupt: bool | None = None
+    tool_agent_id: str | None = None
+    tool_agent_type: str | None = None
+    last_assistant_message: str | None = None
+    reports_tool_failures: bool | None = None
 
 
 class Event(BaseModel):
@@ -210,6 +221,9 @@ class EventDataBase(BaseModel):
     # Room assignment (populated by ProductMapper).
     floor_id: str | None = None
     room_id: str | None = None
+    # Set by hooks that map PostToolUseFailure: lets consumers tell "no
+    # failures" apart from "the producer cannot report failures".
+    reports_tool_failures: bool | None = None
 
 
 class SessionEventData(EventDataBase):
@@ -219,7 +233,7 @@ class SessionEventData(EventDataBase):
 
 
 class ToolEventData(EventDataBase):
-    """Payload for PRE_TOOL_USE, POST_TOOL_USE, PERMISSION_REQUEST."""
+    """Payload for PRE_TOOL_USE, POST_TOOL_USE, POST_TOOL_USE_FAILURE, PERMISSION_REQUEST."""
 
     tool_name: str | None = None
     tool_use_id: str | None = None
@@ -228,6 +242,13 @@ class ToolEventData(EventDataBase):
     result_summary: str | None = None
     error_type: str | None = None
     thinking: str | None = None
+    # PostToolUseFailure fields.
+    error: str | None = None
+    is_interrupt: bool | None = None
+    # Subagent that called the tool (Claude Code's ``agent_id``/``agent_type``
+    # common fields). ``agent_id`` itself stays "main" for older consumers.
+    tool_agent_id: str | None = None
+    tool_agent_type: str | None = None
 
 
 class PromptEventData(EventDataBase):
@@ -261,6 +282,8 @@ class LifecycleEventData(EventDataBase):
     WALKING_TO_DESK, WAITING, LEAVING, ERROR, TEAMMATE_IDLE."""
 
     notification_type: str | None = None
+    # Stop hook: tail of Claude's final response (question detection).
+    last_assistant_message: str | None = None
     error_type: str | None = None
     reason: str | None = None
     bubble_content: BubbleContent | None = None
@@ -285,7 +308,7 @@ class BackgroundTaskEventData(EventDataBase):
 
 # ---------------------------------------------------------------------------
 # Family event models. Each binds a multi-value `Literal` of EventType values
-# to its payload class; together the Literals cover all 23 EventType values
+# to its payload class; together the Literals cover all 24 EventType values
 # exactly once, making AnyEvent a total discriminated union over EventType.
 # ---------------------------------------------------------------------------
 
@@ -313,6 +336,7 @@ class ToolEvent(_EventBase):
     event_type: Literal[
         EventType.PRE_TOOL_USE,
         EventType.POST_TOOL_USE,
+        EventType.POST_TOOL_USE_FAILURE,
         EventType.PERMISSION_REQUEST,
     ]
     data: ToolEventData

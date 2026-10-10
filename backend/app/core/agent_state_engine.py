@@ -20,12 +20,15 @@ import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any, cast
 
 from app.core import token_tracker as _token_tracker
-from app.core.path_utils import is_safe_transcript_path
-from app.core.token_tracker import TokenTracker
+from app.core.transcript_tail import (
+    ends_with_question,
+    last_assistant_text,
+    last_usage,
+    resolve_transcript,
+)
 from app.models.events import AnyEvent, EventType
 
 logger = logging.getLogger(__name__)
@@ -163,8 +166,8 @@ class Thresholds:
     presence_window: float = 600
     rest_after_disconnect: float = 600
     prompt: float = 3
-    turn_done: float = 10
     return_: float = 5
+    subagent_expiry: float = 1800
     exit_visible: float = 120
     session_max_age: float = 24 * 3600
 
@@ -179,8 +182,8 @@ class Thresholds:
             presence_window=s.STATE_PRESENCE_WINDOW_SECONDS,
             rest_after_disconnect=s.STATE_REST_AFTER_DISCONNECT_SECONDS,
             prompt=s.STATE_PROMPT_SECONDS,
-            turn_done=s.STATE_TURN_DONE_SECONDS,
             return_=s.STATE_RETURN_SECONDS,
+            subagent_expiry=s.STATE_SUBAGENT_EXPIRY_SECONDS,
             exit_visible=s.STATE_EXIT_VISIBLE_SECONDS,
             session_max_age=s.STATE_SESSION_MAX_AGE_HOURS * 3600,
         )
@@ -199,8 +202,8 @@ _MAIN_IDS = frozenset({"", "main"})
 
 # Claude Code only issues new tool calls after it has every result of the
 # previous ones, so a main-agent PreToolUse that starts this long after a
-# still-pending call means that call already ended (typically a failure: the
-# hook never maps PostToolUseFailure). Calls of one message start together.
+# still-pending call means that call already ended (for producers that do not
+# send PostToolUseFailure). Calls of one message start together.
 _PARALLEL_TOOL_WINDOW = timedelta(seconds=2)
 
 
@@ -231,10 +234,17 @@ class Record:
     notification_type: str | None = None
     success: bool | None = None
     run_in_background: bool = False
+    # Subagent that called the tool (hook ``tool_agent_id``), if any.
+    tool_agent_id: str | None = None
+    is_interrupt: bool | None = None
+    reports_failures: bool = False
+    # Stop: whether Claude's last message asks the user something.
+    question: bool | None = None
+    question_text: str | None = None
 
     @property
     def is_main(self) -> bool:
-        return (self.agent_id or "") in _MAIN_IDS
+        return (self.agent_id or "") in _MAIN_IDS and not self.tool_agent_id
 
     def sort_key(self) -> tuple[datetime, int]:
         return (self.ts, self.seq)
@@ -260,6 +270,7 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
             command = str(tool_input.get("url") or tool_input.get("query"))
     text = (
         getattr(d, "prompt", None)
+        or getattr(d, "error", None)
         or getattr(d, "message", None)
         or getattr(d, "task_description", None)
         or getattr(d, "summary", None)
@@ -278,6 +289,9 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
         notification_type=getattr(d, "notification_type", None),
         success=getattr(d, "success", None),
         run_in_background=bool(tool_input.get("run_in_background")),
+        tool_agent_id=getattr(d, "tool_agent_id", None),
+        is_interrupt=getattr(d, "is_interrupt", None),
+        reports_failures=bool(d.reports_tool_failures),
     )
 
 
@@ -294,12 +308,8 @@ def _is_permission_notification(rec: Record) -> bool:
     return bool(rec.text and "permission" in rec.text.lower())
 
 
-def _is_idle_notification(rec: Record) -> bool:
-    if rec.event_type != EventType.NOTIFICATION:
-        return False
-    if rec.notification_type:
-        return "idle" in rec.notification_type
-    return bool(rec.text and "waiting for your input" in rec.text.lower())
+def _times_by_key() -> dict[str, datetime]:
+    return {}
 
 
 def _records_by_key() -> dict[str, Record]:
@@ -331,6 +341,8 @@ class _Derived:
     pending_tools: dict[str, Record] = field(default_factory=_records_by_key)
     pending_permission: Record | None = None
     active_subagents: dict[str, Record] = field(default_factory=_records_by_key)
+    # Last event attributed to each active subagent (for the expiry).
+    subagent_activity: dict[str, datetime] = field(default_factory=_times_by_key)
     tool_times: list[datetime] = field(default_factory=_times)
     active_minutes: int = 0
     consecutive_errors: int = 0
@@ -343,12 +355,14 @@ _RESOLVES_PERMISSION = frozenset(
     {
         EventType.PRE_TOOL_USE,
         EventType.POST_TOOL_USE,
+        EventType.POST_TOOL_USE_FAILURE,
         EventType.USER_PROMPT_SUBMIT,
         EventType.STOP,
         EventType.SESSION_END,
         EventType.SUBAGENT_START,
     }
 )
+_TOOL_DONE = frozenset({EventType.POST_TOOL_USE, EventType.POST_TOOL_USE_FAILURE})
 # Main-agent events after which no tool can still be running in the foreground.
 _CLEARS_PENDING = frozenset(
     {EventType.USER_PROMPT_SUBMIT, EventType.STOP, EventType.SESSION_END, EventType.SESSION_START}
@@ -384,6 +398,7 @@ def derive(records: Iterable[Record]) -> _Derived:
         # Subagents: SubagentStart without its SubagentStop.
         if et == EventType.SUBAGENT_START and rec.agent_id:
             dv.active_subagents[rec.agent_id] = rec
+            dv.subagent_activity[rec.agent_id] = rec.ts
             dv.tool_times.append(rec.ts)  # the Task/Agent tool call itself
         elif et == EventType.SUBAGENT_INFO and rec.native_agent_id:
             if rec.native_agent_id not in native_to_start:
@@ -397,9 +412,27 @@ def derive(records: Iterable[Record]) -> _Derived:
                 del dv.active_subagents[rec.agent_id]
             elif rec.native_agent_id and rec.native_agent_id in native_to_start:
                 dv.active_subagents.pop(native_to_start[rec.native_agent_id], None)
+        elif (
+            et == EventType.POST_TOOL_USE_FAILURE
+            and rec.is_main
+            and rec.tool_name in ("Task", "Agent")
+        ):
+            # A Task/Agent call that fails never produces its SubagentStop.
+            dv.active_subagents.pop(f"subagent_{rec.tool_use_id}", None)
 
-        # Errors: only possible when the producer reports failures.
-        failed = et == EventType.POST_TOOL_USE and rec.success is False
+        # Activity of a subagent: its own tool calls (native id or start id).
+        owner = rec.tool_agent_id or rec.native_agent_id or (None if rec.is_main else rec.agent_id)
+        if owner:
+            start_id = native_to_start.get(owner, owner)
+            if start_id in dv.active_subagents:
+                dv.subagent_activity[start_id] = rec.ts
+
+        # Errors: PostToolUseFailure in a row (user interrupts do not count).
+        if rec.reports_failures:
+            dv.saw_error_signal = True
+        failed = (et == EventType.POST_TOOL_USE_FAILURE and not rec.is_interrupt) or (
+            et == EventType.POST_TOOL_USE and rec.success is False
+        )
         if failed or et == EventType.ERROR:
             dv.consecutive_errors += 1
             dv.saw_error_signal = True
@@ -411,6 +444,9 @@ def derive(records: Iterable[Record]) -> _Derived:
             if et == EventType.PRE_TOOL_USE:
                 dv.tool_times.append(rec.ts)
             continue
+        # Notifications (idle reminders, etc.) do not change what the agent
+        # does; a permission notification is handled below.
+        is_notification = et == EventType.NOTIFICATION
 
         if et == EventType.PRE_TOOL_USE:
             dv.tool_times.append(rec.ts)
@@ -422,7 +458,7 @@ def derive(records: Iterable[Record]) -> _Derived:
                 del dv.pending_tools[key]
             key = rec.tool_use_id or f"{rec.tool_name}:{rec.seq}"
             dv.pending_tools[key] = rec
-        elif et == EventType.POST_TOOL_USE:
+        elif et in _TOOL_DONE:
             if rec.tool_use_id and rec.tool_use_id in dv.pending_tools:
                 del dv.pending_tools[rec.tool_use_id]
             else:
@@ -443,14 +479,14 @@ def derive(records: Iterable[Record]) -> _Derived:
         # unless the turn already ended: a background subagent finishing after
         # Stop does not wake the agent. Its start is the main agent waiting,
         # handled by active_subagents.
-        if et == EventType.SUBAGENT_START:
+        if et == EventType.SUBAGENT_START or is_notification:
             continue
-        if et == EventType.SUBAGENT_STOP and dv.last_main is not None:
-            ended_turn = dv.last_main.event_type == EventType.STOP or _is_idle_notification(
-                dv.last_main
-            )
-            if ended_turn:
-                continue
+        if (
+            et == EventType.SUBAGENT_STOP
+            and dv.last_main is not None
+            and dv.last_main.event_type == EventType.STOP
+        ):
+            continue
         dv.last_main = rec
 
     dv.active_minutes = len(minutes)
@@ -465,9 +501,11 @@ class SessionLog:
     records: list[Record] = field(default_factory=_records)
     project: str | None = None
     transcript_path: str | None = None
-    tokens: TokenTracker = field(default_factory=TokenTracker)
     token_samples: list[tuple[datetime, int]] = field(default_factory=_samples)
     token_problem: str | None = None
+    context_tokens: int | None = None
+    context_window: int = 200_000
+    token_file_size: int = -1
     _derived: _Derived | None = None
     # Memory for state 20 ("regresa al trabajo").
     prev_state: int | None = None
@@ -523,12 +561,22 @@ def _evidence(rec: Record | None, **extra: Any) -> dict[str, Any]:
     return ev
 
 
+def active_subagents(dv: _Derived, now: datetime, th: Thresholds) -> dict[str, Record]:
+    """Subagents without SubagentStop that had activity within the expiry window."""
+    return {
+        aid: rec
+        for aid, rec in dv.active_subagents.items()
+        if (now - dv.subagent_activity.get(aid, rec.ts)).total_seconds() < th.subagent_expiry
+    }
+
+
 def compute_state(
     log: SessionLog, presence: Presence, now: datetime, th: Thresholds
 ) -> StateResult:
     """Catalog state for one session at ``now`` (without the state-20 memory)."""
     dv = log.derived
     start = dv.start_ts or dv.first_ts or now
+    subagents = active_subagents(dv, now, th)
 
     if dv.end_ts is not None:
         return StateResult(12, dv.end_ts)
@@ -562,10 +610,10 @@ def compute_state(
             result = StateResult(14, current.ts, "tu_respuesta", _evidence(current))
         else:
             result = StateResult(tool_state(tool), current.ts)
-    elif dv.active_subagents:
-        earliest = min(r.ts for r in dv.active_subagents.values())
+    elif subagents:
+        earliest = min(r.ts for r in subagents.values())
         since = max(earliest, dv.last_main.ts) if dv.last_main else earliest
-        agents = [_short(r.text, 60) or r.agent_id for r in dv.active_subagents.values()]
+        agents = [_short(r.text, 60) or r.agent_id for r in subagents.values()]
         result = StateResult(
             17,
             since,
@@ -611,27 +659,22 @@ def _state_from_last_main(
     if et == EventType.CONTEXT_COMPACTION:
         return StateResult(10, last.ts)
     if et == EventType.STOP:
-        if age < th.turn_done:
-            return StateResult(11, last.ts)
-        return StateResult(
-            14,
-            last.ts + timedelta(seconds=th.turn_done),
-            "tu_respuesta",
-            {"herramienta": None, "comando": None, "desde": last.ts.isoformat(), "evento": "stop"},
-        )
-    if _is_idle_notification(last):
-        return StateResult(
-            14,
-            last.ts,
-            "tu_respuesta",
-            {
-                "herramienta": None,
-                "comando": None,
-                "desde": last.ts.isoformat(),
-                "evento": "notification",
-                "mensaje": _short(last.text),
-            },
-        )
+        # 14 only with an explicit question; otherwise the turn just ended
+        # (11) and the idle rule moves it to 18/19 after STATE_IDLE_SECONDS.
+        if last.question:
+            return StateResult(
+                14,
+                last.ts,
+                "tu_respuesta",
+                {
+                    "herramienta": None,
+                    "comando": None,
+                    "desde": last.ts.isoformat(),
+                    "evento": "stop",
+                    "mensaje": _short(last.question_text, 120),
+                },
+            )
+        return StateResult(11, last.ts)
     if et == EventType.USER_PROMPT_SUBMIT:
         if age < th.prompt:
             return StateResult(2, last.ts)
@@ -678,6 +721,8 @@ class AgentStateEngine:
         log.project = d.project_dir or d.working_dir or log.project or d.project_name
         if d.transcript_path:
             log.transcript_path = d.transcript_path
+        if rec.event_type == EventType.STOP:
+            self._detect_question(rec, event, log)
         self._update_tokens(log, event, rec.ts)
         log.add(rec)
         if rec.event_type == EventType.USER_PROMPT_SUBMIT and (
@@ -686,27 +731,56 @@ class AgentStateEngine:
             self._last_prompt = rec.ts
         self._snapshot = None
 
+    @staticmethod
+    def _detect_question(rec: Record, event: AnyEvent, log: SessionLog) -> None:
+        """Stop: does Claude's last message end with '?' (explicit question)?
+
+        Uses the Stop hook's ``last_assistant_message`` when the hook sends it;
+        otherwise reads only the tail of the session transcript.
+        """
+        text = getattr(event.data, "last_assistant_message", None)
+        if not text and log.transcript_path:
+            path, _ = resolve_transcript(log.transcript_path)
+            if path is not None:
+                try:
+                    text = last_assistant_text(path)
+                except OSError:
+                    text = None
+        rec.question = ends_with_question(text)
+        rec.question_text = text[-200:] if text else None
+
     def _update_tokens(self, log: SessionLog, event: AnyEvent, ts: datetime) -> None:
+        """Latest message usage (= context size), from the event or the transcript tail."""
         d = event.data
-        has_fast = d.input_tokens is not None or d.output_tokens is not None
-        if not has_fast:
-            path = d.transcript_path or d.agent_transcript_path
-            if not path:
-                return
-            problem = _transcript_problem(path)
-            if problem:
+        total: int | None = None
+        if d.input_tokens is not None or d.output_tokens is not None:
+            total = (d.input_tokens or 0) + (d.output_tokens or 0)
+        elif d.transcript_path:
+            path, problem = resolve_transcript(d.transcript_path)
+            if path is None:
                 log.token_problem = problem
                 return
-        before = log.tokens.total_tokens
-        try:
-            log.tokens.update_from_event(event)
-        except Exception as exc:  # token parsing must never break ingestion
-            log.token_problem = f"No se pudo leer el uso de tokens: {exc}"
+            try:
+                size = path.stat().st_size
+                if size == log.token_file_size:
+                    return  # transcript unchanged since the last read
+                log.token_file_size = size
+                usage = last_usage(path)
+            except OSError as exc:
+                log.token_problem = f"No se pudo leer la transcripción: {exc}"
+                return
+            if usage is None:
+                return
+            total = int(usage["input_tokens"]) + int(usage["output_tokens"])
+            model = usage.get("model")
+            if isinstance(model, str):
+                log.context_window = _token_tracker._context_window_for_model(model)  # pyright: ignore[reportPrivateUsage]
+        if total is None:
             return
-        after = log.tokens.total_tokens
-        if after != before or not log.token_samples:
-            log.token_samples.append((ts, after))
-            log.token_problem = None
+        if total != log.context_tokens or not log.token_samples:
+            log.token_samples.append((ts, total))
+        log.context_tokens = total
+        log.token_problem = None
 
     # -- presence ------------------------------------------------------------
 
@@ -821,7 +895,8 @@ class AgentStateEngine:
         st = self._state_with_memory(log, presence, now)
         current = _latest(dv.pending_tools)
         current_tool = current.tool_name if current else None
-        if current_tool is None and dv.active_subagents:
+        subagents = active_subagents(dv, now, self.th)
+        if current_tool is None and subagents:
             current_tool = "Task/Agent"
         last = dv.last_record
         return {
@@ -841,7 +916,7 @@ class AgentStateEngine:
                 "tipo": last.event_type if last else None,
                 "hora": last.ts.isoformat() if last else None,
             },
-            "subagentes_activos": len(dv.active_subagents),
+            "subagentes_activos": len(subagents),
             "indicadores": self._indicators(log, now),
             "eventos_recientes": [
                 {
@@ -867,7 +942,7 @@ class AgentStateEngine:
         context_pct: float | None = None
         token_reason = log.token_problem
         if log.token_samples and token_reason is None:
-            # token_tracker reports the latest message usage (= context size).
+            # The transcript reports the latest message usage (= context size).
             # Growth of that number approximates tokens processed; drops come
             # from compaction and are ignored.
             samples = log.token_samples
@@ -882,8 +957,9 @@ class AgentStateEngine:
                         recent_growth += delta
                 prev = value
             tokens_per_min = round(recent_growth / minutes, 1)
-            context_tokens = log.tokens.total_tokens
-            context_pct = round(log.tokens.context_utilization * 100, 1)
+            context_tokens = log.context_tokens
+            if context_tokens is not None and log.context_window:
+                context_pct = round(min(1.0, context_tokens / log.context_window) * 100, 1)
         elif token_reason is None:
             token_reason = "Ningún evento trajo tokens ni una transcripción legible"
 
@@ -893,8 +969,8 @@ class AgentStateEngine:
         else:
             errors = None
             errors_reason = (
-                "El hook solo envía PostToolUse cuando la herramienta tiene éxito "
-                "(success=true siempre); falta mapear PostToolUseFailure"
+                "Los eventos de esta sesión vienen de un hook que no envía "
+                "PostToolUseFailure (sin reports_tool_failures)"
             )
 
         return {
@@ -908,29 +984,6 @@ class AgentStateEngine:
             "errores_seguidos": errors,
             "errores_motivo": errors_reason,
         }
-
-
-def _transcript_problem(path: str) -> str | None:
-    """Reason the transcript cannot be used for tokens, or None if it can."""
-    from app.config import get_settings
-
-    translated = get_settings().translate_path(path)
-    if not is_safe_transcript_path(translated):
-        return f"Transcripción fuera de ~/.claude y ~/.claude-demo: {path}"
-    p = Path(translated)
-    try:
-        if not p.exists():
-            return f"La transcripción no existe: {path}"
-        size = p.stat().st_size
-    except OSError as exc:
-        return f"No se pudo leer la transcripción: {exc}"
-    max_bytes: int = _token_tracker._MAX_TRANSCRIPT_BYTES  # pyright: ignore[reportPrivateUsage]
-    if size > max_bytes:
-        return (
-            f"La transcripción pesa {size / 1_000_000:.1f} MB y supera el límite de "
-            f"{max_bytes / 1_000_000:.0f} MB de token_tracker"
-        )
-    return None
 
 
 # ---------------------------------------------------------------------------

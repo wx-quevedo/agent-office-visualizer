@@ -7,7 +7,7 @@ Output suppression is handled in main.py before this module is imported.
 import os
 from collections.abc import Callable
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 # ---------------------------------------------------------------------------
 # API endpoint and request constants
@@ -58,15 +58,65 @@ def _log_clamp(host: str | None) -> None:
         pass
 
 
-API_URL = _resolve_api_url(
-    os.environ.get("CLAUDE_OFFICE_API_URL", _DEFAULT_API_URL),
-    os.environ.get("CLAUDE_OFFICE_ALLOW_REMOTE", "") == "1",
-    _log_clamp,
+def _ipv4_loopback(url: str) -> str:
+    """Use 127.0.0.1 instead of ``localhost``.
+
+    On Windows ``localhost`` resolves to ::1 first; the backends listen on
+    IPv4 only, so every request waited for the IPv6 attempt to time out
+    (~0.5 s with TIMEOUT). Same server, no delay.
+    """
+    parsed = urlparse(url)
+    if parsed.hostname != "localhost":
+        return url
+    netloc = "127.0.0.1" + (f":{parsed.port}" if parsed.port else "")
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
+def resolve_extra_urls(
+    raw: str,
+    allow_remote: bool,
+    on_clamp: Callable[[str | None], None],
+) -> list[str]:
+    """Parse CLAUDE_OFFICE_EXTRA_API_URLS (comma-separated) into URLs.
+
+    Each URL goes through the same loopback clamp as the main URL; a clamped
+    remote URL is dropped instead of being reset to the default (which would
+    duplicate the main destination).
+    """
+    urls: list[str] = []
+    for part in raw.split(","):
+        url = part.strip()
+        if not url:
+            continue
+        if _resolve_api_url(url, allow_remote, on_clamp) != url:
+            continue
+        url = _ipv4_loopback(url)
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
+ALLOW_REMOTE = os.environ.get("CLAUDE_OFFICE_ALLOW_REMOTE", "") == "1"
+
+API_URL = _ipv4_loopback(
+    _resolve_api_url(
+        os.environ.get("CLAUDE_OFFICE_API_URL", _DEFAULT_API_URL),
+        ALLOW_REMOTE,
+        _log_clamp,
+    )
 )
 
 # Mutable holder for the API key — populated by load_config().
 _api_key_holder: list[str] = [""]
-TIMEOUT = 0.5  # Seconds — keep short so hooks never block Claude
+# Seconds. Every destination is sent in parallel. The hook waits up to
+# SEND_BUDGET for the main destination but only EXTRA_BUDGET for the extra
+# ones: a stopped backend (a refused connection on Windows still takes
+# ~0.5 s) is abandoned instead of delaying Claude. Python start-up already
+# takes ~150 ms of the ~300 ms target.
+TIMEOUT = 0.25
+EXTRA_TIMEOUT = 0.25
+SEND_BUDGET = 0.25
+EXTRA_BUDGET = 0.1
 
 
 def get_api_key() -> str:

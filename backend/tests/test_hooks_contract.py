@@ -174,6 +174,21 @@ _RAW_CASES: list[tuple[str, dict[str, Any], str]] = [
         "notification",
     ),
     ("stop", {"session_id": "abc123"}, "stop"),
+    # PostToolUseFailure (sent only to extra destinations by main.py).
+    (
+        "post_tool_use_failure",
+        {
+            "session_id": "abc123",
+            "tool_name": "Bash",
+            "tool_use_id": "t_bash",
+            "tool_input": {"command": "npm test"},
+            "error": "Exit code 1",
+            "is_interrupt": False,
+            "agent_id": "sa_1",
+            "agent_type": "Explore",
+        },
+        "post_tool_use_failure",
+    ),
     # pre_compact remaps to context_compaction.
     ("pre_compact", {"session_id": "abc123"}, "pre_compact-to-context_compaction"),
 ]
@@ -192,6 +207,7 @@ _EXPECTED_HOOKS_OUTPUT_TYPES: frozenset[str] = frozenset(
         "pre_tool_use",
         "subagent_start",
         "post_tool_use",
+        "post_tool_use_failure",
         "subagent_stop",
         "subagent_info",
         "permission_request",

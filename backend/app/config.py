@@ -104,10 +104,11 @@ class Settings(BaseSettings):
     STATE_PRESENCE_WINDOW_SECONDS: float = 600
     # The user must be disconnected this long before an idle agent rests.
     STATE_REST_AFTER_DISCONNECT_SECONDS: float = 600
-    # Short-lived states: "recibe encargo", "terminó el turno", "regresa al trabajo".
+    # Short-lived states: "recibe encargo", "regresa al trabajo".
     STATE_PROMPT_SECONDS: float = 3
-    STATE_TURN_DONE_SECONDS: float = 10
     STATE_RETURN_SECONDS: float = 5
+    # A subagent without activity for this long is considered finished.
+    STATE_SUBAGENT_EXPIRY_SECONDS: float = 1800
     # Ended sessions stay listed ("se va") this long; older sessions are dropped.
     STATE_EXIT_VISIBLE_SECONDS: float = 120
     STATE_SESSION_MAX_AGE_HOURS: float = 24

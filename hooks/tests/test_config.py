@@ -48,3 +48,26 @@ def test_remote_hostname_with_port_clamps_on_host_only():
     result = _resolve_api_url("http://10.0.0.5:9000/api/v1/events", False, clamped.append)
     assert result == _DEFAULT_API_URL
     assert clamped == ["10.0.0.5"]
+
+
+def test_localhost_becomes_ipv4_loopback() -> None:
+    from claude_office_hooks.config import _ipv4_loopback
+
+    assert _ipv4_loopback("http://localhost:8000/api/v1/events") == (
+        "http://127.0.0.1:8000/api/v1/events"
+    )
+    assert _ipv4_loopback("http://127.0.0.1:8100/x") == "http://127.0.0.1:8100/x"
+
+
+def test_extra_urls_parsed_clamped_and_deduplicated() -> None:
+    from claude_office_hooks.config import resolve_extra_urls
+
+    clamped: list[str | None] = []
+    urls = resolve_extra_urls(
+        "http://127.0.0.1:8100/api/v1/events, http://localhost:8100/api/v1/events,"
+        " http://evil.example.com/x,,",
+        False,
+        clamped.append,
+    )
+    assert urls == ["http://127.0.0.1:8100/api/v1/events"]
+    assert clamped == ["evil.example.com"]

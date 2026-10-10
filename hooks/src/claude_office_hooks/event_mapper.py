@@ -90,6 +90,32 @@ def _build_agent_transcript_path(main_transcript: str | None, native_agent_id: s
     return f"{session_dir}/subagents/agent-{native_agent_id}.jsonl"
 
 
+# Event types the hook emits that older backends (the daily claude-office
+# install) do not know: they reject them with HTTP 422, so main.py sends these
+# only to the extra destinations (CLAUDE_OFFICE_EXTRA_API_URLS).
+NEW_EVENT_TYPES: frozenset[str] = frozenset({"post_tool_use_failure"})
+
+# Keep only the end of long texts: enough to detect a closing question.
+_LAST_MESSAGE_TAIL = 300
+_ERROR_MAX = 500
+
+
+def _add_tool_agent(raw_data: dict[str, Any], data: dict[str, Any]) -> None:
+    """Record which subagent called a tool (Claude Code common fields).
+
+    Claude Code adds ``agent_id``/``agent_type`` to hook input when the hook
+    fires inside a subagent. ``data["agent_id"]`` keeps its historical value
+    ("main") so older backends behave exactly as before; the subagent goes in
+    new fields they ignore.
+    """
+    agent_id = raw_data.get("agent_id")
+    if agent_id:
+        data["tool_agent_id"] = agent_id
+        agent_type = raw_data.get("agent_type")
+        if agent_type:
+            data["tool_agent_type"] = agent_type
+
+
 def _handle_session_start(raw_data: dict[str, Any], data: dict[str, Any]) -> None:
     """Populate *data* for a session_start event."""
     source = raw_data.get("source", "unknown")
@@ -133,6 +159,7 @@ def _handle_pre_tool_use(
         data.pop("tool_input", None)
     else:
         data["agent_id"] = "main"
+        _add_tool_agent(raw_data, data)
 
 
 def _handle_post_tool_use(
@@ -195,6 +222,25 @@ def _handle_post_tool_use(
                         data["agent_transcript_path"] = agent_path
     else:
         data["agent_id"] = "main"
+        _add_tool_agent(raw_data, data)
+
+
+def _handle_post_tool_use_failure(raw_data: dict[str, Any], data: dict[str, Any]) -> None:
+    """Populate *data* for a post_tool_use_failure event (Claude Code PostToolUseFailure).
+
+    Fields per the hooks reference: tool_name, tool_input, tool_use_id,
+    error, is_interrupt (optional), duration_ms (optional).
+    """
+    data["tool_name"] = raw_data.get("tool_name")
+    data["tool_input"] = raw_data.get("tool_input")
+    data["success"] = False
+    data["agent_id"] = "main"
+    error = raw_data.get("error")
+    if error:
+        data["error"] = str(error)[:_ERROR_MAX]
+    if raw_data.get("is_interrupt") is not None:
+        data["is_interrupt"] = bool(raw_data.get("is_interrupt"))
+    _add_tool_agent(raw_data, data)
 
 
 def _handle_native_subagent_start(
@@ -294,12 +340,24 @@ def _handle_permission_request(raw_data: dict[str, Any], data: dict[str, Any]) -
     data["tool_name"] = raw_data.get("tool_name")
     data["tool_input"] = raw_data.get("tool_input")
     data["agent_id"] = "main"
+    _add_tool_agent(raw_data, data)
 
 
 def _handle_notification(raw_data: dict[str, Any], data: dict[str, Any]) -> None:
-    """Populate *data* for a notification event."""
-    data["notification_type"] = raw_data.get("type")
+    """Populate *data* for a notification event.
+
+    Claude Code sends the kind in ``notification_type`` (permission_prompt,
+    idle_prompt, ...); ``type`` is kept as a fallback for older payloads.
+    """
+    data["notification_type"] = raw_data.get("notification_type") or raw_data.get("type")
     data["message"] = raw_data.get("message")
+
+
+def _handle_stop(raw_data: dict[str, Any], data: dict[str, Any]) -> None:
+    """Populate *data* for a stop event: the end of Claude's final response."""
+    message = raw_data.get("last_assistant_message")
+    if isinstance(message, str) and message:
+        data["last_assistant_message"] = message[-_LAST_MESSAGE_TAIL:]
 
 
 def _handle_session_end(raw_data: dict[str, Any], data: dict[str, Any]) -> None:
@@ -346,6 +404,8 @@ def map_event(
         "project_dir": project_dir,
         "working_dir": working_dir,
         "transcript_path": transcript_path,
+        # This hook maps PostToolUseFailure, so "no failures" means zero.
+        "reports_tool_failures": True,
     }
 
     # tool_use_id is only present on tool-related hooks (pre/post tool use and
@@ -381,6 +441,9 @@ def map_event(
     elif event_type == "post_tool_use":
         _handle_post_tool_use(raw_data, payload, data, transcript_path)
 
+    elif event_type == "post_tool_use_failure":
+        _handle_post_tool_use_failure(raw_data, data)
+
     elif event_type == "subagent_start":
         result = _handle_native_subagent_start(raw_data, payload, data, transcript_path)
         if result is None:
@@ -401,7 +464,7 @@ def map_event(
         _handle_notification(raw_data, data)
 
     elif event_type == "stop":
-        pass  # No additional fields required
+        _handle_stop(raw_data, data)
 
     elif event_type == "session_end":
         _handle_session_end(raw_data, data)

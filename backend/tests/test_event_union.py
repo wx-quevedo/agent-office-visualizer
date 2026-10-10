@@ -37,6 +37,7 @@ _EVENT_TYPE_TO_VARIANT = {
     EventType.PRE_TOOL_USE: ToolEvent,
     EventType.POST_TOOL_USE: ToolEvent,
     EventType.USER_PROMPT_SUBMIT: PromptEvent,
+    EventType.POST_TOOL_USE_FAILURE: ToolEvent,
     EventType.PERMISSION_REQUEST: ToolEvent,
     EventType.NOTIFICATION: LifecycleEvent,
     EventType.SUBAGENT_START: AgentEvent,
@@ -59,7 +60,7 @@ _EVENT_TYPE_TO_VARIANT = {
 
 
 def test_every_event_type_is_covered_by_a_variant() -> None:
-    """Each of the 23 EventType values must route to a known variant."""
+    """Each of the 24 EventType values must route to a known variant."""
     assert set(_EVENT_TYPE_TO_VARIANT) == set(EventType)
 
 
