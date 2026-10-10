@@ -15,6 +15,32 @@ if (-not (Test-Path $Uvicorn)) { throw "Falta el entorno del backend en $DirBack
 if (-not (Test-Path (Join-Path $DirExport 'index.html'))) { throw "Falta el frontend compilado en $DirExport. Corre actualizar-oficina.ps1." }
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
 
+function Mostrar-Resultado([bool]$okBackend, [bool]$okFrontend) {
+    if (-not ($okBackend -and $okFrontend)) {
+        Write-Host "No respondió a tiempo (backend: $okBackend, frontend: $okFrontend). Revisa los registros en $Logs" -ForegroundColor Yellow
+        exit 1
+    }
+    Write-Host ""
+    Write-Host "Lista. Abre:"
+    Write-Host "  PC:      http://localhost:$PuertoFrontend/oficina    (3D: http://localhost:$PuertoFrontend/oficina/3d)"
+    Write-Host "  iPhone:  http://${IpTailscale}:$PuertoFrontend/oficina    (3D: http://${IpTailscale}:$PuertoFrontend/oficina/3d)"
+    Write-Host "  Datos:   $Datos"
+}
+
+# Con la tarea programada instalada, el arranque va siempre por ella: los
+# servidores quedan fuera de la sesión que corre este script (una terminal,
+# VS Code o Claude Code). Dentro de la tarea su estado es "Running" y el
+# script arranca los procesos él mismo.
+$tarea = Get-ScheduledTask -TaskName $NombreTarea -ErrorAction SilentlyContinue
+if ($tarea -and $tarea.State -ne 'Running') {
+    Start-ScheduledTask -TaskName $NombreTarea
+    Escribir-Paso "Arranque a través de la tarea programada '$NombreTarea'"
+    $okBackend = Esperar-Url "http://127.0.0.1:$PuertoBackend/health" 120
+    $okFrontend = Esperar-Url "http://127.0.0.1:$PuertoFrontend/oficina" 30
+    Mostrar-Resultado $okBackend $okFrontend
+    exit 0
+}
+
 function Revisar-Puerto([int]$puerto) {
     # $true: ya lo atiende la copia diaria; $false: libre. Error si es de otro programa.
     $dueno = Get-DuenoPuerto $puerto
@@ -26,7 +52,7 @@ function Revisar-Puerto([int]$puerto) {
 if (Revisar-Puerto $PuertoBackend) {
     Escribir-Paso "Backend ya corriendo en el puerto $PuertoBackend"
 } else {
-    $id = Iniciar-Oculto "`"$Uvicorn`" app.main:app --host 0.0.0.0 --port $PuertoBackend" $DirBackend (Join-Path $Logs 'backend.log')
+    $id = Iniciar-Oculto "`"$Uvicorn`" app.main:app --host 0.0.0.0 --port $PuertoBackend --loop asyncio:SelectorEventLoop" $DirBackend (Join-Path $Logs 'backend.log')
     Escribir-Paso "Backend iniciado (PID $id)"
 }
 if (Revisar-Puerto $PuertoFrontend) {
@@ -38,12 +64,4 @@ if (Revisar-Puerto $PuertoFrontend) {
 
 $okBackend = Esperar-Url "http://127.0.0.1:$PuertoBackend/health" 90
 $okFrontend = Esperar-Url "http://127.0.0.1:$PuertoFrontend/oficina" 30
-if (-not ($okBackend -and $okFrontend)) {
-    Write-Host "No respondió a tiempo (backend: $okBackend, frontend: $okFrontend). Revisa los registros en $Logs" -ForegroundColor Yellow
-    exit 1
-}
-Write-Host ""
-Write-Host "Lista. Abre:"
-Write-Host "  PC:      http://localhost:$PuertoFrontend/oficina    (3D: http://localhost:$PuertoFrontend/oficina/3d)"
-Write-Host "  iPhone:  http://${IpTailscale}:$PuertoFrontend/oficina    (3D: http://${IpTailscale}:$PuertoFrontend/oficina/3d)"
-Write-Host "  Datos:   $Datos"
+Mostrar-Resultado $okBackend $okFrontend

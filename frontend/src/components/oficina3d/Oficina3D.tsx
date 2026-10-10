@@ -132,6 +132,7 @@ export default function Oficina3D() {
     memoria.current = r.estado;
     setAgents(r.vistas);
     office.setCerrados(r.cerrados);
+    office.setGrupos(r.estado.grupos);
     office.olvidarSalidos(r.reentradas);
   }, [datos, salidos, setAgents, clave]);
 

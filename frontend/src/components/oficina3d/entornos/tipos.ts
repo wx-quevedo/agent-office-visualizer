@@ -47,7 +47,97 @@ export interface Grafo {
 /** Collision test of the environment (walls, fixed furniture, desks). */
 export type Bloqueado = (x: number, z: number, rad: number) => boolean;
 
-export type ClaveEntorno = "original" | "puente" | "control";
+export type ClaveEntorno =
+  "original" | "puente" | "control" | "cabinas" | "estudio";
+
+/** Owner of a group that holds agents of several projects. */
+export const GRUPO_GENERAL = "*general*";
+
+/**
+ * Environments that seat the agents by project (Cabinas, Estudio): the desks
+ * come in groups (a cabin, an island). A group belongs to one project while it
+ * has agents, or to the general group. Seat index i = a desk of a group.
+ */
+export interface Agrupacion {
+  /** Group of seat i and its place inside the group. */
+  grupoDe(asiento: number): { g: number; k: number };
+  /** Seat index of place k of group g. */
+  asiento(g: number, k: number): number;
+  /** Places of group g (Infinity: an open general area that keeps growing). */
+  capacidad(g: number): number;
+  /** Number of groups. Seats past them are extra desks of the general group. */
+  grupos: number;
+  /** Group that is always the general one (Cabinas), or null (Estudio: free groups become general when needed). */
+  generalFijo: number | null;
+  /** Agents a project needs to get a group of its own. */
+  umbralPropio: number;
+  /** Free groups kept for the general one before giving a project its own. */
+  reservaGeneral: number;
+  /** An agent waiting for you walks to the door of its group (Cabinas), or null (stays seated). */
+  puerta: ((g: number, orden: number) => PuntoFila) | null;
+}
+
+/** Fixed decoration piece (drawn by entornos/decoracion.tsx, blocks paths when it stands on the floor). */
+export type TipoPieza =
+  | "planta"
+  | "plantaGrande"
+  | "arbol"
+  | "arbusto"
+  | "macetero"
+  | "lampara"
+  | "librero"
+  | "sofa"
+  | "mesaCafe"
+  | "banca"
+  | "mesaReuniones"
+  | "pizarra"
+  | "cafeteria"
+  | "cuadro"
+  | "reloj"
+  | "alfombra"
+  | "cesped";
+
+export interface Pieza {
+  tipo: TipoPieza;
+  x: number;
+  z: number;
+  ry?: number;
+  /** Rugs, lawns and planters: size; others: ignored. */
+  ancho?: number;
+  fondo?: number;
+  color?: string;
+  escala?: number;
+}
+
+/** Half sizes (x, z) of a piece standing on the floor, before rotation; null: does not block. */
+const MEDIDAS: Partial<Record<TipoPieza, [number, number]>> = {
+  planta: [0.28, 0.28],
+  plantaGrande: [0.4, 0.4],
+  arbol: [0.55, 0.55],
+  arbusto: [0.5, 0.5],
+  lampara: [0.25, 0.25],
+  librero: [0.62, 0.2],
+  sofa: [1.15, 0.5],
+  mesaCafe: [0.6, 0.35],
+  banca: [0.85, 0.3],
+  mesaReuniones: [1.9, 1.9],
+  pizarra: [1.0, 0.15],
+  cafeteria: [3.3, 0.4],
+};
+
+/** Collision box of a piece (null for rugs, lawns, paintings and clocks). */
+export function huellaPieza(p: Pieza): Rect | null {
+  let m = MEDIDAS[p.tipo];
+  if (p.tipo === "macetero") m = [(p.ancho ?? 2) / 2, (p.fondo ?? 0.5) / 2];
+  if (!m) return null;
+  const e = p.escala ?? 1;
+  const r = p.ry ?? 0;
+  const c = Math.abs(Math.cos(r));
+  const s = Math.abs(Math.sin(r));
+  const hx = (m[0] * c + m[1] * s) * e;
+  const hz = (m[0] * s + m[1] * c) * e;
+  return { x0: p.x - hx, x1: p.x + hx, z0: p.z - hz, z1: p.z + hz };
+}
 
 export interface Entorno {
   clave: ClaveEntorno;
@@ -89,6 +179,18 @@ export interface Entorno {
   paseo: { descanso: string[]; destinos: string[] };
   /** Limits for placed furniture (editor). */
   limites: { x: number; z: number };
+  /** Seats by project (cabins, islands), or none: lowest free desk. */
+  agrupacion?: Agrupacion;
+  /** Desks the navigation graph walks around (default: the base desks). */
+  puestosGrafo?: number;
+  /** Extra empty desks drawn next to the used ones (default: none). */
+  puestosVisibles?: (ocupados: number[]) => number[];
+  /** The agent waiting for you turns (with its chair) towards your desk. */
+  girarHaciaTi?: boolean;
+  /** Fixed decoration drawn from data (its pieces on the floor block paths). */
+  decoracion?: Pieza[];
+  /** Coloured floor area of the room (theme floor colour); default 30 × 14 in the centre. */
+  pisoCentral?: Rect;
 }
 
 // -- helpers shared by the environments -------------------------------------------

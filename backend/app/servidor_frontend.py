@@ -123,7 +123,15 @@ def main() -> None:
         raise SystemExit(f"No hay un frontend compilado en {raiz} (falta index.html)")
     import uvicorn
 
-    uvicorn.run(crear_app(raiz), host=args.host, port=args.port, log_level="warning")
+    # Selector loop: on Windows the default Proactor loop closes the listening
+    # socket when an accept fails (WinError 64) and the server stops answering.
+    uvicorn.run(
+        crear_app(raiz),
+        host=args.host,
+        port=args.port,
+        log_level="warning",
+        loop="asyncio:SelectorEventLoop",
+    )
 
 
 if __name__ == "__main__":

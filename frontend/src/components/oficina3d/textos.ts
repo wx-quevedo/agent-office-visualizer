@@ -39,6 +39,8 @@ const TEXTOS = {
   "pantalla.titulo": "OFICINA DE AGENTES",
   "pantalla.nadie": "nadie",
   "tuPuesto.letrero": "Tú",
+  "grupo.cabinaGeneral": "Cabina general",
+  "grupo.islaGeneral": "Isla general",
   "barra.entorno": "Entorno",
 
   "barra.editar": "Editar oficina",

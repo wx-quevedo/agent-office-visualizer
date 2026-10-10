@@ -511,7 +511,7 @@ function Kitchen({ p, ry = 0 }: { p: V3; ry?: number }) {
 }
 // Boardroom prezentatsiya ekrani (avval oddiy oq doska edi) — "majlis"
 // districtining imzosi. Emissive displey: qorong'i shifer-ko'k polda porlaydi.
-function Whiteboard({ p, ry = 0 }: { p: V3; ry?: number }) {
+export function Whiteboard({ p, ry = 0 }: { p: V3; ry?: number }) {
   return (
     <group position={p} rotation={[0, ry, 0]}>
       <Box p={[0, 1.4, 0]} s={[1.95, 1.12, 0.07]} c="#161a20" rough={0.4} />

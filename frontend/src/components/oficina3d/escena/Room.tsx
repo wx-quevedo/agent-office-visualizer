@@ -93,11 +93,14 @@ export default function Room({
   mode,
   ancho = ROOM.W,
   fondo = ROOM.D,
+  piso = { x0: -15, x1: 15, z0: -7, z1: 7 },
 }: {
   mode: CameraMode;
   /** Room size of the active environment (Original: 46 × 32). */
   ancho?: number;
   fondo?: number;
+  /** Area painted with the floor colour of the theme (Original: 30 × 14 in the centre). */
+  piso?: { x0: number; x1: number; z0: number; z1: number };
 }) {
   const W = ancho;
   const D = fondo;
@@ -170,10 +173,10 @@ export default function Room({
       </mesh>
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.012, 0]}
+        position={[(piso.x0 + piso.x1) / 2, 0.012, (piso.z0 + piso.z1) / 2]}
         receiveShadow
       >
-        <planeGeometry args={[30, 14]} />
+        <planeGeometry args={[piso.x1 - piso.x0, piso.z1 - piso.z0]} />
         <meshStandardMaterial
           color={floorColor ?? "#d8c7a8"}
           roughness={0.6}

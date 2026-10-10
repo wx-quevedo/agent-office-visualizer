@@ -21,6 +21,7 @@ import Room from "./escena/Room";
 import { cantidadPuestosBase } from "./escena/roles";
 import { activarEntorno } from "./entornos/activo";
 import { DecoracionEntorno, PuestoUsuario } from "./entornos/decoracion";
+import { mirarHacia, sitPoint } from "./entornos/tipos";
 import { updateFrustum } from "./escena/visibility";
 import Workstation from "./escena/Workstation";
 import { dprFor, shadowEvery, useSettings } from "./settings";
@@ -79,14 +80,26 @@ export default function Escena3D({
     }
   };
 
-  // Collision: the 10 main desks are always there; overflow desks only when used.
-  const seatKey = order.map((id) => agents[id]?.seatIndex).join(",");
-  useEffect(() => {
-    const base = Array.from({ length: SEAT_COUNT }, (_, i) => i);
-    const overflow = order
+  // Desks drawn: the base ones of the environment, the used ones (agents and
+  // closed desks that are kept) and the empty ones the environment adds next
+  // to them (the rest of a cabin or an island).
+  const ocupados = [
+    ...order
       .map((id) => agents[id]?.seatIndex)
-      .filter((i): i is number => typeof i === "number" && i >= SEAT_COUNT);
-    setActiveSeats([...base, ...overflow]);
+      .filter((i): i is number => typeof i === "number"),
+    ...cerrados.map((c) => c.seatIndex),
+  ];
+  const seatKey = [...ocupados].sort((a, b) => a - b).join(",");
+  const dibujados = [
+    ...new Set([
+      ...Array.from({ length: SEAT_COUNT }, (_, i) => i),
+      ...ocupados,
+      ...(ent.puestosVisibles?.(ocupados) ?? []),
+    ]),
+  ].sort((a, b) => a - b);
+  // Collision: every drawn desk.
+  useEffect(() => {
+    setActiveSeats(dibujados);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seatKey, clave]);
 
@@ -108,14 +121,24 @@ export default function Escena3D({
 
   // Desk details of the environment: project nameplate, light while the
   // agent waits for you, chair turned while it queues at the counter.
-  const extrasPuesto = (a: (typeof agents)[string] | undefined) =>
-    a
-      ? {
-          placa: ent.placaNombre ? a.folderName : undefined,
-          resaltado: ent.resaltarEspera && (a.permission || a.question),
-          sillaGirada: a.destino === "fila",
-        }
-      : {};
+  const extrasPuesto = (a: (typeof agents)[string] | undefined) => {
+    if (!a) return {};
+    const espera = a.permission || a.question;
+    const giro = (() => {
+      // Estudio: the chair turns towards your desk while it waits.
+      if (!ent.girarHaciaTi || !espera) return 0;
+      const p = ent.puesto(a.seatIndex);
+      const s = sitPoint(p);
+      return mirarHacia(s.x, s.z, ent.tuPuesto.x, ent.tuPuesto.z) - p.ry;
+    })();
+    return {
+      placa: ent.placaNombre ? a.folderName : undefined,
+      resaltado: ent.resaltarEspera && espera,
+      sillaGirada: a.destino === "fila",
+      giroSilla: giro,
+      luzSilla: !!ent.girarHaciaTi && espera,
+    };
+  };
 
   return (
     <div style={{ position: "absolute", inset: 0 }}>
@@ -153,12 +176,16 @@ export default function Escena3D({
         {/* Everything below remounts when the environment changes: agents
             appear directly at their places. */}
         <group key={clave}>
-          <Room mode="iso" ancho={ent.tamano.ancho} fondo={ent.tamano.fondo} />
+          <Room
+            mode="iso"
+            ancho={ent.tamano.ancho}
+            fondo={ent.tamano.fondo}
+            piso={ent.pisoCentral}
+          />
           <DecoracionEntorno clave={clave} entorno={ent} />
           <PuestoUsuario puesto={ent.tuPuesto} presente={presente} />
           <PlacedFurniture />
-          {/* The 10 main desks are always there (lit when used). */}
-          {Array.from({ length: SEAT_COUNT }, (_, i) => {
+          {dibujados.map((i) => {
             const occ = order
               .map((id) => agents[id])
               .find((a) => a && a.seatIndex === i);
@@ -175,28 +202,6 @@ export default function Escena3D({
               />
             );
           })}
-          {/* Overflow agents (11+) bring their own desk. */}
-          {order
-            .map((id) => agents[id])
-            .filter((a) => a && a.seatIndex >= SEAT_COUNT)
-            .map((a) => (
-              <Workstation
-                key={`ov-${a!.id}`}
-                seatIndex={a!.seatIndex}
-                agent={a!}
-                {...extrasPuesto(a!)}
-              />
-            ))}
-          {/* Overflow desks of closed agents (note or kept empty). */}
-          {cerrados
-            .filter((c) => c.seatIndex >= SEAT_COUNT)
-            .map((c) => (
-              <Workstation
-                key={`ovc-${c.sessionId}`}
-                seatIndex={c.seatIndex}
-                cerrado={c}
-              />
-            ))}
           {capaLista &&
             order.map((id) => {
               const a = agents[id];

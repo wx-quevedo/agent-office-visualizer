@@ -392,13 +392,15 @@ async def focus_session(
 
         if clipboard_cmd:
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    *clipboard_cmd,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
+                # In a thread: the selector loop used on Windows has no subprocesses.
+                await asyncio.to_thread(
+                    subprocess.run,
+                    clipboard_cmd,
+                    input=clipboard_message.encode("utf-8"),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
                 )
-                await proc.communicate(input=clipboard_message.encode("utf-8"))
             except FileNotFoundError:
                 logger.warning("Clipboard command not found: %s", clipboard_cmd[0])
 

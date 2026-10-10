@@ -4,12 +4,20 @@
  * navigation graph (listeners) and the scene remounts with agents placed.
  */
 
+import { CABINAS_ENTORNO } from "./cabinas";
 import { CONTROL } from "./control";
+import { ESTUDIO } from "./estudio";
 import { ORIGINAL } from "./original";
 import { PUENTE } from "./puente";
 import type { ClaveEntorno, Entorno } from "./tipos";
 
-export const ENTORNOS: Entorno[] = [ORIGINAL, PUENTE, CONTROL];
+export const ENTORNOS: Entorno[] = [
+  ORIGINAL,
+  PUENTE,
+  CABINAS_ENTORNO,
+  CONTROL,
+  ESTUDIO,
+];
 export const ENTORNO_POR_DEFECTO: ClaveEntorno = "original";
 
 let actual: Entorno = ORIGINAL;

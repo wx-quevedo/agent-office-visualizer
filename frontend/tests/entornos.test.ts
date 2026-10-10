@@ -87,7 +87,15 @@ const rectComoPoligono = (r: Rect): WP[] => [
 ];
 
 /** How many desks each environment must place without overlap. */
-const CUPO: Record<string, number> = { original: 20, puente: 40, control: 40 };
+const CUPO: Record<string, number> = {
+  original: 20,
+  puente: 40,
+  control: 40,
+  // every fixed desk: 6 cabins, the general cabin and the extra desks
+  cabinas: 103,
+  // 17 islands and the extra desks
+  estudio: 84,
+};
 
 describe("entorno Original sin cambios", () => {
   it("los 10 escritorios y el crecimiento en filas son los de antes", () => {
@@ -141,6 +149,14 @@ describe.each(ENTORNOS.map((e) => [e.clave, e] as const))(
             `${clave}: puesto ${i}`,
           ).toBe(false);
       }
+      // No desk stands on a wall, a cabin, the counter or a decoration piece.
+      if (clave !== "original")
+        for (let i = 0; i < n; i++)
+          for (const r of e.choques)
+            expect(
+              poligonosSeTocan(poligonos[i], rectComoPoligono(r)),
+              `${clave}: puesto ${i} contra ${JSON.stringify(r)}`,
+            ).toBe(false);
       for (const h of huellas) {
         expect(Math.abs(h.x0)).toBeLessThan(e.tamano.ancho / 2);
         expect(Math.abs(h.x1)).toBeLessThan(e.tamano.ancho / 2);
@@ -155,9 +171,20 @@ describe.each(ENTORNOS.map((e) => [e.clave, e] as const))(
       const desde = nearestNode(e.entrada.x, e.entrada.z);
       const destinos: Array<[string, WP]> = [
         ...Array.from(
-          { length: e.puestosBase },
+          { length: e.puestosGrafo ?? e.puestosBase },
           (_, i) => [`puesto ${i}`, sitPoint(e.puesto(i))] as [string, WP],
         ),
+        ...(e.agrupacion?.puerta
+          ? Array.from({ length: e.agrupacion.grupos }, (_, g) =>
+              [0, 1, 2].map(
+                (i) =>
+                  [`puerta ${g}.${i}`, e.agrupacion!.puerta!(g, i)] as [
+                    string,
+                    WP,
+                  ],
+              ),
+            ).flat()
+          : []),
         ["tu puesto", sitPoint(e.tuPuesto)],
         ["sala de descanso", NODES[e.descanso.nodo]],
         ...e.descanso.asientos.map(

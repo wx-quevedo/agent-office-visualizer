@@ -48,7 +48,7 @@ export interface AgentView {
   origen: "lugar" | "puerta";
   /** Resting (19): sofa seat or a standing spot nearby. */
   descanso: (PuntoSofa & { tipo: "sofa" | "cerca"; indice: number }) | null;
-  /** Spot in the queue at the counter (Sala de control, 13 and 14), or null. */
+  /** Where it waits for you standing: the counter queue (Sala de control) or the door of its cabin (Cabinas), or null. */
   fila: PuntoFila | null;
   etiqueta: Etiqueta;
   /** Waiting for your permission (13). */
@@ -81,6 +81,9 @@ interface OfficeState {
   /** You are present (presence of the engine): you sit at your desk. */
   presente: boolean;
   setPresente(v: boolean): void;
+  /** Owner of each used group (cabin, island): project or GRUPO_GENERAL. */
+  grupos: Record<number, string>;
+  setGrupos(g: Record<number, string>): void;
   /** Desks of closed agents (note with the question, or empty and kept). */
   cerrados: EscritorioCerrado[];
   /** Agents whose character already went out through the door. */
@@ -106,6 +109,10 @@ export const useOffice = create<OfficeState>()((set, get) => ({
   presente: false,
   setPresente: (v) => {
     if (get().presente !== v) set({ presente: v });
+  },
+  grupos: {},
+  setGrupos: (g) => {
+    if (JSON.stringify(g) !== JSON.stringify(get().grupos)) set({ grupos: g });
   },
   cerrados: [],
   salidos: new Set<string>(),

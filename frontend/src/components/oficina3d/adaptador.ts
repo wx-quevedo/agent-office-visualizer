@@ -25,6 +25,8 @@ import {
   type Comportamiento,
 } from "./comportamiento";
 import { entornoActivo } from "./entornos/activo";
+import { asignarPorProyecto } from "./entornos/grupos";
+import type { PuntoFila } from "./entornos/tipos";
 import type { AgentView, SubagentView } from "./store";
 
 export { comportamiento } from "./comportamiento";
@@ -75,6 +77,8 @@ export const ESPERA_LARGA_MS = 3 * 60 * 1000;
 /** Memory of the adapter between reads. */
 export interface EstadoAdaptador {
   puestos: Record<string, number>;
+  /** Owner of each used group (environments that seat by project). */
+  grupos: Record<number, string>;
   /** Agents drawn in the previous read. */
   enEscena: string[];
   /** True until the first read: agents are placed, they do not walk in. */
@@ -82,7 +86,7 @@ export interface EstadoAdaptador {
 }
 
 export function estadoInicial(): EstadoAdaptador {
-  return { puestos: {}, enEscena: [], primera: true };
+  return { puestos: {}, grupos: {}, enEscena: [], primera: true };
 }
 
 /** A desk of a closed agent (21): note with the question, or empty and kept. */
@@ -148,17 +152,48 @@ export function adaptar(
   const ids = agentes
     .map((a) => a.agente.session_id)
     .filter((id) => conPuesto.has(id));
-  const puestos = asignarPuestos(previo.puestos, ids);
+  const ent = entornoActivo();
+  const agr = ent.agrupacion;
+  let puestos: Record<string, number>;
+  let grupos: Record<number, string> = {};
+  if (agr) {
+    // Seats by project (cabins, islands).
+    const proyecto = new Map(
+      agentes.map((a) => [a.agente.session_id, nombreProyecto(a)]),
+    );
+    const r = asignarPorProyecto(
+      previo.puestos,
+      ids.map((id) => ({ id, proyecto: proyecto.get(id) ?? "" })),
+      previo.grupos ?? {},
+      agr,
+    );
+    puestos = r.puestos;
+    grupos = r.duenos;
+  } else {
+    puestos = asignarPuestos(previo.puestos, ids);
+  }
 
-  // Environments with a counter: who waits for you queues there.
-  const mostrador = entornoActivo().mostrador;
-  const fila = mostrador
-    ? ordenarFila(
-        escena
-          .filter((x) => x.c.espera !== null)
-          .map((x) => ({ id: x.a.agente.session_id, desde: x.a.estado.desde })),
-      )
-    : {};
+  // Who waits for you and goes somewhere: the counter queue (the one waiting
+  // longest first), or the door of its cabin (in order within each cabin).
+  const esperan = escena
+    .filter((x) => x.c.espera !== null)
+    .map((x) => ({ id: x.a.agente.session_id, desde: x.a.estado.desde }));
+  const espera: Record<string, PuntoFila> = {};
+  const mostrador = ent.mostrador;
+  if (mostrador) {
+    for (const [id, i] of Object.entries(ordenarFila(esperan)))
+      espera[id] = mostrador.fila(i);
+  } else if (agr?.puerta) {
+    const porGrupo = new Map<number, typeof esperan>();
+    for (const x of esperan) {
+      const { g } = agr.grupoDe(puestos[x.id]);
+      if (!porGrupo.has(g)) porGrupo.set(g, []);
+      porGrupo.get(g)!.push(x);
+    }
+    for (const [g, lista] of porGrupo)
+      for (const [id, i] of Object.entries(ordenarFila(lista)))
+        espera[id] = agr.puerta(g, i);
+  }
 
   const descanso = asignarDescanso(
     escena
@@ -187,9 +222,8 @@ export function adaptar(
       cuenta: a.agente.cuenta,
       seatIndex: puestos[id],
       status: c.status,
-      destino: mostrador && fila[id] !== undefined ? "fila" : c.destino,
-      fila:
-        mostrador && fila[id] !== undefined ? mostrador.fila(fila[id]) : null,
+      destino: espera[id] ? "fila" : c.destino,
+      fila: espera[id] ?? null,
       pose: c.pose,
       monitor: c.monitor,
       origen,
@@ -231,7 +265,7 @@ export function adaptar(
   return {
     vistas,
     cerrados,
-    estado: { puestos, enEscena: [...enEscena], primera: false },
+    estado: { puestos, grupos, enEscena: [...enEscena], primera: false },
     reentradas,
   };
 }

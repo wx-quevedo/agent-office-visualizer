@@ -225,6 +225,8 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
   const descansoAnterior = useRef(agent.descanso);
   const filaRef = useRef(agent.fila);
   filaRef.current = agent.fila;
+  const esperaRef = useRef(agent.permission || agent.question);
+  esperaRef.current = agent.permission || agent.question;
   const prevDestino = useRef(agent.destino);
   // Sitting on the sofa / gliding between the approach point and the seat
   // (no collision for that last step: the seat is inside the sofa box).
@@ -392,6 +394,11 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
       if (poseRef.current === "mirarCamara") {
         const c = state.camera.position;
         ry = Math.atan2(-(c.x - p.x), -(c.z - p.z));
+      }
+      // Estudio: while it waits for you it turns towards your desk.
+      if (ent.girarHaciaTi && esperaRef.current) {
+        const tu = ent.tuPuesto;
+        ry = Math.atan2(-(tu.x - p.x), -(tu.z - p.z));
       }
       g.rotation.y = dampAngle(g.rotation.y, ry, 4, dt);
     }

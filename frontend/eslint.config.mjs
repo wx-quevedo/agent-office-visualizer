@@ -34,7 +34,7 @@ const eslintConfig = defineConfig([
   {
     files: [
       "src/components/oficina3d/escena/**",
-      "src/components/oficina3d/entornos/decoracion.tsx",
+      "src/components/oficina3d/entornos/*.tsx",
       "src/components/oficina3d/Escena3D.tsx",
     ],
     rules: {

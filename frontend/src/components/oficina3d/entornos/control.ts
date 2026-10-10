@@ -10,9 +10,11 @@
 import {
   caja,
   grafoCuadricula,
+  huellaPieza,
   mirarHacia,
   paredes,
   type Entorno,
+  type Pieza,
   type Puesto,
   type PuntoFila,
   type PuntoSofa,
@@ -120,6 +122,30 @@ const PLANTAS: WP[] = [
   { x: 14.8, z: -14.8 },
 ];
 
+/** More decoration (data): bookshelves, meeting corner, whiteboard, rugs, lamps. */
+const DECORACION: Pieza[] = [
+  {
+    tipo: "alfombra",
+    x: 0,
+    z: -12.6,
+    ancho: 5.4,
+    fondo: 3.2,
+    color: "#9aa6b8",
+  },
+  { tipo: "librero", x: -13.2, z: -15.55 },
+  { tipo: "librero", x: -11.9, z: -15.55 },
+  { tipo: "lampara", x: -9.6, z: -15.2 },
+  { tipo: "mesaReuniones", x: 11.6, z: -12.4 },
+  { tipo: "pizarra", x: 15.7, z: -8.2, ry: -Math.PI / 2 },
+  { tipo: "plantaGrande", x: -15.2, z: -6 },
+  { tipo: "plantaGrande", x: 15.2, z: -4.6 },
+  { tipo: "lampara", x: -15.2, z: -8.2 },
+  { tipo: "planta", x: 6.9, z: -15.3 },
+  { tipo: "planta", x: -6.9, z: -15.3 },
+  { tipo: "cuadro", x: 15.85, z: 4.5, ry: -Math.PI / 2, color: "#d9895b" },
+  { tipo: "cuadro", x: -15.85, z: -10.5, ry: Math.PI / 2, color: "#5aa06a" },
+];
+
 function choques(): Rect[] {
   const r: Rect[] = paredes(ANCHO, FONDO);
   r.push(caja(TU_PUESTO_CONTROL.x, TU_PUESTO_CONTROL.z, 1.05, 0.5));
@@ -127,6 +153,10 @@ function choques(): Rect[] {
   for (const s of SOFAS) r.push(caja(s.x, s.z, 1.15, 0.5));
   r.push(caja(MESA_CAFE.x, MESA_CAFE.z, 0.6, 0.35));
   for (const p of PLANTAS) r.push(caja(p.x, p.z, 0.28, 0.28));
+  for (const p of DECORACION) {
+    const h = huellaPieza(p);
+    if (h) r.push(h);
+  }
   return r;
 }
 
@@ -168,4 +198,5 @@ export const CONTROL: Entorno = {
     ],
   },
   limites: { x: ANCHO / 2 - 0.5, z: FONDO / 2 - 0.5 },
+  decoracion: DECORACION,
 };

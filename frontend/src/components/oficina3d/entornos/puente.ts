@@ -9,9 +9,11 @@
 import {
   caja,
   grafoCuadricula,
+  huellaPieza,
   paredes,
   ryHacia,
   type Entorno,
+  type Pieza,
   type Puesto,
   type PuntoSofa,
   type Rect,
@@ -98,6 +100,25 @@ const PLANTAS: WP[] = [
   { x: 9.4, z: -12.9 },
 ];
 
+/** More decoration (data): reading corner, meeting table, whiteboard, rugs, lamps. */
+const DECORACION: Pieza[] = [
+  { tipo: "alfombra", x: 0, z: 9.4, ancho: 4.6, fondo: 3.2, color: "#9aa6b8" },
+  { tipo: "mesaReuniones", x: 13, z: 10.6 },
+  { tipo: "lampara", x: 10.6, z: 13.2 },
+  { tipo: "librero", x: -17.5, z: -6.6, ry: Math.PI / 2 },
+  { tipo: "librero", x: -17.5, z: -5.3, ry: Math.PI / 2 },
+  { tipo: "pizarra", x: -11.5, z: -13.75 },
+  { tipo: "plantaGrande", x: -14.6, z: -13.1 },
+  { tipo: "lampara", x: -5.8, z: -13.3 },
+  { tipo: "planta", x: 5.8, z: -13.3 },
+  { tipo: "plantaGrande", x: -16.9, z: 7.4 },
+  { tipo: "lampara", x: -16.9, z: 8.8 },
+  { tipo: "plantaGrande", x: 17, z: -3 },
+  { tipo: "planta", x: 17, z: 6.4 },
+  { tipo: "cuadro", x: 17.85, z: -1, ry: -Math.PI / 2, color: "#d9895b" },
+  { tipo: "cuadro", x: -17.85, z: 1.5, ry: Math.PI / 2, color: "#5aa06a" },
+];
+
 function choques(): Rect[] {
   const r: Rect[] = paredes(ANCHO, FONDO);
   r.push(caja(TU_PUESTO_PUENTE.x, TU_PUESTO_PUENTE.z, 1.05, 0.5));
@@ -105,6 +126,10 @@ function choques(): Rect[] {
   r.push(caja(SOFA_B.x, SOFA_B.z, 0.5, 1.15));
   r.push(caja(MESA_CENTRO.x, MESA_CENTRO.z, 0.6, 0.35));
   for (const p of PLANTAS) r.push(caja(p.x, p.z, 0.28, 0.28));
+  for (const p of DECORACION) {
+    const h = huellaPieza(p);
+    if (h) r.push(h);
+  }
   return r;
 }
 
@@ -148,4 +173,5 @@ export const PUENTE: Entorno = {
     ],
   },
   limites: { x: ANCHO / 2 - 0.5, z: FONDO / 2 - 0.5 },
+  decoracion: DECORACION,
 };

@@ -3,13 +3,13 @@
 /**
  * Drawing of each environment (the fixed building and decoration), with the
  * pieces of Agent Office 3D (MIT): Original keeps OfficeDecor; Puente de mando
- * and Sala de control are built here. Also the parts every environment
- * shares: your desk (bigger, "Tú" sign, you seated when present) and the big
- * screen with the counters.
+ * and Sala de control are built here, Cabinas and Estudio in grupos3d.tsx, and
+ * the data pieces of each environment in piezas.tsx. Also the parts every
+ * environment shares: your desk (bigger, "Tú" sign, you seated when present)
+ * and the big screen with the counters.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import * as THREE from "three";
+import { useEffect, useState } from "react";
 import { useOffice, type AgentView } from "../store";
 import { t } from "../textos";
 import OfficeDecor, {
@@ -24,42 +24,16 @@ import OfficeDecor, {
 } from "../escena/OfficeDecor";
 import PixelPerson from "../escena/PixelPerson";
 import type { CharSkin } from "../escena/roles";
-import { CENTRO_PUENTE } from "./puente";
+import { Puerta, useTextura, type V3 } from "./comun3d";
+import { DecoracionCabinas, DecoracionEstudio } from "./grupos3d";
+import { Piezas } from "./piezas";
+import { CENTRO_PUENTE, PUENTE } from "./puente";
 import {
   sitPoint,
   type ClaveEntorno,
   type Entorno,
   type Puesto,
 } from "./tipos";
-
-type V3 = [number, number, number];
-
-/** Text on a canvas texture (no web fonts: works offline and on the phone). */
-function useTextura(
-  ancho: number,
-  alto: number,
-  dibujar: (ctx: CanvasRenderingContext2D) => void,
-  deps: unknown[],
-) {
-  const tex = useMemo(() => {
-    const c = document.createElement("canvas");
-    c.width = ancho;
-    c.height = alto;
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, [ancho, alto]);
-  useEffect(() => {
-    const ctx = (tex.image as HTMLCanvasElement).getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, ancho, alto);
-    dibujar(ctx);
-    tex.needsUpdate = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tex, ...deps]);
-  useEffect(() => () => tex.dispose(), [tex]);
-  return tex;
-}
 
 // -- big screen ---------------------------------------------------------------------
 
@@ -300,23 +274,6 @@ export function PuestoUsuario({
 
 // -- shared pieces ------------------------------------------------------------------------
 
-/** Entrance door on a wall (the same as in the Original office). */
-function Puerta({ p, ry }: { p: V3; ry: number }) {
-  return (
-    <group position={p} rotation={[0, ry, 0]}>
-      <Box p={[0.02, 1.08, 0]} s={[0.08, 2.16, 1.5]} c="#2f343c" rough={0.6} />
-      <Box p={[0.07, 1.04, 0]} s={[0.04, 2.04, 1.3]} c="#8a6a4a" rough={0.7} />
-      <Box
-        p={[0.11, 1.02, 0.45]}
-        s={[0.04, 0.05, 0.16]}
-        c="#d9d4c7"
-        rough={0.3}
-      />
-      <Box p={[0.06, 0.005, 0]} s={[1.2, 0.01, 1.6]} c="#3a3f47" rough={0.95} />
-    </group>
-  );
-}
-
 /** Lying ring sector (rug under the arc of desks). */
 function SectorPiso({
   centro,
@@ -374,6 +331,7 @@ function DecoracionPuente() {
       <Painting p={[-17.85, 1.7, -2]} ry={Math.PI / 2} c="#c85a3c" />
       <Painting p={[17.85, 1.7, 3]} ry={-Math.PI / 2} c="#3a7bc8" />
       <WallClock p={[-8, 2.2, -13.85]} />
+      <Piezas lista={PUENTE.decoracion} />
     </group>
   );
 }
@@ -441,6 +399,7 @@ function DecoracionControl({ entorno }: { entorno: Entorno }) {
       <Puerta p={[15.8, 0, 13.5]} ry={Math.PI} />
       <Painting p={[-15.85, 1.7, 2]} ry={Math.PI / 2} c="#3a7bc8" />
       <WallClock p={[8, 2.3, -15.85]} />
+      <Piezas lista={entorno.decoracion} />
     </group>
   );
 }
@@ -455,5 +414,7 @@ export function DecoracionEntorno({
 }) {
   if (clave === "puente") return <DecoracionPuente />;
   if (clave === "control") return <DecoracionControl entorno={entorno} />;
+  if (clave === "cabinas") return <DecoracionCabinas entorno={entorno} />;
+  if (clave === "estudio") return <DecoracionEstudio entorno={entorno} />;
   return <OfficeDecor />;
 }

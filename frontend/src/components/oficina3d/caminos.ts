@@ -6,7 +6,8 @@
  * each desk chair to its node, the entrance and the break room are protected.
  * Grid environments (Puente de mando, Sala de control...): the routes the
  * agents really use are protected — from the entrance to every base desk, to
- * your desk, to the break room seats and standing spots, and to the queue.
+ * your desk, to the break room seats and standing spots, to the queue and
+ * to the cabin doors (Cabinas: every fixed desk, not only the base ones).
  * Protected zones: each desk and its chair, and your desk.
  */
 
@@ -28,8 +29,11 @@ const PASO = 0.1;
 
 type Segmento = [WP, WP];
 
+/** Desks protected: the base ones, or every fixed desk (cabins, islands). */
 function base(e: Entorno) {
-  return Array.from({ length: e.puestosBase }, (_, i) => e.puesto(i));
+  return Array.from({ length: e.puestosGrafo ?? e.puestosBase }, (_, i) =>
+    e.puesto(i),
+  );
 }
 
 function segmentosOriginal(e: Entorno): Segmento[] {
@@ -72,6 +76,10 @@ function segmentosRutas(e: Entorno): Segmento[] {
   ];
   if (e.mostrador)
     for (let i = 0; i < 9; i++) destinos.push(e.mostrador.fila(i));
+  const agr = e.agrupacion;
+  if (agr?.puerta)
+    for (let g = 0; g < agr.grupos; g++)
+      for (let i = 0; i < 3; i++) destinos.push(agr.puerta(g, i));
   return destinos.flatMap((d) => ruta(e, d));
 }
 

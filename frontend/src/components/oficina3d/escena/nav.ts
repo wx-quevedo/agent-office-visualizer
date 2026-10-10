@@ -17,10 +17,12 @@ export let EDGES: [string, string][] = [];
 let ADJ: Record<string, string[]> = {};
 let KEYS: string[] = [];
 
-/** Builds the graph of the active environment (fixed boxes and base desks only). */
+/** Builds the graph of the active environment (fixed boxes and its fixed desks). */
 export function reconstruirGrafo(): void {
   const e = entornoActivo();
-  const base = Array.from({ length: e.puestosBase }, (_, i) => e.puesto(i));
+  const base = Array.from({ length: e.puestosGrafo ?? e.puestosBase }, (_, i) =>
+    e.puesto(i),
+  );
   const g = e.grafo(blockedStatic, base);
   NODES = g.nodes;
   EDGES = g.edges;

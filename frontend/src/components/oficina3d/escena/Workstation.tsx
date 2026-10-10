@@ -58,6 +58,8 @@ const PAPER_M = stdMat("#f7f5ef", { roughness: 0.9 });
 const MUG2_M = stdMat("#c96a4e", { roughness: 0.5 });
 const NOTE_M = stdMat("#ffd60a", { roughness: 0.85 });
 const CHAIR_M = stdMat("#2c313a", { roughness: 0.6 });
+/** Chair of an agent waiting for you (Estudio): soft blue. */
+const CHAIR_LUZ_M = stdMat("#4c8bf5", { roughness: 0.5 });
 const ARM_M = stdMat("#1c2027");
 const POST_M = stdMat("#8b929c", { roughness: 0.35, metalness: 0.85 });
 const STAR_M = stdMat("#3a3f47", { roughness: 0.4, metalness: 0.6 });
@@ -492,6 +494,8 @@ function Workstation({
   placa,
   resaltado = false,
   sillaGirada = false,
+  giroSilla = 0,
+  luzSilla = false,
 }: {
   seatIndex: number;
   agent?: AgentView;
@@ -503,6 +507,10 @@ function Workstation({
   resaltado?: boolean;
   /** The agent left its desk to queue at the counter: chair turned. */
   sillaGirada?: boolean;
+  /** Chair turned by this angle (Estudio: towards your desk while it waits). */
+  giroSilla?: number;
+  /** Chair lit blue (Estudio: the agent waits for you). */
+  luzSilla?: boolean;
 }) {
   const seat = seatFor(seatIndex);
   const select = useOffice((s) => s.select);
@@ -657,9 +665,29 @@ function Workstation({
       )}
 
       {/* Zamonaviy ergonomik kursi (5-yulduzli baza) */}
-      <group position={[0, 0, 0.62]} rotation={[0, sillaGirada ? 0.9 : 0, 0]}>
-        <B p={[0, 0.46, 0]} s={[0.48, 0.07, 0.48]} m={CHAIR_M} />
-        <B p={[0, 0.74, 0.22]} s={[0.46, 0.5, 0.06]} m={CHAIR_M} />
+      <group
+        position={[0, 0, 0.62]}
+        rotation={[0, sillaGirada ? 0.9 : giroSilla, 0]}
+      >
+        <B
+          p={[0, 0.46, 0]}
+          s={[0.48, 0.07, 0.48]}
+          m={luzSilla ? CHAIR_LUZ_M : CHAIR_M}
+        />
+        <B
+          p={[0, 0.74, 0.22]}
+          s={[0.46, 0.5, 0.06]}
+          m={luzSilla ? CHAIR_LUZ_M : CHAIR_M}
+        />
+        {luzSilla && (
+          <mesh
+            position={[0, 0.016, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            material={HALO_M}
+          >
+            <circleGeometry args={[0.6, 32]} />
+          </mesh>
+        )}
         {/* qo'l tayanchlar */}
         {[-0.26, 0.26].map((x) => (
           <B
