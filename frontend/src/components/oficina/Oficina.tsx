@@ -9,14 +9,17 @@
  */
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import PanelAvisos from "@/components/avisos/PanelAvisos";
+import { useAvisos } from "@/components/avisos/useAvisos";
 import { API_BASE } from "@/utils/api";
 import {
   CONTADORES,
@@ -522,7 +525,9 @@ function nuevoCliente(): string {
 
 export default function Oficina() {
   const params = useSearchParams();
+  const router = useRouter();
   const agenteId = params.get("agente");
+  const [panelAvisos, setPanelAvisos] = useState(false);
   const [datos, setDatos] = useState<Estado | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recibido, setRecibido] = useState<number | null>(null);
@@ -594,6 +599,16 @@ export default function Oficina() {
 
   const cambiarVista = guardarVista;
 
+  // Spoken alerts and Windows notifications (module reusable in /oficina/3d).
+  const abrirAgente = useCallback(
+    (id: string) =>
+      router.push(
+        id ? `/oficina?agente=${encodeURIComponent(id)}` : "/oficina",
+      ),
+    [router],
+  );
+  const avisos = useAvisos(datos?.agentes ?? null, { abrirAgente });
+
   return (
     <main className={s.pagina}>
       <header className={s.encabezado}>
@@ -608,29 +623,46 @@ export default function Oficina() {
             </span>
           </div>
         </div>
-        {!agenteId && (
-          <div
-            className={s.selector}
-            role="group"
-            aria-label="Ordenar la oficina"
+        <div className={s.acciones}>
+          <button
+            type="button"
+            className={s.botonAvisos}
+            aria-expanded={panelAvisos}
+            onClick={() => setPanelAvisos((v) => !v)}
           >
-            <button
-              type="button"
-              aria-pressed={vista === "urgencia"}
-              onClick={() => cambiarVista("urgencia")}
+            Avisos
+            <span className={s.mono}>
+              {avisos.config.activos ? "activos" : "apagados"}
+            </span>
+          </button>
+          {!agenteId && (
+            <div
+              className={s.selector}
+              role="group"
+              aria-label="Ordenar la oficina"
             >
-              Por urgencia
-            </button>
-            <button
-              type="button"
-              aria-pressed={vista === "proyecto"}
-              onClick={() => cambiarVista("proyecto")}
-            >
-              Por proyecto
-            </button>
-          </div>
-        )}
+              <button
+                type="button"
+                aria-pressed={vista === "urgencia"}
+                onClick={() => cambiarVista("urgencia")}
+              >
+                Por urgencia
+              </button>
+              <button
+                type="button"
+                aria-pressed={vista === "proyecto"}
+                onClick={() => cambiarVista("proyecto")}
+              >
+                Por proyecto
+              </button>
+            </div>
+          )}
+        </div>
       </header>
+
+      {panelAvisos && (
+        <PanelAvisos api={avisos} onCerrar={() => setPanelAvisos(false)} />
+      )}
 
       {error && (
         <div className={s.aviso}>

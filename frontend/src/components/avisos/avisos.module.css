@@ -1,0 +1,148 @@
+/* Alerts panel: same boxes as /oficina (white, greys, black). */
+
+.panel {
+  border: 3px solid var(--negro, #111);
+  background: var(--blanco, #fff);
+  color: var(--negro, #111);
+  padding: 16px 20px 20px;
+  margin-bottom: 24px;
+}
+
+.cabeza {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.mono {
+  font-family: var(--font-plex-mono), "Courier New", monospace;
+}
+
+.estado {
+  margin: 8px 0 12px;
+  color: var(--gris-oscuro, #555);
+}
+
+.estado strong {
+  color: var(--negro, #111);
+}
+
+.fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.boton {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 2px solid var(--negro, #111);
+  background: var(--blanco, #fff);
+  color: var(--negro, #111);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primario {
+  background: var(--negro, #111);
+  color: var(--blanco, #fff);
+}
+
+.boton:focus-visible,
+.interruptor input:focus-visible,
+.campo select:focus-visible,
+.campo input:focus-visible {
+  outline: 3px solid var(--negro, #111);
+  outline-offset: 2px;
+}
+
+.nota {
+  border: 1px dashed var(--gris, #8a8a8a);
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  color: var(--gris-oscuro, #555);
+  font-size: 14px;
+}
+
+.columnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 14px;
+}
+
+.grupo {
+  border: 1px solid var(--gris-borde, #b5b5b5);
+  padding: 10px 14px 14px;
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.grupo legend {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.interruptor {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.interruptor input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--negro, #111);
+  flex: none;
+}
+
+.interruptor small {
+  display: block;
+  color: var(--gris-oscuro, #555);
+  font-size: 12px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.campo select {
+  min-height: 44px;
+  border: 1px solid var(--gris-oscuro, #555);
+  background: var(--blanco, #fff);
+  color: var(--negro, #111);
+  font: inherit;
+  padding: 0 8px;
+  max-width: 100%;
+}
+
+.campo input[type="range"] {
+  accent-color: var(--negro, #111);
+  min-height: 32px;
+}
+
+@media (max-width: 699px) {
+  .panel {
+    padding: 12px;
+  }
+}
