@@ -1,0 +1,446 @@
+import { memo, useEffect, useMemo } from "react";
+import * as THREE from "three";
+import type { AgentView } from "../store";
+import { useOffice } from "../store";
+import { clutterLevel } from "./clutter";
+import { useDaylight } from "./daylight";
+import { basicMat, cyl, sphere, stdMat, UNIT_BOX } from "./resources";
+import { roleKeyFor, seatFor, STATUS_COLOR } from "./roles";
+
+// ── Ish joyi — MEBEL (personaj AgentAvatar'da, alohida) ──────
+// Stollar OLDINDAN turadi (bo'sh yoki band). Bo'sh stol = qorong'i ekran, toza
+// stol → "band bo'lmagan ish joyi" ko'rinadi. Agent qo'shilganda O'SHA stolga
+// o'tiradi (ekran yonadi, tartibsizlik paydo bo'ladi) — mebel yo'qdan paydo
+// bo'lmaydi, ofis haqiqiy ofisdek to'ladi.
+
+const DESK_TOP = 0.72;
+type V3 = [number, number, number];
+function B({
+  p,
+  s,
+  m,
+  cast = true,
+}: {
+  p?: V3;
+  s: V3;
+  m: THREE.Material;
+  cast?: boolean;
+}) {
+  return (
+    <mesh
+      position={p}
+      scale={s}
+      geometry={UNIT_BOX}
+      material={m}
+      castShadow={cast}
+    />
+  );
+}
+// Statik (holatga bog'liq bo'lmagan) materiallar — bir marta keshlanadi.
+const DESK_TOP_M = stdMat("#f2efe9", { roughness: 0.4 });
+const DESK_EDGE_M = stdMat("#2a2e35", { roughness: 0.4 });
+const LEG_M = stdMat("#4a4f57", { roughness: 0.4, metalness: 0.6 });
+const MON_M = stdMat("#12151a", { roughness: 0.3 });
+const SCREEN_OFF_M = stdMat("#1b1f27", { roughness: 0.35 }); // o'chiq ekran (bo'sh stol)
+const STAND_M = stdMat("#3a3f47");
+const KEY_M = stdMat("#e2e2e0", { roughness: 0.6 });
+const MUG_M = stdMat("#ffffff", { roughness: 0.4 });
+// Tartibsizlik buyumlari (toolCalls o'sgan sari qo'shiladi)
+const PAPER_M = stdMat("#f7f5ef", { roughness: 0.9 });
+const MUG2_M = stdMat("#c96a4e", { roughness: 0.5 });
+const NOTE_M = stdMat("#ffd60a", { roughness: 0.85 });
+const CHAIR_M = stdMat("#2c313a", { roughness: 0.6 });
+const ARM_M = stdMat("#1c2027");
+const POST_M = stdMat("#8b929c", { roughness: 0.35, metalness: 0.85 });
+const STAR_M = stdMat("#3a3f47", { roughness: 0.4, metalness: 0.6 });
+const SCREEN_G = new THREE.PlaneGeometry(0.64, 0.36);
+const GLOW_G = new THREE.PlaneGeometry(0.98, 0.66);
+
+// ── Rol stol odati — har rolning belgili buyumi (stolда, o'ng-orqa burchakда) ──
+// Backend — debug o'rdagi · Tadqiqot — kitob uyumi · Hujjatlar — qog'oz+kitob
+// Ma'lumot — mini grafik (bar) · QA — checklist planshet · Frontend — rang palitrasi.
+const DUCK_M = stdMat("#f2c94c", { roughness: 0.6 });
+const BEAK_M = stdMat("#e8913a", { roughness: 0.6 });
+const CLIP_M = stdMat("#eceae4", { roughness: 0.7 });
+const CLIPTOP_M = stdMat("#3a3f47", { roughness: 0.5 });
+const BAR_M = [
+  stdMat("#3987e5"),
+  stdMat("#e66767"),
+  stdMat("#199e70"),
+  stdMat("#c98500"),
+];
+const BOOK_M = [
+  stdMat("#c0392b"),
+  stdMat("#2f6bd6"),
+  stdMat("#27ae60"),
+  stdMat("#8a5a2b"),
+];
+const SWATCH_M = [
+  stdMat("#e0518a"),
+  stdMat("#3fb4c6"),
+  stdMat("#f2c94c"),
+  stdMat("#7d5ae0"),
+];
+function DeskProp({ roleKey }: { roleKey: string }) {
+  const y = DESK_TOP + 0.05;
+  switch (roleKey) {
+    case "backend": // debug o'rdagi
+      return (
+        <group position={[0.5, y, -0.16]} scale={0.85}>
+          <mesh
+            position={[0, 0.05, 0]}
+            castShadow
+            geometry={sphere(0.075, 10, 8)}
+            material={DUCK_M}
+          />
+          <mesh
+            position={[0, 0.14, -0.05]}
+            castShadow
+            geometry={sphere(0.05, 10, 8)}
+            material={DUCK_M}
+          />
+          <B
+            p={[0, 0.13, -0.11]}
+            s={[0.04, 0.025, 0.05]}
+            m={BEAK_M}
+            cast={false}
+          />
+        </group>
+      );
+    case "research": // kitob uyumi
+      return (
+        <group position={[0.52, y, -0.14]}>
+          {[0, 1, 2].map((i) => (
+            <B
+              key={i}
+              p={[i * 0.01, 0.02 + i * 0.04, 0]}
+              s={[0.26, 0.035, 0.19]}
+              m={BOOK_M[i]}
+            />
+          ))}
+        </group>
+      );
+    case "docs": // qog'oz uyumi + kitob
+      return (
+        <group position={[0.5, y, -0.14]}>
+          <B p={[0, 0.02, 0]} s={[0.24, 0.035, 0.3]} m={CLIP_M} />
+          <B p={[0.02, 0.06, -0.02]} s={[0.22, 0.04, 0.16]} m={BOOK_M[3]} />
+        </group>
+      );
+    case "data": // mini grafik (barlar)
+      return (
+        <group position={[0.52, y, -0.15]}>
+          <B p={[0, 0.09, 0.02]} s={[0.28, 0.18, 0.02]} m={CLIPTOP_M} />
+          {[0, 1, 2, 3].map((i) => (
+            <B
+              key={i}
+              p={[-0.09 + i * 0.06, 0.04 + i * 0.02, 0.03]}
+              s={[0.035, 0.05 + i * 0.04, 0.01]}
+              m={BAR_M[i]}
+              cast={false}
+            />
+          ))}
+        </group>
+      );
+    case "qa": // checklist planshet
+      return (
+        <group position={[0.5, y, -0.12]} rotation={[0.2, 0, 0]}>
+          <B p={[0, 0.09, 0]} s={[0.24, 0.32, 0.02]} m={CLIP_M} />
+          <B p={[0, 0.24, 0.02]} s={[0.1, 0.045, 0.02]} m={CLIPTOP_M} />
+          {[0, 1, 2].map((i) => (
+            <B
+              key={i}
+              p={[-0.05, 0.15 - i * 0.06, 0.02]}
+              s={[0.03, 0.03, 0.01]}
+              m={BAR_M[2]}
+              cast={false}
+            />
+          ))}
+        </group>
+      );
+    case "frontend": // rang palitrasi
+      return (
+        <group position={[0.5, y, -0.14]} rotation={[0.25, 0, 0]}>
+          <B p={[0, 0.03, 0]} s={[0.3, 0.02, 0.22]} m={CLIP_M} />
+          {[0, 1, 2, 3].map((i) => (
+            <B
+              key={i}
+              p={[
+                -0.09 + (i % 2) * 0.18,
+                0.045,
+                -0.05 + Math.floor(i / 2) * 0.1,
+              ]}
+              s={[0.07, 0.02, 0.07]}
+              m={SWATCH_M[i]}
+              cast={false}
+            />
+          ))}
+        </group>
+      );
+    default:
+      return null;
+  }
+}
+
+// ── Monitor ekrani — HAQIQIY tool/fayl ko'rsatiladi ──────────────
+// Flat rang o'rniga ekranda joriy ish ko'rinadi: fayl nomi + holat rangidagi
+// "kod satrlari". WebGL tuvaliga matn drei <Text> orqali chizilmaydi — u troika
+// CDN shriftini yuklaydi (CSP bloklaydi). Shuning uchun 2D CANVAS'ga chizib,
+// CanvasTexture qilamiz (o'zicha, ichki shrift, tekstura — performant). Ma'lumot
+// O'LCHANGAN (toolLabel); yorliq o'zgarganда qayta chiziladi.
+function fitText(
+  ctx: CanvasRenderingContext2D,
+  s: string,
+  maxW: number,
+): string {
+  if (ctx.measureText(s).width <= maxW) return s;
+  let t = s;
+  while (t.length > 1 && ctx.measureText(t + "…").width > maxW)
+    t = t.slice(0, -1);
+  return t + "…";
+}
+function MonitorScreen({ label, color }: { label?: string; color: string }) {
+  const tex = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = 256;
+    c.height = 144;
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => {
+    const c = tex.image as HTMLCanvasElement;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    const W = 256,
+      H = 144;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#0d1016";
+    ctx.fillRect(0, 0, W, H);
+    // Yuqori "oyna" paneli — holat rangida + qora nuqtalar
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, W, 14);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    for (const x of [10, 26, 42]) {
+      ctx.beginPath();
+      ctx.arc(x, 7, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (label) {
+      ctx.fillStyle = "#f2f5fa";
+      ctx.font = "bold 19px system-ui, sans-serif";
+      ctx.fillText(fitText(ctx, label, W - 24), 12, 42);
+      // "Kod satrlari" — holat rangida, susayib boradi (ekran tirik ko'rinsin)
+      ctx.fillStyle = color;
+      [0.72, 0.44, 0.86, 0.55, 0.33].forEach((w, i) => {
+        ctx.globalAlpha = 0.4 - i * 0.04;
+        ctx.fillRect(12, 60 + i * 15, (W - 24) * w, 6);
+      });
+      ctx.globalAlpha = 1;
+    } else {
+      // Band, lekin tool yo'q (o'ylayapti/idle) — nozik kursor
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = color;
+      ctx.fillRect(12, 38, 8, 15);
+      ctx.globalAlpha = 1;
+    }
+    tex.needsUpdate = true;
+  }, [tex, label, color]);
+  useEffect(() => () => tex.dispose(), [tex]);
+  return (
+    <mesh position={[0, 0.26, -0.019]} geometry={SCREEN_G}>
+      <meshBasicMaterial map={tex} toneMapped={false} />
+    </mesh>
+  );
+}
+
+function Workstation({
+  seatIndex,
+  agent,
+}: {
+  seatIndex: number;
+  agent?: AgentView;
+}) {
+  const seat = seatFor(seatIndex);
+  const select = useOffice((s) => s.select);
+  const occupied = !!agent;
+  const color = agent ? STATUS_COLOR[agent.status] : "#3a4150";
+  // Ekran porlashi kechаsi kuchayadi (qorong'uда monitorlar ko'proq ajralib turadi).
+  const lampsOn = useDaylight((s) => s.params.lamps);
+  const glowOpacity = lampsOn ? 0.4 : 0.2;
+  const clutter = agent ? clutterLevel(agent.toolCalls) : 0;
+
+  return (
+    <group
+      position={[seat.x, 0, seat.z]}
+      rotation={[0, seat.ry, 0]}
+      onClick={(e) => {
+        e.stopPropagation();
+        select(agent ? agent.id : null);
+      }}
+    >
+      {/* Stol usti — oq + qora aksent qirra */}
+      <B p={[0, DESK_TOP, 0]} s={[1.5, 0.06, 0.8]} m={DESK_TOP_M} />
+      <B
+        p={[0, DESK_TOP - 0.045, 0]}
+        s={[1.52, 0.03, 0.82]}
+        m={DESK_EDGE_M}
+        cast={false}
+      />
+      {/* nozik chrome A-oyoqlar */}
+      {[-0.64, 0.64].map((x) => (
+        <B
+          key={x}
+          p={[x, DESK_TOP / 2 - 0.03, 0]}
+          s={[0.05, DESK_TOP - 0.06, 0.68]}
+          m={LEG_M}
+        />
+      ))}
+
+      {/* Slim monitor — band bo'lsa ekran holat rangida yonadi, bo'sh bo'lsa o'chiq */}
+      <group position={[0, DESK_TOP + 0.02, -0.22]}>
+        <B p={[0, 0.26, 0]} s={[0.7, 0.42, 0.03]} m={MON_M} />
+        {agent ? (
+          <>
+            {/* Ekranда joriy tool/fayl (canvas-tekstura) */}
+            <MonitorScreen label={agent.toolLabel} color={color} />
+            {/* ekran porlashi — holat rangida yumshoq halo */}
+            <mesh
+              position={[0, 0.26, -0.025]}
+              geometry={GLOW_G}
+              material={basicMat(color, {
+                transparent: true,
+                opacity: glowOpacity,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide,
+                toneMapped: false,
+              })}
+            />
+          </>
+        ) : (
+          // Bo'sh stol — o'chiq (qorong'i) ekran, porlash yo'q
+          <mesh
+            position={[0, 0.26, -0.02]}
+            geometry={SCREEN_G}
+            material={SCREEN_OFF_M}
+          />
+        )}
+        {/* nozik stend */}
+        <B p={[0, 0.05, 0]} s={[0.05, 0.16, 0.05]} m={STAND_M} />
+        <B
+          p={[0, -0.02, 0]}
+          s={[0.26, 0.02, 0.14]}
+          m={DESK_EDGE_M}
+          cast={false}
+        />
+      </group>
+
+      {/* Klaviatura — doim (stolning bir qismi) */}
+      <B p={[0, DESK_TOP + 0.04, 0.14]} s={[0.5, 0.02, 0.16]} m={KEY_M} />
+      {/* Rol stol odati — faqat band stolда (kimningdir buyumi) */}
+      {agent && <DeskProp roleKey={roleKeyFor(agent.role, agent.seatIndex)} />}
+      {/* Krujka — faqat band stolда (kimningdir shaxsiy buyumi) */}
+      {occupied && (
+        <mesh
+          position={[0.55, DESK_TOP + 0.08, 0.05]}
+          castShadow
+          geometry={cyl(0.05, 0.045, 0.1, 12)}
+          material={MUG_M}
+        />
+      )}
+
+      {/* ── Tartibsizlik — ISH BELGISI, bezak emas (manba: toolCalls) ──
+          Har daraja bir buyum qo'shadi: qog'oz → 2-krujka → stiker+qog'oz uyumi
+          → g'ijimlangan qog'oz. Toza stol = yangi sessiya yoki bo'sh joy. */}
+      {clutter >= 1 && (
+        <B
+          p={[-0.48, DESK_TOP + 0.04, 0.12]}
+          s={[0.28, 0.012, 0.34]}
+          m={PAPER_M}
+        />
+      )}
+      {clutter >= 2 && (
+        <mesh
+          position={[-0.6, DESK_TOP + 0.09, -0.12]}
+          castShadow
+          geometry={cyl(0.055, 0.05, 0.12, 12)}
+          material={MUG2_M}
+        />
+      )}
+      {clutter >= 3 && (
+        <>
+          <B
+            p={[-0.44, DESK_TOP + 0.07, 0.15]}
+            s={[0.26, 0.05, 0.32]}
+            m={PAPER_M}
+          />
+          {/* Monitor chetidagi stiker */}
+          <B
+            p={[0.4, DESK_TOP + 0.4, -0.2]}
+            s={[0.13, 0.13, 0.006]}
+            m={NOTE_M}
+            cast={false}
+          />
+        </>
+      )}
+      {clutter >= 4 && (
+        <>
+          <mesh
+            position={[0.34, DESK_TOP + 0.09, 0.24]}
+            castShadow
+            geometry={sphere(0.06, 6, 5)}
+            material={PAPER_M}
+          />
+          <B
+            p={[-0.2, DESK_TOP + 0.05, -0.24]}
+            s={[0.24, 0.02, 0.28]}
+            m={PAPER_M}
+          />
+          <B
+            p={[0.28, DESK_TOP + 0.4, -0.2]}
+            s={[0.11, 0.11, 0.006]}
+            m={NOTE_M}
+            cast={false}
+          />
+        </>
+      )}
+
+      {/* Zamonaviy ergonomik kursi (5-yulduzli baza) */}
+      <group position={[0, 0, 0.62]}>
+        <B p={[0, 0.46, 0]} s={[0.48, 0.07, 0.48]} m={CHAIR_M} />
+        <B p={[0, 0.74, 0.22]} s={[0.46, 0.5, 0.06]} m={CHAIR_M} />
+        {/* qo'l tayanchlar */}
+        {[-0.26, 0.26].map((x) => (
+          <B
+            key={x}
+            p={[x, 0.56, 0.05]}
+            s={[0.05, 0.04, 0.3]}
+            m={ARM_M}
+            cast={false}
+          />
+        ))}
+        <mesh
+          position={[0, 0.22, 0]}
+          geometry={cyl(0.04, 0.05, 0.44, 10)}
+          material={POST_M}
+        />
+        {[0, 1, 2, 3, 4].map((i) => {
+          const a = (i / 5) * Math.PI * 2;
+          return (
+            <B
+              key={i}
+              p={[Math.cos(a) * 0.22, 0.04, Math.sin(a) * 0.22]}
+              s={[0.22, 0.04, 0.05]}
+              m={STAR_M}
+            />
+          );
+        })}
+      </group>
+    </group>
+  );
+}
+
+// memo — o'zgarmagan agentda qayta render bo'lmaydi (perf).
+export default memo(Workstation);

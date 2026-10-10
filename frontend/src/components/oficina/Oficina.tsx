@@ -12,7 +12,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -20,7 +19,6 @@ import {
 } from "react";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
 import { useAvisos } from "@/components/avisos/useAvisos";
-import { API_BASE } from "@/utils/api";
 import {
   CONTADORES,
   GRUPOS,
@@ -28,7 +26,6 @@ import {
   agruparPorUrgencia,
   contar,
   detalleActual,
-  dispositivo,
   duracion,
   esfuerzo,
   grupoDe,
@@ -43,12 +40,10 @@ import {
   tipoEspera,
   visibles,
   type Agente,
-  type Estado,
 } from "./logica";
+import { useEstadoOficina, useLatidoPresencia } from "./useEstadoOficina";
 import s from "./oficina.module.css";
 
-const REFRESCO_MS = 2000;
-const LATIDO_MS = 30000;
 const CLAVE_VISTA = "oficina-vista";
 
 type Vista = "urgencia" | "proyecto";
@@ -515,78 +510,20 @@ function Detalle({
 
 // -- page ---------------------------------------------------------------------------
 
-function nuevoCliente(): string {
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return `oficina-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
-}
-
 export default function Oficina() {
   const params = useSearchParams();
   const router = useRouter();
   const agenteId = params.get("agente");
   const [panelAvisos, setPanelAvisos] = useState(false);
-  const [datos, setDatos] = useState<Estado | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [recibido, setRecibido] = useState<number | null>(null);
-  const [ahora, setAhora] = useState(() => Date.now());
+  const { datos, error, recibido, ahora } = useEstadoOficina();
   const vista = useSyncExternalStore(
     suscribirVista,
     leerVista,
     () => "urgencia" as Vista,
   );
 
-  // State every 2 s (at most), one request at a time.
-  useEffect(() => {
-    let vivo = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const cargar = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/v1/agents/state`, {
-          cache: "no-store",
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d = (await r.json()) as Estado;
-        if (!vivo) return;
-        setDatos(d);
-        setError(null);
-        setRecibido(Date.now());
-      } catch (e) {
-        if (vivo) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (vivo) {
-          setAhora(Date.now());
-          timer = setTimeout(cargar, REFRESCO_MS);
-        }
-      }
-    };
-    void cargar();
-    return () => {
-      vivo = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
-
   // Presence heartbeat: an open /oficina counts as the user being present.
-  useEffect(() => {
-    const cliente = nuevoCliente();
-    const latir = () => {
-      const cuerpo = JSON.stringify({
-        cliente,
-        dispositivo: dispositivo(window.innerWidth, navigator.userAgent),
-      });
-      void fetch(`${API_BASE}/api/v1/agents/presence`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: cuerpo,
-      }).catch(() => undefined);
-    };
-    latir();
-    const id = setInterval(latir, LATIDO_MS);
-    return () => clearInterval(id);
-  }, []);
+  useLatidoPresencia();
 
   const agentes = useMemo(
     () => (datos ? visibles(datos.agentes, ahora) : []),
@@ -624,6 +561,9 @@ export default function Oficina() {
           </div>
         </div>
         <div className={s.acciones}>
+          <Link href="/oficina/3d" className={s.botonAvisos}>
+            Vista 3D
+          </Link>
           <button
             type="button"
             className={s.botonAvisos}

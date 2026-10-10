@@ -1,0 +1,208 @@
+/* /oficina/3d: light top bar like /oficina (white, greys, black); the scene fills the rest. */
+
+.pagina {
+  --negro: #111111;
+  --gris-oscuro: #555555;
+  --gris: #8a8a8a;
+  --gris-borde: #b5b5b5;
+  --gris-claro: #e6e6e6;
+  --gris-fondo: #f4f4f4;
+  --blanco: #ffffff;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: #e9ebee;
+  color: var(--negro);
+  font-family: var(--font-plex-sans), Arial, sans-serif;
+  font-size: 15px;
+}
+
+.mono {
+  font-family: var(--font-plex-mono), "Courier New", monospace;
+}
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  padding: 10px 20px;
+  background: var(--blanco);
+  border-bottom: 1px solid var(--gris-borde);
+  z-index: 2;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.contadores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.contador {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--gris-borde);
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--gris-oscuro);
+}
+
+.contador b {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 18px;
+  color: var(--negro);
+}
+
+.urgente {
+  border: 3px solid var(--negro);
+  color: var(--negro);
+}
+
+.acciones {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid var(--negro);
+  background: var(--blanco);
+  color: var(--negro);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.boton .mono {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--gris-oscuro);
+}
+
+.boton[aria-expanded="true"] {
+  background: var(--negro);
+  color: var(--blanco);
+}
+
+.boton[aria-expanded="true"] .mono {
+  color: var(--gris-claro);
+}
+
+.boton:focus-visible {
+  outline: 3px solid var(--negro);
+  outline-offset: 2px;
+}
+
+.capaAvisos {
+  position: absolute;
+  top: 70px;
+  right: 16px;
+  width: min(1100px, calc(100% - 32px));
+  max-height: calc(100% - 86px);
+  overflow-y: auto;
+  z-index: 5;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+
+.capaAvisos > section {
+  margin-bottom: 0;
+}
+
+.lienzo {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.aviso {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--blanco);
+  border: 1px dashed var(--gris);
+  padding: 6px 12px;
+  color: var(--gris-oscuro);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.ayuda {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--gris-borde);
+  padding: 4px 10px;
+  color: var(--gris-oscuro);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+@media (max-width: 699px) {
+  .barra {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .titulo {
+    font-size: 17px;
+    flex: 1 1 100%;
+  }
+
+  .contadores {
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .contador {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .acciones {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .boton {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .capaAvisos {
+    top: 8px;
+    right: 8px;
+    width: calc(100% - 16px);
+    max-height: calc(100% - 16px);
+  }
+
+  .ayuda {
+    display: none;
+  }
+}

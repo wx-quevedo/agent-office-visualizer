@@ -59,6 +59,9 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 | 2026-10-10 | "Tokens totales" = tokens de salida desde el primer evento de la sesión que vio el motor (una vez por id de mensaje) | Sumar la creación de caché y la historia de una conversación retomada inflaba el número (97,5 M en 164 min) |
 | 2026-10-10 | Tener `/oficina` abierta (PC o celular) cuenta como presencia, con un latido cada 30 s que vence a los 75 s; `/datos` no cuenta | La oficina es la pantalla que Washington mira; el celular no usa el WebSocket |
 | 2026-10-10 | Avisos con voz y notificaciones del navegador desde /oficina, como módulo independiente para reutilizar en la escena 3D | Washington necesita enterarse de permisos y preguntas sin mirar la pantalla; la escena 3D usará el mismo `useAvisos` |
+| 2026-10-10 | Estilo visual: escena 3D basada en Agent Office 3D (MIT), sin pixel art; personajes intercambiables por GLB más adelante | Washington eligió esa escena como base; los modelos GLB con animaciones de Mixamo quedan para el prompt 3 del port |
+| 2026-10-10 | La distribución de la oficina se guarda en el repo (`frontend/public/oficina3d/distribucion.json`) | Versionada y igual en PC y celular; el editor de muebles se portará después |
+| 2026-10-10 | Voces: Washington usará las voces de Google en Chrome (no Edge) | En Edge y en Playwright solo aparecen voces de Microsoft de España; pendiente buscar mejores voces o un sistema de lectura |
 
 ## Ajustes heredados de la instalación diaria
 
@@ -88,7 +91,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Prueba en vivo de Washington con `/datos` (sesión 8f5f7ede en `E:\Test\prueba-visualizador`, cuenta personal, y 5f41c31c de vive-demo, cuenta demo): funcionaron aparición de sesiones, Write, ping de 46 s, error en Read (errores seguidos 1 y luego 0), cierre de ventana (21 `proceso_terminado` en ~15 s), retomar la conversación (PID nuevo, cierre borrado) y la cuenta demo. Correcciones: AskUserQuestion/ExitPlanMode como 14, pregunta en el último párrafo, texto del encargo sin bloques inyectados, conciliación con la transcripción, subagentes sin límite de tiempo, PID con el ejecutable renombrado por la actualización (hook; Washington lo reinstaló el 2026-10-10 a las 11:06), sesiones de prueba borradas y script `scripts/borrar_sesiones_prueba.py`, tokens totales acumulados. Commit `ad1b144` |
 | 2026-10-10 | Página `/oficina` v1 en cajas (blanco, grises y negro, IBM Plex Sans y Mono): vista por urgencia (te esperan, trabajando, inactivos y descanso, cerrados), vista por proyecto (una sala por carpeta), detalle por agente (`/oficina?agente=<session_id>`) y celular (< 700 px, una columna). Latido de presencia `POST /api/v1/agents/presence` cada 30 s (PC o celular); "Tokens totales" pasa a ser tokens de salida desde que la sesión llegó al motor (la sesión de Demo Org 5f41c31c bajó de 97,5 M a ~0,38 M). Capturas en `docs/capturas/oficina-v1/`. Commit `3ce9936` |
 | 2026-10-10 | Estudio de Agent Office 3D (thomasarisu.agent-office, MIT) en `E:\referencias\agent-office`, fuera del repositorio; plan de port en 3 prompts aprobado por Washington. Sin commit |
-| 2026-10-10 | Avisos con voz y notificaciones de Windows desde `/oficina` (`frontend/src/components/avisos/`): te pide permiso (13), te hizo una pregunta (14), terminó (11), recordatorio cada 2, 5 o 10 min mientras espera, cerrado con pregunta (21, apagado por defecto); panel con interruptores, voz en español, velocidad, volumen, sonido y pruebas. Captura en `docs/capturas/avisos-v1/` (hash en el registro del commit siguiente) |
+| 2026-10-10 | Avisos con voz y notificaciones de Windows desde `/oficina` (`frontend/src/components/avisos/`): te pide permiso (13), te hizo una pregunta (14), terminó (11), recordatorio cada 2, 5 o 10 min mientras espera, cerrado con pregunta (21, apagado por defecto); panel con interruptores, voz en español, velocidad, volumen, sonido y pruebas. Captura en `docs/capturas/avisos-v1/`. Commit `cd06200` |
+| 2026-10-10 | Prompt 1 del port de Agent Office 3D: escena 3D en `/oficina/3d` (`frontend/src/components/oficina3d/`, código MIT adaptado) con los agentes reales del motor, puestos estables por sesión, etiquetas con proyecto, cuenta y estado, más datos al pasar el mouse, clic al detalle de `/oficina`, barra propia en tema claro con contadores, "Vista de cajas" y Avisos (mismo `useAvisos`), latido de presencia, distribución desde `frontend/public/oficina3d/distribucion.json`, modo celular (calidad baja, sin sombras, cámara a lo largo). three 0.185.1, @react-three/fiber 9.8.1 y @react-three/drei 10.7.8 solo en el chunk de `/oficina/3d`. Capturas en `docs/capturas/oficina3d-v1/` (hash en el registro del commit siguiente) |
 
 ## Cómo levantar
 
@@ -182,6 +186,20 @@ Módulo independiente de la vista: `deteccion.ts` (lógica pura, probada en `fro
 - Notificaciones con `tag` por agente (el recordatorio reemplaza la anterior); al hacer clic enfocan la pestaña y abren `/oficina?agente=<session_id>`. Solo funcionan en `localhost` o https (por la IP de Tailscale en http no hay notificaciones, solo voz).
 - Configuración en `localStorage` (`oficina-avisos`).
 
+## Oficina 3D (`/oficina/3d`)
+
+Basada en Agent Office 3D (thomasarisu.agent-office v0.1.6, https://github.com/SaidislomSaidazimovv/agent-office, licencia MIT; aviso en `frontend/src/components/oficina3d/LICENSE-agent-office` y en `THIRD_PARTY_NOTICES.md`). Se copió solo la escena (`escena/`: personajes, avatar y movimiento, navegación, choques, presencia, decoración, puestos, recursos); se reemplazaron su store, i18n (8 idiomas) y layout por `store.ts`, `textos.ts` (español, `t(clave)` tipado) y `distribucion.ts`. Sin su extensión, CLI, tablero de costos, gira, botón "+ Agent", vista en primera persona ni editor de muebles.
+
+- Ruta cargada solo en el navegador (`next/dynamic` con `ssr: false`): three, R3F y drei van en su propio chunk; `/oficina` y `/datos` no los cargan (comprobado midiendo los JS que descarga cada ruta del build estático).
+- Adaptador (`adaptador.ts`, probado en `frontend/tests/oficina3d.test.ts`): 1, 2, 3, 4, 7, 9 y 10 → pensando (mano al mentón); 5, 6 y 8 → trabajando (teclea); 13 y 14 → revisión (sentado, burbuja "Te pide permiso" o "Te hizo una pregunta"); 15 y 16 → sentado esperando (distintivo "En segundo plano"); 17 → con ayudantes; 11, 12, 18 y 20 → inactivo (se levanta y pasea); 19 → inactivo en la sala de descanso; 21 → no aparece. Errores seguidos ≥ 1 en un estado de trabajo → con errores (13 y 14 tienen prioridad). Esperando 3 min o más → "Te espera hace rato".
+- Puestos estables: un agente conserva su escritorio mientras exista; uno nuevo toma el libre más bajo.
+- Sin emojis: los emotes originales son distintivos de texto (Error, Te espera hace rato, Contexto lleno, Pensando mucho, Listo, Charlando).
+- Tema claro: fondo gris claro y luz de día constante; el ciclo día/noche del original queda apagado (se fuerza con `?hour=N`).
+- Etiquetas: contenedor fijo (`escena/capaEtiquetas.ts`) para los `<Html>` de drei; sin él, drei recreaba la raíz al montar la escena y la etiqueta de un agente desaparecía. La etiqueta del hover es un `<Html>` aparte con z-index alto (drei solo lo recalcula cuando algo se mueve).
+- Lint: las reglas del React Compiler (`react-hooks/refs`, `immutability`, `purity`, `set-state-in-effect`) se apagan solo para `oficina3d/escena/**` y `Escena3D.tsx`, porque R3F modifica objetos de three y refs dentro de `useFrame`.
+- @react-three/fiber 9.8.1 en lugar de 9.7.0 (la de la referencia): 9.7.0 pide React < 19.3 y el proyecto usa 19.3.0.
+- Dependencias instaladas con npm (el Makefile usa npm si no hay bun, y `package-lock.json` está ignorado). `frontend/bun.lock` no se actualizó porque bun no está instalado en esta PC: hay que regenerarlo con `bun install` donde haya bun.
+
 ## Hook compartido (oficina diaria y desarrollo)
 
 El comando `claude-office-hook` se instala una sola vez desde `E:\visualizador-agentes\hooks` (`uv tool install --force -p 3.14 E:\visualizador-agentes\hooks`) y lo usan las dos cuentas (`~/.claude` y `~/.claude-demo`).
@@ -249,5 +267,5 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 ## Próximos pasos
 
 1. Resolver los pendientes del motor de estados (errores de herramientas, `agent_id` de subagentes, tokens de transcripciones grandes, cuándo "te espera respuesta").
-2. Revisar `/oficina` v1 con Washington y pasar a pixel art (elegir el motor de dibujo), dejando la vista clásica intacta.
+2. Port de Agent Office 3D: prompt 2 (comportamientos que faltan: alzar la mano en 13, burbuja con la pregunta en 14, sofá en la sala de descanso en 19, entrar y salir, escritorio vacío con nota en 21) y prompt 3 (personajes GLB con Mixamo, editor de la distribución, prueba en el iPhone). Buscar mejores voces o un sistema de lectura para los avisos.
 3. Avisos (sonido y notificación del sistema) y app móvil con notificaciones.
