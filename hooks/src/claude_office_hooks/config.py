@@ -96,6 +96,39 @@ def resolve_extra_urls(
     return urls
 
 
+def principal_es_visualizador(raw: str) -> bool:
+    """CLAUDE_OFFICE_PRINCIPAL=visualizador: the main destination is our backend.
+
+    By default the main destination is assumed to be the original
+    claude-office, which rejects the newer event types (HTTP 422), so those
+    only go to the extra destinations. When the main destination is the
+    visualizer (daily copy on 8000), it gets every event too.
+    """
+    return raw.strip().strip('"').strip("'").lower() == "visualizador"
+
+
+def event_targets(
+    event_type: object,
+    api_url: str,
+    extra_urls: list[str],
+    new_event_types: frozenset[str],
+    main_gets_all: bool,
+) -> list[tuple[str, bool]]:
+    """Destinations of one event as (url, is_main).
+
+    The main destination gets every event when ``main_gets_all`` is set, and
+    otherwise every event except ``new_event_types``. Extra destinations get
+    every event; an extra equal to the main URL is skipped (no duplicates).
+    """
+    targets: list[tuple[str, bool]] = []
+    if main_gets_all or event_type not in new_event_types:
+        targets.append((api_url, True))
+    for url in extra_urls:
+        if url != api_url:
+            targets.append((url, False))
+    return targets
+
+
 ALLOW_REMOTE = os.environ.get("CLAUDE_OFFICE_ALLOW_REMOTE", "") == "1"
 
 API_URL = _ipv4_loopback(

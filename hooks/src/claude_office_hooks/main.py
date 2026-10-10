@@ -39,8 +39,10 @@ try:
         SEND_BUDGET,
         TIMEOUT,
         _log_clamp,  # pyright: ignore[reportPrivateUsage]
+        event_targets,
         get_api_key,
         load_config,
+        principal_es_visualizador,
         resolve_extra_urls,
     )
     from claude_office_hooks.debug_logger import debug_log
@@ -68,6 +70,13 @@ try:
         ),
         ALLOW_REMOTE,
         _log_clamp,
+    )
+
+    # CLAUDE_OFFICE_PRINCIPAL=visualizador: the main destination (8000) is the
+    # visualizer, not the original claude-office, so it also gets the newer
+    # event types. Unset: compatible with claude-office (they go to extras only).
+    MAIN_GETS_ALL = principal_es_visualizador(
+        os.environ.get("CLAUDE_OFFICE_PRINCIPAL", _config.get("CLAUDE_OFFICE_PRINCIPAL", ""))
     )
 
     def _open_request(req: "urllib.request.Request", url: str, timeout: float) -> Any:
@@ -122,7 +131,8 @@ try:
         """POST *payload* to every destination in parallel.
 
         The main destination gets the event unless its type is one older
-        backends reject; extra destinations get every event. The hook waits up
+        backends reject (or always, with CLAUDE_OFFICE_PRINCIPAL=visualizador);
+        extra destinations get every event. The hook waits up
         to SEND_BUDGET for the main destination and EXTRA_BUDGET for the extra
         ones, then returns (pending requests run in daemon threads and are
         dropped at exit). Errors are always swallowed.
@@ -134,12 +144,18 @@ try:
             if api_key:
                 headers["X-API-Key"] = api_key
             # (url, request timeout, quiet errors, wait budget)
-            targets: list[tuple[str, float, bool, float]] = []
-            if payload.get("event_type") not in NEW_EVENT_TYPES:
-                targets.append((API_URL, TIMEOUT, False, SEND_BUDGET))
-            for url in EXTRA_API_URLS:
-                if url != API_URL:
-                    targets.append((url, EXTRA_TIMEOUT, True, EXTRA_BUDGET))
+            targets: list[tuple[str, float, bool, float]] = [
+                (url, TIMEOUT, False, SEND_BUDGET)
+                if is_main
+                else (url, EXTRA_TIMEOUT, True, EXTRA_BUDGET)
+                for url, is_main in event_targets(
+                    payload.get("event_type"),
+                    API_URL,
+                    EXTRA_API_URLS,
+                    NEW_EVENT_TYPES,
+                    MAIN_GETS_ALL,
+                )
+            ]
             started = time.monotonic()
             threads = [
                 (

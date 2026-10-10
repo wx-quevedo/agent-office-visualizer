@@ -63,6 +63,9 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 | 2026-10-10 | La distribución de la oficina se guarda en el repo (`frontend/public/oficina3d/distribucion.json`) | Versionada y igual en PC y celular; el editor de muebles se portará después |
 | 2026-10-10 | Etiquetas 3D: solo dicen lo que la postura no muestra (caminando = libre, sentado = trabajando); sin "Inactivo" ni similares. Libre: solo el proyecto; trabajando: proyecto y actividad corta; te espera: "Te pide permiso" o "Te preguntó" con borde oscuro; "Con errores" si hay errores seguidos | Menos texto en la escena; la postura ya comunica si trabaja |
 | 2026-10-10 | Cuentas: la personal no lleva marca; la de Demo Org lleva el isotipo (`frontend/public/logos/isotipo-demo.png`, ~16 px) en la etiqueta 3D y en los escritorios de `/oficina`, y el logo completo (`logo-demo.png`) solo donde hay espacio (detalle). "Demo Org" como texto solo en tooltips y `alt` | Se distingue la cuenta sin texto extra |
+| 2026-10-10 | La oficina pasa a uso diario en E:\visualizador-agentes-diario (3000/8000); claude-office queda de respaldo | Washington aprobó la oficina; dos copias independientes: la diaria estable y la de desarrollo para cambios |
+| 2026-10-10 | La copia diaria se sirve compilada: backend con uvicorn sin `--reload` y el export estático del frontend con un servidor Starlette propio (`app.servidor_frontend`) en 3000 | Usa el mismo entorno del backend (nada extra que instalar), resuelve las URL limpias del export (`/oficina` → `oficina.html`), fija los tipos MIME (en Windows el registro puede dar `text/plain` a `.js`) y aplica la misma regla de acceso (solo localhost y Tailscale) |
+| 2026-10-10 | La copia diaria se clona desde la copia de desarrollo local (`E:\visualizador-agentes`, rama main) | Así `actualizar-oficina.ps1` trae los commits aprobados aunque todavía no estén en GitHub; se puede cambiar el origen a GitHub con `git remote set-url` |
 | 2026-10-10 | Voces: Washington usará las voces de Google en Chrome (no Edge) | En Edge y en Playwright solo aparecen voces de Microsoft de España; pendiente buscar mejores voces o un sistema de lectura |
 
 ## Ajustes heredados de la instalación diaria
@@ -95,11 +98,12 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Estudio de Agent Office 3D (thomasarisu.agent-office, MIT) en `E:\referencias\agent-office`, fuera del repositorio; plan de port en 3 prompts aprobado por Washington. Sin commit |
 | 2026-10-10 | Avisos con voz y notificaciones de Windows desde `/oficina` (`frontend/src/components/avisos/`): te pide permiso (13), te hizo una pregunta (14), terminó (11), recordatorio cada 2, 5 o 10 min mientras espera, cerrado con pregunta (21, apagado por defecto); panel con interruptores, voz en español, velocidad, volumen, sonido y pruebas. Captura en `docs/capturas/avisos-v1/`. Commit `cd06200` |
 | 2026-10-10 | Prompt 1 del port de Agent Office 3D: escena 3D en `/oficina/3d` (`frontend/src/components/oficina3d/`, código MIT adaptado) con los agentes reales del motor, puestos estables por sesión, etiquetas con proyecto, cuenta y estado, más datos al pasar el mouse, clic al detalle de `/oficina`, barra propia en tema claro con contadores, "Vista de cajas" y Avisos (mismo `useAvisos`), latido de presencia, distribución desde `frontend/public/oficina3d/distribucion.json`, modo celular (calidad baja, sin sombras, cámara a lo largo). three 0.185.1, @react-three/fiber 9.8.1 y @react-three/drei 10.7.8 solo en el chunk de `/oficina/3d`. Capturas en `docs/capturas/oficina3d-v1/`. Commit `543ec55` |
-| 2026-10-10 | Prompt 2 del port de Agent Office 3D: capa de comportamiento (`oficina3d/comportamiento.ts`) separada del estado; 13 alza un brazo, 14 globo con la pregunta y mira a la cámara, 19 va a la sala de descanso y se sienta en el sofá (4 lugares; los demás de pie cerca), 1 y los agentes nuevos entran por la puerta oeste, 12 y los que se cierran salen por ella, 15 reloj de arena y 16 barra de progreso dibujados sobre el monitor, 21 con pregunta deja una nota en su escritorio (sin pregunta, el escritorio queda reservado una hora). Etiquetas simples (libre = solo el proyecto, trabajando = actividad corta, te espera = borde oscuro, con errores). Isotipo y logo de Demo Org (`frontend/public/logos/`) en la escena 3D y en `/oficina`; sin texto "personal". Capturas en `docs/capturas/oficina3d-v2/` (hash en el registro del commit siguiente) |
+| 2026-10-10 | Prompt 2 del port de Agent Office 3D: capa de comportamiento (`oficina3d/comportamiento.ts`) separada del estado; 13 alza un brazo, 14 globo con la pregunta y mira a la cámara, 19 va a la sala de descanso y se sienta en el sofá (4 lugares; los demás de pie cerca), 1 y los agentes nuevos entran por la puerta oeste, 12 y los que se cierran salen por ella, 15 reloj de arena y 16 barra de progreso dibujados sobre el monitor, 21 con pregunta deja una nota en su escritorio (sin pregunta, el escritorio queda reservado una hora). Etiquetas simples (libre = solo el proyecto, trabajando = actividad corta, te espera = borde oscuro, con errores). Isotipo y logo de Demo Org (`frontend/public/logos/`) en la escena 3D y en `/oficina`; sin texto "personal". Capturas en `docs/capturas/oficina3d-v2/`. Commit `5b91296` (subido a GitHub por Washington) |
+| 2026-10-10 | Uso diario: copia `E:\visualizador-agentes-diario` en 3000/8000 (compilada, sin recarga, datos en `C:\Users\<user>\.visualizador-agentes\datos-diario`), servidor del frontend compilado (`backend/app/servidor_frontend.py`), scripts `scripts/diario/` (preparar, iniciar, detener, estado, actualizar, instalar y quitar arranque automático) y opción `CLAUDE_OFFICE_PRINCIPAL=visualizador` del hook. `<project path>` queda de respaldo, detenido. Capturas en `docs/capturas/diario-v1/` (hash en el registro del commit siguiente) |
 
 ## Cómo levantar
 
-Copia de desarrollo en 3100 (frontend) y 8100 (backend), en paralelo a la oficina diaria de `<project path>` en 3000/8000. Comandos para Git Bash:
+Copia de desarrollo en 3100 (frontend) y 8100 (backend), en paralelo a la copia diaria (`E:\visualizador-agentes-diario`, 3000/8000; ver "Uso diario"). Comandos para Git Bash:
 
 ```bash
 cd /e/visualizador-agentes
@@ -125,7 +129,7 @@ CLAUDE_OFFICE_API_URL=http://localhost:8100/api/v1/events uv run python scripts/
 Abrir http://localhost:3100 (desde el iPhone: http://<TAILSCALE_IP>:3100).
 
 - No usar `make install-all`, `make hooks-install` ni `make opencode-install`: instalan hooks y plugins en las cuentas reales.
-- `make dev` en esta carpeta usa 3000/8000 y choca con la oficina diaria; usar siempre `make dev-local`.
+- `make dev` en esta carpeta usa 3000/8000 y choca con la copia diaria; usar siempre `make dev-local`.
 - Los puertos se cambian con `make dev-local DEV_BACKEND_PORT=... DEV_FRONTEND_PORT=...` (y `NEXT_PUBLIC_BACKEND_PORT` en `frontend/.env.local`).
 - El log del backend imprime el enlace con `?token=` usando 3000/8000; en desarrollo, cambiar el puerto a 3100 a mano.
 - En Windows usar `127.0.0.1` en lugar de `localhost` para scripts que hagan muchas peticiones: `localhost` prueba primero IPv6 y tarda unos 2 s por petición.
@@ -205,13 +209,29 @@ Basada en Agent Office 3D (thomasarisu.agent-office v0.1.6, https://github.com/S
 - @react-three/fiber 9.8.1 en lugar de 9.7.0 (la de la referencia): 9.7.0 pide React < 19.3 y el proyecto usa 19.3.0.
 - Dependencias instaladas con npm (el Makefile usa npm si no hay bun, y `package-lock.json` está ignorado). `frontend/bun.lock` sigue sin las dependencias de three (three, @react-three/fiber, @react-three/drei, @types/three) porque bun no está instalado en esta PC: pendiente regenerarlo con `bun install` donde haya bun.
 
+## Uso diario (`E:\visualizador-agentes-diario`, 3000/8000)
+
+Dos copias independientes: la **diaria** (la que Washington usa todo el día en la PC y en el iPhone por Tailscale) y la de **desarrollo** (`E:\visualizador-agentes`, 3100/8100). En la diaria nunca se edita código: solo se actualiza con `actualizar-oficina.ps1`. `<project path>` queda de respaldo: no se borra, no se modifica y no se arranca.
+
+- URLs: PC http://localhost:3000/oficina (3D: /oficina/3d, datos: /datos); iPhone http://<TAILSCALE_IP>:3000/oficina. El frontend busca el backend en el puerto 8000 del mismo host.
+- Producción: backend `uvicorn app.main:app --host 0.0.0.0 --port 8000` sin `--reload` (el middleware solo acepta localhost y la red de Tailscale 100.64.0.0/10); frontend compilado (`next build`, export estático en `frontend/out`) servido por `python -m app.servidor_frontend --dir ..\frontend\out --port 3000`. Procesos sin ventana y desacoplados de la consola (siguen vivos al cerrarla).
+- Datos (fuera de los repositorios): `C:\Users\<user>\.visualizador-agentes\datos-diario\` con `visualizer.db`, `agent_events.db` (y sus `-wal`/`-shm`) y `logs\` (`backend.log`, `frontend.log`, `actualizar.log`, `preparar.log`). Se configuran en `E:\visualizador-agentes-diario\backend\.env` (`DATABASE_URL`, `STATE_EVENT_LOG_PATH`, CORS para localhost:3000, 127.0.0.1:3000 y <TAILSCALE_IP>:3000). Desarrollo sigue en `E:\visualizador-agentes\backend\*.db`: nunca escriben el mismo archivo. El `agent_events.db` de desarrollo se copió una vez al preparar la diaria (con desarrollo detenido) para no empezar sin historia.
+- Scripts (`scripts\diario\`, PowerShell; correr con `powershell -ExecutionPolicy Bypass -File <script>`): `preparar-copia-diaria.ps1` (primera vez: clona, crea datos y `.env`, instala y compila; `-CopiarHistoria` copia la historia de desarrollo), `iniciar-oficina.ps1` (no duplica procesos; si un puerto lo usa otro programa no lo toca), `detener-oficina.ps1` (solo procesos cuya línea de comandos contiene `E:\visualizador-agentes-diario`), `estado-oficina.ps1`, `actualizar-oficina.ps1` (detiene, `git pull --ff-only`, `uv sync --frozen`, `npm install`, `next build` y arranca; si algo falla vuelve al commit y al frontend compilado anteriores y los arranca), `instalar-arranque.ps1` y `quitar-arranque.ps1` (tarea programada del usuario al iniciar sesión, sin administrador; si Windows no la permite, acceso directo en Inicio). Variables opcionales: `VISUALIZADOR_DIARIO_RAIZ` y `VISUALIZADOR_DIARIO_DATOS`.
+- Hook: con `CLAUDE_OFFICE_PRINCIPAL=visualizador` en `C:\Users\<user>\.claude\claude-office-config.env`, el destino principal (8000) recibe también los tipos nuevos (`post_tool_use_failure`). Requiere reinstalar el hook (aprobación de Washington). Sin esa línea, el 8000 recibe todo menos `post_tool_use_failure` (los errores seguidos no se ven en la diaria).
+
+### Volver a claude-office
+
+1. Detener la diaria: `powershell -ExecutionPolicy Bypass -File E:\visualizador-agentes-diario\scripts\diario\detener-oficina.ps1` (y `quitar-arranque.ps1` si se instaló el arranque automático).
+2. Quitar `CLAUDE_OFFICE_PRINCIPAL=visualizador` de `claude-office-config.env` (o dejarlo vacío): claude-office rechaza `post_tool_use_failure` con 422; sin la línea, el hook no se lo envía.
+3. Arrancar `<project path>` como antes (`make dev` en esa carpeta). El hook sigue enviando al 8000 y al 8100.
+
 ## Hook compartido (oficina diaria y desarrollo)
 
 El comando `claude-office-hook` se instala una sola vez desde `E:\visualizador-agentes\hooks` (`uv tool install --force -p 3.14 E:\visualizador-agentes\hooks`) y lo usan las dos cuentas (`~/.claude` y `~/.claude-demo`).
 
 - Destinos: `CLAUDE_OFFICE_API_URL` (por defecto la oficina diaria, `http://127.0.0.1:8000/api/v1/events`) y `CLAUDE_OFFICE_EXTRA_API_URLS` (lista separada por comas) en `C:\Users\<user>\.claude\claude-office-config.env`. Hoy: `http://127.0.0.1:8100/api/v1/events`.
 - Envío en paralelo: espera hasta 0,25 s al destino principal y 0,08 s a los extra; un destino apagado se ignora sin error y el hook siempre termina con código 0.
-- Tipos nuevos (`post_tool_use_failure`) solo van a los destinos extra; la oficina diaria los rechazaría con 422.
+- Tipos nuevos (`post_tool_use_failure`) solo van a los destinos extra, salvo con `CLAUDE_OFFICE_PRINCIPAL=visualizador` (el principal es nuestro backend y también los recibe). claude-office los rechazaría con 422.
 - Campos nuevos (`tool_agent_id`, `tool_agent_type`, `error`, `is_interrupt`, `last_assistant_message`, `reports_tool_failures`, `claude_pid`, `claude_pid_created`): la oficina diaria los ignora (comprobado: guarda el evento sin esos campos).
 - Proceso de Claude Code (`hooks/src/claude_office_hooks/process_info.py`): el hook sube por sus ancestros con la API de Windows (`NtQueryInformationProcess` para el padre, `QueryFullProcessImageNameW` para el nombre, `GetProcessTimes` para la hora de creación) pasando por los intérpretes intermedios (`claude-office-hook.exe`, `bash`/`cmd`/`powershell`) hasta el primer `claude.exe` (instalación nativa) o `node.exe` (instalación por npm). Se detiene en `Code.exe`, `explorer.exe` o `WindowsTerminal.exe`, y si un padre es más nuevo que su hijo (PID reutilizado) devuelve `null`. Cuesta ~12 ms (importar ctypes) más ~0,5 ms.
 
@@ -262,6 +282,10 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 | "Tokens totales" igual a "Tokens en el contexto" | Ahora es el acumulado real de la transcripción (salida + entrada nueva) |
 | "Tokens totales" de 5f41c31c (Demo Org) en 97,5 M tras 164 min | Sumaba toda la historia de la conversación retomada (6 semanas) y la creación de caché (81 M, contexto reescrito tras cada vencimiento o compactación). Ahora: salida desde la llegada al motor (~0,38 M) |
 | `npm run lint` completo marca 10 errores de `react-hooks` (`set-state-in-effect`, `refs`) | Son previos y están en archivos de la vista clásica (`SettingsModal.tsx`, `BuildingTab.tsx`, `useSessions.ts`, `useWebSocketEvents.ts`); no se tocan. Los archivos de `/oficina` y de avisos pasan el lint |
+| Copia diaria: Next 16 pide `oficina/__next.oficina.__PAGE__.txt` (datos de navegación) y el export lo guarda como `oficina/__next.oficina/__PAGE__.txt` (404 en consola, navegación más lenta) | `app.servidor_frontend` traduce los puntos del segmento a carpetas |
+| Copia diaria: `detener-oficina.ps1` se cortaba en PowerShell 5.1 cuando `taskkill` avisaba de un proceso ya terminado con su árbol | `taskkill` se llama a través de `cmd` y ese aviso se ignora |
+| Copia diaria por Tailscale: aviso de React #418 en `/datos` | La página muestra la URL del backend en el HTML compilado (`localhost`) y en el iPhone es otra; React lo corrige al cargar. Pendiente: no mostrar esa URL en el HTML estático |
+| Al reiniciar el backend, los cerrados por proceso terminado se vuelven a fechar al momento del arranque ("Desaparece en 60 min" de nuevo) | Pendiente: conservar la hora original del cierre |
 | `/oficina` en `http://127.0.0.1:3100` no carga datos en desarrollo | Next bloquea `/_next/*` de desarrollo para orígenes fuera de `allowedDevOrigins`; usar `localhost:3100` (sin cambiar la configuración) |
 | El tiempo del hook depende de la carga de la PC: con Unity y Chrome abiertos, el mismo hook anterior pasó de ~180 a ~250 ms (8100 encendido) y de ~260 a ~320 ms (8100 apagado) | Se mide comparando la versión anterior y la nueva intercaladas; la detección del proceso suma ~5-10 ms |
 | Next.js 16.3 genera `frontend/AGENTS.md` y `frontend/CLAUDE.md` al arrancar | Se versionan (decisión 2026-10-09) para que `next dev` no los vuelva a dejar como cambios sueltos |
@@ -271,6 +295,7 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 
 ## Próximos pasos
 
-1. Resolver los pendientes del motor de estados (errores de herramientas, `agent_id` de subagentes, tokens de transcripciones grandes, cuándo "te espera respuesta").
-2. Port de Agent Office 3D: prompt 3 (personajes GLB con Mixamo, editor de la distribución, prueba en el iPhone). Regenerar `frontend/bun.lock` donde haya bun. Buscar mejores voces o un sistema de lectura para los avisos.
-3. Avisos (sonido y notificación del sistema) y app móvil con notificaciones.
+1. Aprobación de Washington: reinstalar el hook y agregar `CLAUDE_OFFICE_PRINCIPAL=visualizador` (comandos en el resumen del 2026-10-10); decidir el arranque automático.
+2. Resolver los pendientes del motor de estados (errores de herramientas, `agent_id` de subagentes, tokens de transcripciones grandes, cuándo "te espera respuesta").
+3. Port de Agent Office 3D: prompt 3 (personajes GLB con Mixamo, editor de la distribución, prueba en el iPhone). Regenerar `frontend/bun.lock` donde haya bun. Buscar mejores voces o un sistema de lectura para los avisos.
+4. Avisos (sonido y notificación del sistema) y app móvil con notificaciones.
