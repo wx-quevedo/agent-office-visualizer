@@ -18,7 +18,7 @@ from sqlalchemy import delete, select, update
 from app.api.middleware import ApiKeyMiddleware, LocalhostOnlyMiddleware
 from app.api.routes import agents_state, events, floors, preferences, sessions, websockets
 from app.config import get_settings
-from app.core.agent_state_engine import bootstrap_from_db, get_state_engine, run_tick_loop
+from app.core.agent_state_engine import bootstrap, get_state_engine, run_tick_loop
 from app.core.event_processor import EventProcessor, get_event_processor
 from app.core.summary_service import get_summary_service
 from app.db.database import Base, get_engine
@@ -86,8 +86,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     # so time-based states (program wait, idle, rest) change without events.
     state_engine = get_state_engine()
     try:
-        loaded = await bootstrap_from_db(state_engine)
-        logger.info("Agent state engine loaded %d recent events from the DB", loaded)
+        loaded = await bootstrap(state_engine)
+        logger.info("Agent state engine start-up from its event log: %s", loaded)
     except Exception:
         logger.exception("Agent state engine bootstrap failed")
     state_ticker = asyncio.create_task(run_tick_loop(state_engine))
@@ -97,6 +97,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     state_ticker.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await state_ticker
+    if state_engine.store is not None:
+        state_engine.store.flush()
+        state_engine.store.close()
     # Cancel any pending debounced overview broadcast so shutdown is clean.
     await get_event_processor().shutdown()
     idle_evictor.cancel()

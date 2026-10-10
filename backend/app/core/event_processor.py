@@ -295,6 +295,8 @@ class EventProcessor:
         logger.debug(
             f"Polled event: {event.event_type} agent={event.data.agent_id} tool={tool_name}"
         )
+        # Catalog state engine: own log + memory, before the classic pipeline.
+        get_state_engine().accept(event, origin="poller")
         await self._process_event_internal(event)
 
     # ------------------------------------------------------------------
@@ -502,13 +504,6 @@ class EventProcessor:
                 resolved_room_id = assignment.room_id
 
         await self._persist_event(event, resolved_floor_id, resolved_room_id)
-
-        # Catalog state engine (new canvas): independent of the classic
-        # StateMachine and must never break the classic pipeline.
-        try:
-            get_state_engine().ingest(event)
-        except Exception:
-            logger.exception("Agent state engine failed to ingest %s", event.event_type)
 
         # Replay from DB *before* acquiring the lock: the restore is async I/O
         # that can take hundreds of ms for a long session, and holding the lock

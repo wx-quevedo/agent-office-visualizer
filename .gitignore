@@ -123,3 +123,8 @@ docs/superpowers
 /.claude/skills/vitest
 /.claude/skills/react-best-practices
 /.claude/skills/next-best-practices
+
+# Registro propio del motor de estados (backend/agent_events.db)
+/backend/agent_events.db
+/backend/agent_events.db-wal
+/backend/agent_events.db-shm

@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from app.core import token_tracker as _token_tracker
+from app.core.agent_event_store import AgentEventStore
 from app.core.transcript_tail import (
     ends_with_question,
     last_assistant_text,
@@ -170,7 +171,7 @@ class Thresholds:
     return_: float = 5
     subagent_expiry: float = 1800
     process_check: float = 30
-    no_pid_close: float = 24 * 3600
+    no_pid_close: float = 3600
     exit_visible: float = 120
     session_max_age: float = 24 * 3600
 
@@ -781,8 +782,11 @@ class AgentStateEngine:
         clock: Callable[[], datetime] | None = None,
         browsers_provider: Callable[[], int] | None = None,
         process_alive: Callable[[int, float | None], bool | None] | None = None,
+        store: AgentEventStore | None = None,
     ) -> None:
         self.th = thresholds or Thresholds()
+        # Engine-owned append-only log (independent of the classic database).
+        self.store = store
         self.clock = clock or (lambda: datetime.now(UTC))
         self.browsers_provider = browsers_provider or (lambda: 0)
         self.process_alive = process_alive or _default_process_alive
@@ -796,8 +800,28 @@ class AgentStateEngine:
 
     # -- ingestion ---------------------------------------------------------
 
+    def accept(self, event: AnyEvent, origin: str = "hook") -> None:
+        """Save an incoming event to the engine's own log, then ingest it.
+
+        Called in arrival order. A failed save is logged and the engine keeps
+        working in memory; ingestion errors never propagate to the caller.
+        """
+        if self.store is not None:
+            try:
+                self.store.append(event, origin)
+            except Exception:
+                logger.exception(
+                    "Agent event log: could not queue %s for session %s",
+                    event.event_type,
+                    event.session_id,
+                )
+        try:
+            self.ingest(event)
+        except Exception:
+            logger.exception("Agent state engine failed to ingest %s", event.event_type)
+
     def ingest(self, event: AnyEvent) -> None:
-        """Add one hook event to its session log."""
+        """Add one event to its session log (memory only)."""
         self._seq += 1
         rec = record_from_event(event, self._seq)
         log = self.sessions.get(event.session_id)
@@ -1130,54 +1154,93 @@ class AgentStateEngine:
 # ---------------------------------------------------------------------------
 
 
-async def bootstrap_from_db(engine: AgentStateEngine) -> int:
-    """Load recent persisted events so a backend restart keeps the states.
+async def bootstrap(engine: AgentStateEngine) -> dict[str, int]:
+    """Rebuild the engine on start-up from its own event log.
 
-    Only sessions updated within ``session_max_age`` are loaded. Returns the
-    number of events ingested.
+    1. Retention: drop log entries older than STATE_EVENT_LOG_RETENTION_DAYS.
+    2. Empty log (first start): one-time import of the sessions active in the
+       last STATE_EVENT_LOG_LOAD_HOURS from the classic database.
+    3. Otherwise: load the sessions active in that window from the log.
     """
-    from pydantic import ValidationError
-    from sqlalchemy import select
-
-    from app.db.database import AsyncSessionLocal
-    from app.db.models import EventRecord, SessionRecord
+    from app.config import get_settings
+    from app.core.agent_event_store import retention_cutoff
     from app.models.events import EventAdapter
 
-    cutoff = engine.clock() - timedelta(seconds=engine.th.session_max_age + engine.th.no_pid_close)
-    count = 0
+    settings = get_settings()
+    now = engine.clock()
+    since = now - timedelta(hours=settings.STATE_EVENT_LOG_LOAD_HOURS)
+    result = {"borrados": 0, "importados": 0, "cargados": 0}
+    store = engine.store
+    if store is None:
+        return result
+    result["borrados"] = store.delete_older_than(
+        retention_cutoff(now, settings.STATE_EVENT_LOG_RETENTION_DAYS)
+    )
+    if store.count() == 0:
+        imported = 0
+        async for event in _legacy_events(since):
+            engine.accept(event, origin="importacion")
+            imported += 1
+        store.flush()
+        result["importados"] = imported
+        logger.info(
+            "Agent event log was empty: imported %d events (sessions active in the last %s h) "
+            "from the classic database",
+            imported,
+            settings.STATE_EVENT_LOG_LOAD_HOURS,
+        )
+        return result
+    loaded = 0
+    for payload in store.iter_recent(since):
+        try:
+            event = EventAdapter.validate_python(payload)
+        except ValueError:
+            logger.warning("Agent event log: skipped an unreadable event")
+            continue
+        engine.ingest(event)
+        loaded += 1
+    result["cargados"] = loaded
+    return result
+
+
+async def _legacy_events(since: datetime):  # noqa: ANN202 - async generator
+    """Events of the classic database for sessions active since ``since``."""
+    from pydantic import ValidationError
+    from sqlalchemy import func, select
+
+    from app.db.database import AsyncSessionLocal
+    from app.db.models import EventRecord
+    from app.models.events import EventAdapter
+
     async with AsyncSessionLocal() as db:
-        session_ids = (
-            (await db.execute(select(SessionRecord.id).where(SessionRecord.updated_at >= cutoff)))
+        active = (
+            select(EventRecord.session_id)
+            .group_by(EventRecord.session_id)
+            .having(func.max(EventRecord.timestamp) >= since)
+        )
+        rows = (
+            (
+                await db.execute(
+                    select(EventRecord)
+                    .where(EventRecord.session_id.in_(active))
+                    .order_by(EventRecord.timestamp, EventRecord.id)
+                )
+            )
             .scalars()
             .all()
         )
-        for sid in session_ids:
-            rows = (
-                (
-                    await db.execute(
-                        select(EventRecord)
-                        .where(EventRecord.session_id == sid)
-                        .order_by(EventRecord.timestamp, EventRecord.id)
-                    )
-                )
-                .scalars()
-                .all()
+    for rec in rows:
+        try:
+            yield EventAdapter.validate_python(
+                {
+                    "event_type": EventType(rec.event_type),
+                    "session_id": rec.session_id,
+                    "timestamp": rec.timestamp,
+                    "data": rec.data or {},
+                }
             )
-            for rec in rows:
-                try:
-                    event = EventAdapter.validate_python(
-                        {
-                            "event_type": EventType(rec.event_type),
-                            "session_id": rec.session_id,
-                            "timestamp": rec.timestamp,
-                            "data": rec.data or {},
-                        }
-                    )
-                except (ValidationError, ValueError):
-                    continue
-                engine.ingest(event)
-                count += 1
-    return count
+        except (ValidationError, ValueError):
+            continue
 
 
 async def run_tick_loop(engine: AgentStateEngine, interval: float = 1.0) -> None:
@@ -1214,8 +1277,14 @@ _engine: AgentStateEngine | None = None
 def get_state_engine() -> AgentStateEngine:
     global _engine
     if _engine is None:
+        from app.core.agent_event_store import default_store_path
+
+        store = AgentEventStore(default_store_path())
+        store.start()
         _engine = AgentStateEngine(
-            Thresholds.from_settings(), browsers_provider=count_browser_connections
+            Thresholds.from_settings(),
+            browsers_provider=count_browser_connections,
+            store=store,
         )
     return _engine
 

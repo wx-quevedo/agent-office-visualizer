@@ -1,13 +1,19 @@
 """Pytest fixtures for backend tests."""
 
 import os
+import tempfile
 
 # Disable AI summary service in tests to avoid network timeouts
 # when CLAUDE_CODE_OAUTH_TOKEN is present in .env but expired.
 os.environ["SUMMARY_ENABLED"] = "False"
 
+# The agent state engine writes its own event log; keep tests away from the
+# real backend/agent_events.db.
+os.environ["STATE_EVENT_LOG_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="agent-events-"), "agent_events.db"
+)
+
 import asyncio
-import tempfile
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from unittest.mock import patch

@@ -857,7 +857,13 @@ def test_unknown_process_state_does_not_close(clock: FakeClock, browsers: Browse
     assert state_at(engine, clock, 40)[0] == 1
 
 
-def test_session_without_pid_closes_after_24h(pengine: AgentStateEngine, clock: FakeClock) -> None:
+def test_session_without_pid_closes_after_configured_24h(
+    clock: FakeClock, browsers: Browsers
+) -> None:
+    # Default is 1 h (see test_agent_event_store); the threshold is configurable.
+    pengine = AgentStateEngine(
+        Thresholds(no_pid_close=24 * 3600), clock=clock, browsers_provider=browsers
+    )
     feed(pengine, start(0), ev("stop", 5, last_assistant_message="¿Lo borro también?"))
     assert state_at(pengine, clock, 23 * 3600) == (14, "tu_respuesta")
     assert state_at(pengine, clock, 5 + 24 * 3600 + 1) == (21, None)

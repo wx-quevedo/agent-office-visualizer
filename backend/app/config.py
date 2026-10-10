@@ -112,8 +112,15 @@ class Settings(BaseSettings):
     # How often to check that each session's Claude Code process still exists.
     STATE_PROCESS_CHECK_SECONDS: float = 30
     # Sessions without a known process (older hook) close after this long
-    # without events ("sin_pid_antiguo").
-    STATE_NO_PID_CLOSE_HOURS: float = 24
+    # without events ("sin_pid_antiguo"). Every live session sends a PID since
+    # the hook update, so 1 h is enough.
+    STATE_NO_PID_CLOSE_HOURS: float = 1
+    # Engine-owned append-only event log (independent of visualizer.db).
+    STATE_EVENT_LOG_PATH: str = str(_BACKEND_DIR / "agent_events.db")
+    # On start-up, load the sessions active in this window from the log.
+    STATE_EVENT_LOG_LOAD_HOURS: float = 24
+    # Retention of the log, applied on start-up.
+    STATE_EVENT_LOG_RETENTION_DAYS: float = 7
     # Ended sessions stay listed ("se va") this long; older sessions are dropped.
     STATE_EXIT_VISIBLE_SECONDS: float = 120
     STATE_SESSION_MAX_AGE_HOURS: float = 24

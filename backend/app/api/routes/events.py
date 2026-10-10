@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from app.config import get_settings
+from app.core.agent_state_engine import get_state_engine
 from app.core.event_processor import EventProcessor, get_event_processor
 from app.models.events import AnyEvent
 
@@ -127,6 +128,9 @@ async def receive_event(
         A status payload with event_id and processing state.
     """
     _check_rate_limit(event.session_id)
+    # Catalog state engine first, in arrival order: its own append-only log and
+    # memory do not depend on the classic pipeline (which runs in background).
+    get_state_engine().accept(event, origin="hook")
     background_tasks.add_task(ep.process_event, event)
     return {
         "status": "accepted",
