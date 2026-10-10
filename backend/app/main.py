@@ -16,7 +16,15 @@ from rich.logging import RichHandler
 from sqlalchemy import delete, select, update
 
 from app.api.middleware import ApiKeyMiddleware, LocalhostOnlyMiddleware
-from app.api.routes import agents_state, events, floors, preferences, sessions, websockets
+from app.api.routes import (
+    agents_state,
+    events,
+    floors,
+    oficina3d,
+    preferences,
+    sessions,
+    websockets,
+)
 from app.config import get_settings
 from app.core.agent_state_engine import bootstrap, get_state_engine, run_tick_loop
 from app.core.event_processor import EventProcessor, get_event_processor
@@ -203,6 +211,7 @@ app.add_middleware(LocalhostOnlyMiddleware)
 app.add_middleware(ApiKeyMiddleware)
 
 app.include_router(agents_state.router, prefix=f"{settings.API_V1_STR}")
+app.include_router(oficina3d.router, prefix=f"{settings.API_V1_STR}/oficina3d")
 app.include_router(events.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(floors.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(preferences.router, prefix=f"{settings.API_V1_STR}")

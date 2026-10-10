@@ -816,6 +816,38 @@ def test_21_cerrado_when_process_ends(
     assert agent["proceso"] == {"pid": 4242, "creado": 1000.0}
 
 
+def test_closure_time_survives_a_backend_restart(
+    clock: FakeClock, browsers: Browsers, procs: FakeProcesses
+) -> None:
+    # The window was closed long ago; the backend restarts and finds the
+    # process already gone: the closure keeps the time of the last event
+    # instead of "now", on every restart.
+    events = [pev("session_start", 0), pev("user_prompt_submit", 5, prompt="x")]
+    desde = []
+    for reinicio in (2 * 3600, 3 * 3600):
+        clock.at(reinicio)
+        engine = AgentStateEngine(
+            Thresholds(), clock=clock, browsers_provider=browsers, process_alive=procs
+        )
+        feed(engine, *events)
+        agent = engine.tick()["agentes"][0]
+        assert agent["cierre"]["motivo"] == "proceso_terminado"
+        desde.append(agent["cierre"]["desde"])
+    assert desde[0] == desde[1] == (T0 + timedelta(seconds=5)).isoformat()
+
+
+def test_closure_time_is_the_check_when_the_process_was_seen_alive(
+    pengine: AgentStateEngine, clock: FakeClock, procs: FakeProcesses
+) -> None:
+    procs.live[4242] = 1000.0
+    feed(pengine, pev("session_start", 0), pev("user_prompt_submit", 1, prompt="x"))
+    state_at(pengine, clock, 10)  # first check: alive
+    del procs.live[4242]
+    state_at(pengine, clock, 45)  # next check: gone
+    agent = pengine.tick()["agentes"][0]
+    assert agent["cierre"]["desde"] == (T0 + timedelta(seconds=45)).isoformat()
+
+
 def test_pending_question_is_kept_when_closed(
     pengine: AgentStateEngine, clock: FakeClock, procs: FakeProcesses
 ) -> None:

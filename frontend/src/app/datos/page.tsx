@@ -7,7 +7,12 @@
  * components. Used to validate the data before building the new canvas.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { API_BASE } from "@/utils/api";
 
 const REFRESH_MS = 2000;
@@ -193,7 +198,17 @@ function TablaAgente({ a, ahora }: { a: Agente; ahora: string }) {
   );
 }
 
+// The backend URL depends on the host the page was opened from (localhost or
+// the Tailscale IP). It is read only in the browser: the static HTML has none,
+// so server and client render the same text (no hydration error #418).
+const sinSuscripcion = () => () => {};
+
 export default function DatosPage() {
+  const fuente = useSyncExternalStore(
+    sinSuscripcion,
+    () => `${API_BASE}/api/v1/agents/state`,
+    () => "",
+  );
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -224,8 +239,7 @@ export default function DatosPage() {
     <main>
       <h1>Datos en bruto del motor de estados</h1>
       <p>
-        Fuente: {API_BASE}/api/v1/agents/state. Se actualiza cada{" "}
-        {REFRESH_MS / 1000} s.
+        Fuente: {fuente || "…"}. Se actualiza cada {REFRESH_MS / 1000} s.
         {datos && <> Última lectura: {hora(datos.generado)}.</>}
       </p>
       {error && <p>Error al leer el backend: {error}</p>}

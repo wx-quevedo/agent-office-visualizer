@@ -118,6 +118,9 @@ class Settings(BaseSettings):
     STATE_NO_PID_CLOSE_HOURS: float = 1
     # Engine-owned append-only event log (independent of visualizer.db).
     STATE_EVENT_LOG_PATH: str = str(_BACKEND_DIR / "agent_events.db")
+    # Office layout of /oficina/3d (furniture and theme). Empty: next to the
+    # event log (the data folder of each copy), as distribucion.json.
+    OFICINA3D_DISTRIBUCION_PATH: str = ""
     # On start-up, load the sessions active in this window from the log.
     STATE_EVENT_LOG_LOAD_HOURS: float = 24
     # Retention of the log, applied on start-up.

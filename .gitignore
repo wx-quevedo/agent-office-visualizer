@@ -128,3 +128,5 @@ docs/superpowers
 /backend/agent_events.db
 /backend/agent_events.db-wal
 /backend/agent_events.db-shm
+# Distribución de la oficina 3D guardada por la copia de desarrollo
+/backend/distribucion.json

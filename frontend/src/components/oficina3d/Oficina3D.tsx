@@ -22,6 +22,8 @@ import {
   type EstadoAdaptador,
 } from "./adaptador";
 import { cargarDistribucion } from "./distribucion";
+import { useEditor } from "./editor";
+import EditorPanel from "./EditorPanel";
 import Escena3D from "./Escena3D";
 import { useSettings } from "./settings";
 import { useOffice } from "./store";
@@ -49,6 +51,7 @@ export default function Oficina3D() {
   const { datos, error } = useEstadoOficina();
   useLatidoPresencia();
   const [panelAvisos, setPanelAvisos] = useState(false);
+  const editando = useEditor((st) => st.activo);
   const [angosta, setAngosta] = useState(false);
   const memoria = useRef<EstadoAdaptador>(estadoInicial());
   // Optional framing from the URL (?zoom=60&centro=x,z), handy for close-ups.
@@ -128,6 +131,18 @@ export default function Oficina3D() {
           </span>
         </div>
         <div className={s.acciones}>
+          <button
+            type="button"
+            className={s.boton}
+            aria-pressed={editando}
+            disabled={editando}
+            onClick={() => {
+              setPanelAvisos(false);
+              useEditor.getState().entrar();
+            }}
+          >
+            {t("barra.editar")}
+          </button>
           <Link href="/oficina" className={s.boton}>
             {t("barra.vistaCajas")}
           </Link>
@@ -154,6 +169,7 @@ export default function Oficina3D() {
       )}
 
       <main className={s.lienzo}>
+        {editando && <EditorPanel />}
         <Escena3D
           zoom={encuadre.zoom ?? (angosta ? 10 : 20)}
           vertical={angosta}
@@ -166,7 +182,7 @@ export default function Oficina3D() {
         {datos && n && n.espera + n.trabajando + n.libres === 0 && (
           <div className={s.aviso}>{t("barra.sinAgentes")}</div>
         )}
-        <div className={s.ayuda}>{t("barra.ayuda")}</div>
+        {!editando && <div className={s.ayuda}>{t("barra.ayuda")}</div>}
       </main>
     </div>
   );

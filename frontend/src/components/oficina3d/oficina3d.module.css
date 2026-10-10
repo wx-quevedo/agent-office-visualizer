@@ -96,6 +96,7 @@
   color: var(--gris-oscuro);
 }
 
+.boton[aria-pressed="true"],
 .boton[aria-expanded="true"] {
   background: var(--negro);
   color: var(--blanco);
@@ -103,6 +104,10 @@
 
 .boton[aria-expanded="true"] .mono {
   color: var(--gris-claro);
+}
+
+.boton:disabled {
+  cursor: default;
 }
 
 .boton:focus-visible {

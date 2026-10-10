@@ -622,6 +622,11 @@ class SessionLog:
     # Set when the registered Claude Code process is found gone.
     closed_process_at: datetime | None = None
     closed_pid: int | None = None
+    # The process was seen alive by this run of the engine. When it was not
+    # (found already gone right after a backend restart), the closure time is
+    # unknown: the last event of the session is used, so a restart does not
+    # move the closure to "now" (and the 1 h of a closed desk does not restart).
+    process_seen_alive: bool = False
     # Reconciliation with the transcript (annotation only).
     recon: Reconciliation | None = None
     # Accumulated tokens of the transcript (read incrementally, in background).
@@ -1276,8 +1281,12 @@ class AgentStateEngine:
                 alive = self.process_alive(pid, created)
             except Exception:
                 alive = None
-            if alive is False:
-                log.closed_process_at = now
+            if alive is True:
+                log.process_seen_alive = True
+            elif alive is False:
+                log.closed_process_at = (
+                    now if log.process_seen_alive or dv.last_ts is None else min(dv.last_ts, now)
+                )
                 log.closed_pid = pid
 
     def _visible(self, log: SessionLog, now: datetime) -> bool:

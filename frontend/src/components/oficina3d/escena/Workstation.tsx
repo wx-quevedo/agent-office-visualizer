@@ -7,6 +7,7 @@ import type { Monitor } from "../comportamiento";
 import type { AgentView } from "../store";
 import { t } from "../textos";
 import { MarcaCuenta } from "@/components/marca/Marca";
+import { useEditor } from "../editor";
 import { capaEtiquetas } from "./capaEtiquetas";
 import { useOffice } from "../store";
 import { clutterLevel } from "./clutter";
@@ -336,6 +337,7 @@ function NotaCerrado({ cerrado }: { cerrado: EscritorioCerrado }) {
       position={[0.05, DESK_TOP + 0.14, 0.08]}
       rotation={[-0.35, 0.25, 0]}
       onPointerOver={(e) => {
+        if (useEditor.getState().activo) return;
         e.stopPropagation();
         setVer(true);
         document.body.style.cursor = "pointer";
@@ -424,6 +426,7 @@ function Workstation({
       position={[seat.x, 0, seat.z]}
       rotation={[0, seat.ry, 0]}
       onClick={(e) => {
+        if (useEditor.getState().activo) return; // editing: the click goes to the floor
         e.stopPropagation();
         select(agent ? agent.id : (cerrado?.sessionId ?? null));
       }}

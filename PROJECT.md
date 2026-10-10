@@ -66,6 +66,8 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 | 2026-10-10 | La oficina pasa a uso diario en E:\visualizador-agentes-diario (3000/8000); claude-office queda de respaldo | Washington aprobó la oficina; dos copias independientes: la diaria estable y la de desarrollo para cambios |
 | 2026-10-10 | La copia diaria se sirve compilada: backend con uvicorn sin `--reload` y el export estático del frontend con un servidor Starlette propio (`app.servidor_frontend`) en 3000 | Usa el mismo entorno del backend (nada extra que instalar), resuelve las URL limpias del export (`/oficina` → `oficina.html`), fija los tipos MIME (en Windows el registro puede dar `text/plain` a `.js`) y aplica la misma regla de acceso (solo localhost y Tailscale) |
 | 2026-10-10 | La copia diaria se clona desde la copia de desarrollo local (`E:\visualizador-agentes`, rama main) | Así `actualizar-oficina.ps1` trae los commits aprobados aunque todavía no estén en GitHub; se puede cambiar el origen a GitHub con `git remote set-url` |
+| 2026-10-10 | Cada copia guarda su propia distribución de la oficina 3D (muebles y tema) en su carpeta de datos, a través del backend; la del repo es solo la base. Se pasa de una copia a otra con Exportar/Importar JSON | Washington arma su oficina en la diaria sin que desarrollo la pise |
+| 2026-10-10 | El editor no deja guardar mientras un mueble tape un camino de los agentes o un escritorio de trabajo | Los agentes caminan por un grafo fijo; un mueble encima los dejaría atascados |
 | 2026-10-10 | Voces: Washington usará las voces de Google en Chrome (no Edge) | En Edge y en Playwright solo aparecen voces de Microsoft de España; pendiente buscar mejores voces o un sistema de lectura |
 
 ## Ajustes heredados de la instalación diaria
@@ -99,7 +101,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Avisos con voz y notificaciones de Windows desde `/oficina` (`frontend/src/components/avisos/`): te pide permiso (13), te hizo una pregunta (14), terminó (11), recordatorio cada 2, 5 o 10 min mientras espera, cerrado con pregunta (21, apagado por defecto); panel con interruptores, voz en español, velocidad, volumen, sonido y pruebas. Captura en `docs/capturas/avisos-v1/`. Commit `cd06200` |
 | 2026-10-10 | Prompt 1 del port de Agent Office 3D: escena 3D en `/oficina/3d` (`frontend/src/components/oficina3d/`, código MIT adaptado) con los agentes reales del motor, puestos estables por sesión, etiquetas con proyecto, cuenta y estado, más datos al pasar el mouse, clic al detalle de `/oficina`, barra propia en tema claro con contadores, "Vista de cajas" y Avisos (mismo `useAvisos`), latido de presencia, distribución desde `frontend/public/oficina3d/distribucion.json`, modo celular (calidad baja, sin sombras, cámara a lo largo). three 0.185.1, @react-three/fiber 9.8.1 y @react-three/drei 10.7.8 solo en el chunk de `/oficina/3d`. Capturas en `docs/capturas/oficina3d-v1/`. Commit `543ec55` |
 | 2026-10-10 | Prompt 2 del port de Agent Office 3D: capa de comportamiento (`oficina3d/comportamiento.ts`) separada del estado; 13 alza un brazo, 14 globo con la pregunta y mira a la cámara, 19 va a la sala de descanso y se sienta en el sofá (4 lugares; los demás de pie cerca), 1 y los agentes nuevos entran por la puerta oeste, 12 y los que se cierran salen por ella, 15 reloj de arena y 16 barra de progreso dibujados sobre el monitor, 21 con pregunta deja una nota en su escritorio (sin pregunta, el escritorio queda reservado una hora). Etiquetas simples (libre = solo el proyecto, trabajando = actividad corta, te espera = borde oscuro, con errores). Isotipo y logo de Demo Org (`frontend/public/logos/`) en la escena 3D y en `/oficina`; sin texto "personal". Capturas en `docs/capturas/oficina3d-v2/`. Commit `5b91296` (subido a GitHub por Washington) |
-| 2026-10-10 | Uso diario: copia `E:\visualizador-agentes-diario` en 3000/8000 (compilada, sin recarga, datos en `C:\Users\<user>\.visualizador-agentes\datos-diario`), servidor del frontend compilado (`backend/app/servidor_frontend.py`), scripts `scripts/diario/` (preparar, iniciar, detener, estado, actualizar, instalar y quitar arranque automático) y opción `CLAUDE_OFFICE_PRINCIPAL=visualizador` del hook. `<project path>` queda de respaldo, detenido. Capturas en `docs/capturas/diario-v1/` (hash en el registro del commit siguiente) |
+| 2026-10-10 | Uso diario: copia `E:\visualizador-agentes-diario` en 3000/8000 (compilada, sin recarga, datos en `C:\Users\<user>\.visualizador-agentes\datos-diario`), servidor del frontend compilado (`backend/app/servidor_frontend.py`), scripts `scripts/diario/` (preparar, iniciar, detener, estado, actualizar, instalar y quitar arranque automático) y opción `CLAUDE_OFFICE_PRINCIPAL=visualizador` del hook. `<project path>` queda de respaldo, detenido. Capturas en `docs/capturas/diario-v1/`. Commit `2b60341` (Washington aprobó el hook con `CLAUDE_OFFICE_PRINCIPAL=visualizador`, lo reinstaló e instaló el arranque automático) |
+| 2026-10-10 | Editor de la oficina 3D (catálogo, agregar, arrastrar en cuadrícula de 0,5 m, rotar, borrar, deshacer y rehacer, guardar y cancelar, exportar e importar JSON) con aviso de muebles que tapan caminos o escritorios; 9 temas de piso y pared más el claro actual; distribución por copia en `GET/PUT /api/v1/oficina3d/distribucion`. Correcciones: el cierre de un proceso muerto conserva su hora tras reiniciar el backend; `/datos` ya no da el error #418 por Tailscale. Capturas en `docs/capturas/editor-v1/` (hash en el registro del commit siguiente) |
 
 ## Cómo levantar
 
@@ -209,6 +212,15 @@ Basada en Agent Office 3D (thomasarisu.agent-office v0.1.6, https://github.com/S
 - @react-three/fiber 9.8.1 en lugar de 9.7.0 (la de la referencia): 9.7.0 pide React < 19.3 y el proyecto usa 19.3.0.
 - Dependencias instaladas con npm (el Makefile usa npm si no hay bun, y `package-lock.json` está ignorado). `frontend/bun.lock` sigue sin las dependencias de three (three, @react-three/fiber, @react-three/drei, @types/three) porque bun no está instalado en esta PC: pendiente regenerarlo con `bun install` donde haya bun.
 
+## Editor de la oficina 3D
+
+Botón "Editar oficina" en la barra de `/oficina/3d` (adaptado del editor de Agent Office 3D, MIT). Panel a la izquierda: catálogo (Planta, Escritorio, Sofá, Mesa de centro, Mesa de reuniones, Librero, Lámpara), mueble seleccionado (Rotar 45°, Borrar), Deshacer y Rehacer (50 pasos), tema de piso y pared, Guardar, Cancelar, Exportar JSON e Importar JSON. Atajos: R, Supr, Ctrl+Z, Ctrl+Y, Esc. Mientras se edita, los agentes siguen visibles pero no reaccionan y la cámara no se mueve al arrastrar.
+
+- Archivos: `oficina3d/editor.ts` (estado; edita la distribución en vivo y guarda una foto para Cancelar), `EditorPanel.tsx`, `escena/PlacedFurniture.tsx` (piso clicable, arrastre, anillo oscuro de selección y rojo de bloqueo), `muebles.ts` (tipos y tamaños, sin three.js), `temas.ts`, `caminos.ts`, `distribucion.ts`.
+- Guardado: `GET/PUT /api/v1/oficina3d/distribucion` (`backend/app/api/routes/oficina3d.py`) lee y escribe `distribucion.json` junto al registro del motor (la diaria: `C:\Users\<user>\.visualizador-agentes\datos-diario\distribucion.json`; desarrollo: `backend/distribucion.json`, ignorado por git; se puede fijar con `OFICINA3D_DISTRIBUCION_PATH`). Si no existe, devuelve la base del repo (`frontend/public/oficina3d/distribucion.json`). Valida tipos conocidos, límites (x ±22,5, z ±15,5), ids únicos, colores, máximo 200 muebles y 64 KB; escribe de forma atómica. Solo clientes que el middleware permite (localhost y Tailscale).
+- Caminos (`caminos.ts`): un mueble no puede tocar los escritorios de trabajo ni sus sillas, ni quedar a menos de 0,22 m de un camino protegido: aristas del grafo de navegación, tramo de cada silla a su nodo, entrada (puerta, interior y nodo) y sala de descanso (pasillo, asientos y lugares de pie). Si lo hace, se marca en rojo, se lista en el panel y Guardar queda desactivado.
+- Temas: Claro (actual, por defecto), Cálido, Fresco, Noche, Bosque, Rosa, Loft, Nórdico, Atardecer y Océano; se guardan en el mismo JSON (`tema`, `floorColor`, `wallColor`).
+
 ## Uso diario (`E:\visualizador-agentes-diario`, 3000/8000)
 
 Dos copias independientes: la **diaria** (la que Washington usa todo el día en la PC y en el iPhone por Tailscale) y la de **desarrollo** (`E:\visualizador-agentes`, 3100/8100). En la diaria nunca se edita código: solo se actualiza con `actualizar-oficina.ps1`. `<project path>` queda de respaldo: no se borra, no se modifica y no se arranca.
@@ -284,8 +296,8 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 | `npm run lint` completo marca 10 errores de `react-hooks` (`set-state-in-effect`, `refs`) | Son previos y están en archivos de la vista clásica (`SettingsModal.tsx`, `BuildingTab.tsx`, `useSessions.ts`, `useWebSocketEvents.ts`); no se tocan. Los archivos de `/oficina` y de avisos pasan el lint |
 | Copia diaria: Next 16 pide `oficina/__next.oficina.__PAGE__.txt` (datos de navegación) y el export lo guarda como `oficina/__next.oficina/__PAGE__.txt` (404 en consola, navegación más lenta) | `app.servidor_frontend` traduce los puntos del segmento a carpetas |
 | Copia diaria: `detener-oficina.ps1` se cortaba en PowerShell 5.1 cuando `taskkill` avisaba de un proceso ya terminado con su árbol | `taskkill` se llama a través de `cmd` y ese aviso se ignora |
-| Copia diaria por Tailscale: aviso de React #418 en `/datos` | La página muestra la URL del backend en el HTML compilado (`localhost`) y en el iPhone es otra; React lo corrige al cargar. Pendiente: no mostrar esa URL en el HTML estático |
-| Al reiniciar el backend, los cerrados por proceso terminado se vuelven a fechar al momento del arranque ("Desaparece en 60 min" de nuevo) | Pendiente: conservar la hora original del cierre |
+| Copia diaria por Tailscale: aviso de React #418 en `/datos` | Resuelto: la URL del backend se calcula solo en el navegador (`useSyncExternalStore` con valor vacío en el servidor), así el HTML compilado y el del cliente coinciden |
+| Al reiniciar el backend, los cerrados por proceso terminado se vuelven a fechar al momento del arranque ("Desaparece en 60 min" de nuevo) | Resuelto: si el motor no vio vivo el proceso en esta ejecución (caso del reinicio), el cierre toma la hora del último evento; si lo vio vivo, la hora de la revisión que lo encontró muerto |
 | `/oficina` en `http://127.0.0.1:3100` no carga datos en desarrollo | Next bloquea `/_next/*` de desarrollo para orígenes fuera de `allowedDevOrigins`; usar `localhost:3100` (sin cambiar la configuración) |
 | El tiempo del hook depende de la carga de la PC: con Unity y Chrome abiertos, el mismo hook anterior pasó de ~180 a ~250 ms (8100 encendido) y de ~260 a ~320 ms (8100 apagado) | Se mide comparando la versión anterior y la nueva intercaladas; la detección del proceso suma ~5-10 ms |
 | Next.js 16.3 genera `frontend/AGENTS.md` y `frontend/CLAUDE.md` al arrancar | Se versionan (decisión 2026-10-09) para que `next dev` no los vuelva a dejar como cambios sueltos |
@@ -293,9 +305,20 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 | autoskills no permite elegir skills sueltas por línea de comandos; sin terminal interactiva instala todas las sugeridas | Washington las instaló con el selector interactivo; las de `frontend/` se movieron a la raíz (Windows pide administrador para enlaces simbólicos, se usaron uniones de directorio) |
 | Command Center con agentes al doble: solo caben 2×2 puestos por columna (antes 2×4) | Los demás se resumen en "+N más"; revisar si hace falta más capacidad |
 
+## Pendientes
+
+1. Escena propia: editor y temas (hecho el 2026-10-10); después, salas y paredes propias si hace falta.
+2. Aprobar o rechazar permisos (estado 13) desde la oficina y el celular, con hook de PermissionRequest y tiempo límite.
+3. Chatear por completo con el agente desde la oficina: primero investigar las funciones oficiales de Claude Code para usarlo a distancia; luego decidir si integrar o construir.
+4. Mejores voces para los avisos (acento latino o ecuatoriano); por ahora, voces de Google en Chrome (no Edge).
+5. VPS con dominio propio y https, para verla desde internet.
+6. Instalador que envía los eventos de cada máquina al VPS (el VPS no puede leer la laptop).
+7. Mac: ver en una sola cuenta los agentes de la Mac y de la laptop Alienware.
+8. App de iPhone con notificaciones push.
+9. Personajes propios en GLB con animaciones de Mixamo, y estilo final.
+10. Deuda técnica: `frontend/bun.lock` sin three, 6 vulnerabilidades de npm, 10 errores de lint de la vista clásica, 5 tests viejos que fallan.
+
 ## Próximos pasos
 
-1. Aprobación de Washington: reinstalar el hook y agregar `CLAUDE_OFFICE_PRINCIPAL=visualizador` (comandos en el resumen del 2026-10-10); decidir el arranque automático.
-2. Resolver los pendientes del motor de estados (errores de herramientas, `agent_id` de subagentes, tokens de transcripciones grandes, cuándo "te espera respuesta").
-3. Port de Agent Office 3D: prompt 3 (personajes GLB con Mixamo, editor de la distribución, prueba en el iPhone). Regenerar `frontend/bun.lock` donde haya bun. Buscar mejores voces o un sistema de lectura para los avisos.
-4. Avisos (sonido y notificación del sistema) y app móvil con notificaciones.
+1. Washington arma su oficina con el editor en la copia diaria.
+2. Siguiente de la lista de Pendientes: aprobar o rechazar permisos (estado 13) desde la oficina y el celular.

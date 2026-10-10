@@ -50,6 +50,7 @@ import { t } from "../textos";
 import { ENTRADA, PASILLO_SOFA, PUERTA } from "../comportamiento";
 import { MarcaCuenta } from "@/components/marca/Marca";
 import { duracion, recortar } from "@/components/oficina/logica";
+import { useEditor } from "../editor";
 import { useSettings } from "../settings";
 
 // ── Agent character (adapted from Agent Office 3D, MIT) ──
@@ -577,11 +578,15 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
     <group
       ref={group}
       position={[pos.current.x, 0, pos.current.z]}
+      // While editing the office the agents stay visible but do not react
+      // (the click goes on to the floor of the editor).
       onClick={(e) => {
+        if (useEditor.getState().activo) return;
         e.stopPropagation();
         select(agent.id);
       }}
       onPointerOver={(e) => {
+        if (useEditor.getState().activo) return;
         e.stopPropagation();
         hover(agent.id);
         document.body.style.cursor = "pointer";

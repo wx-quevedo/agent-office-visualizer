@@ -11,6 +11,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import { ACESFilmicToneMapping, SRGBColorSpace } from "three";
 import { useLayout } from "./distribucion";
+import { useEditor } from "./editor";
 import AgentAvatar from "./escena/AgentAvatar";
 import { capaEtiquetas } from "./escena/capaEtiquetas";
 import { setActiveSeats, setPlacedRects } from "./escena/collision";
@@ -61,6 +62,8 @@ export default function Escena3D({
   const hover = useOffice((s) => s.hover);
   const quality = useSettings((s) => s.quality);
   const shadows = useSettings((s) => s.shadows);
+  // Dragging a piece in the editor: the camera does not move.
+  const arrastrando = useEditor((s) => s.arrastrando) !== null;
   // Labels go into a fixed layer; agents are drawn once it exists.
   const [capaLista, setCapaLista] = useState(false);
   const capa = (el: HTMLDivElement | null) => {
@@ -122,6 +125,7 @@ export default function Escena3D({
         />
         <OrbitControls
           makeDefault
+          enabled={!arrastrando}
           target={[cx, 0.8, cz]}
           enablePan
           minZoom={8}

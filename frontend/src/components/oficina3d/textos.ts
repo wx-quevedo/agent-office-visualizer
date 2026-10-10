@@ -37,6 +37,31 @@ const TEXTOS = {
   "detalle.clic": "Clic para ver el detalle",
 
   "pantalla.titulo": "OFICINA DE AGENTES",
+
+  "barra.editar": "Editar oficina",
+  "editor.titulo": "Editar oficina",
+  "editor.ayuda":
+    "Elige un mueble y haz clic en el piso para agregarlo. Arrastra un mueble para moverlo (cuadrícula de 0,5 m).",
+  "editor.muebles": "Muebles",
+  "editor.seleccionado": "Mueble seleccionado",
+  "editor.ninguno": "Ninguno: haz clic en un mueble.",
+  "editor.rotar": "Rotar",
+  "editor.borrar": "Borrar",
+  "editor.deshacer": "Deshacer",
+  "editor.rehacer": "Rehacer",
+  "editor.tema": "Tema de piso y pared",
+  "editor.guardar": "Guardar",
+  "editor.guardando": "Guardando…",
+  "editor.cancelar": "Cancelar",
+  "editor.exportar": "Exportar JSON",
+  "editor.importar": "Importar JSON",
+  "editor.importarError": "El archivo no es una distribución válida.",
+  "editor.tapaCamino": "tapa un camino de los agentes",
+  "editor.tapaEscritorio": "tapa un escritorio de trabajo",
+  "editor.avisoBloqueo": "Mueve estos muebles para poder guardar:",
+  "editor.cantidad": "muebles agregados",
+  "editor.atajos":
+    "Atajos: R rota, Supr borra, Ctrl+Z deshace, Ctrl+Y rehace, Esc suelta el mueble elegido.",
 } as const;
 
 export type Clave = keyof typeof TEXTOS;
