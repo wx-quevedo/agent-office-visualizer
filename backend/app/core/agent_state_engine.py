@@ -58,6 +58,7 @@ STATE_NAMES: dict[int, str] = {
     18: "Inactivo contigo presente",
     19: "Descansando sin ti",
     20: "Regresa al trabajo",
+    21: "Cerrado",
 }
 
 # Waiting kind for each waiting state.
@@ -168,6 +169,8 @@ class Thresholds:
     prompt: float = 3
     return_: float = 5
     subagent_expiry: float = 1800
+    process_check: float = 30
+    no_pid_close: float = 24 * 3600
     exit_visible: float = 120
     session_max_age: float = 24 * 3600
 
@@ -184,6 +187,8 @@ class Thresholds:
             prompt=s.STATE_PROMPT_SECONDS,
             return_=s.STATE_RETURN_SECONDS,
             subagent_expiry=s.STATE_SUBAGENT_EXPIRY_SECONDS,
+            process_check=s.STATE_PROCESS_CHECK_SECONDS,
+            no_pid_close=s.STATE_NO_PID_CLOSE_HOURS * 3600,
             exit_visible=s.STATE_EXIT_VISIBLE_SECONDS,
             session_max_age=s.STATE_SESSION_MAX_AGE_HOURS * 3600,
         )
@@ -241,6 +246,9 @@ class Record:
     # Stop: whether Claude's last message asks the user something.
     question: bool | None = None
     question_text: str | None = None
+    # Claude Code process that owns the session (hook >= this project).
+    claude_pid: int | None = None
+    claude_pid_created: float | None = None
 
     @property
     def is_main(self) -> bool:
@@ -268,6 +276,12 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
             command = str(tool_input.get("pattern"))
         elif tool_input.get("url") or tool_input.get("query"):
             command = str(tool_input.get("url") or tool_input.get("query"))
+        elif isinstance(tool_input.get("questions"), list):
+            # AskUserQuestion: keep the first question's text.
+            questions = cast(list[Any], tool_input.get("questions"))
+            first: object = questions[0] if questions else None
+            if isinstance(first, dict):
+                command = str(cast(dict[str, Any], first).get("question") or "") or None
     text = (
         getattr(d, "prompt", None)
         or getattr(d, "error", None)
@@ -292,6 +306,8 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
         tool_agent_id=getattr(d, "tool_agent_id", None),
         is_interrupt=getattr(d, "is_interrupt", None),
         reports_failures=bool(d.reports_tool_failures),
+        claude_pid=d.claude_pid,
+        claude_pid_created=d.claude_pid_created,
     )
 
 
@@ -348,6 +364,11 @@ class _Derived:
     consecutive_errors: int = 0
     saw_error_signal: bool = False
     last_prompt_ts: datetime | None = None
+    # Latest Claude Code process seen for the session: (pid, creation time).
+    process: tuple[int, float | None] | None = None
+    # Explicit question still unanswered: a Stop that ends in "?" or an
+    # AskUserQuestion/ExitPlanMode cut short by an end/restart of the session.
+    question: Record | None = None
 
 
 # Main-agent events that close a pending permission request.
@@ -394,6 +415,11 @@ def derive(records: Iterable[Record]) -> _Derived:
 
         if et == EventType.USER_PROMPT_SUBMIT:
             dv.last_prompt_ts = rec.ts
+            dv.question = None
+        elif et == EventType.STOP:
+            dv.question = rec if rec.question else None
+        if rec.claude_pid:
+            dv.process = (rec.claude_pid, rec.claude_pid_created)
 
         # Subagents: SubagentStart without its SubagentStop.
         if et == EventType.SUBAGENT_START and rec.agent_id:
@@ -468,6 +494,10 @@ def derive(records: Iterable[Record]) -> _Derived:
                         del dv.pending_tools[key]
                         break
         if et in _CLEARS_PENDING:
+            if et in (EventType.SESSION_START, EventType.SESSION_END):
+                for pending in dv.pending_tools.values():
+                    if pending.tool_name in ASK_USER_TOOLS:
+                        dv.question = pending
             dv.pending_tools.clear()
 
         if et == EventType.PERMISSION_REQUEST or _is_permission_notification(rec):
@@ -506,6 +536,9 @@ class SessionLog:
     context_tokens: int | None = None
     context_window: int = 200_000
     token_file_size: int = -1
+    # Set when the registered Claude Code process is found gone.
+    closed_process_at: datetime | None = None
+    closed_pid: int | None = None
     _derived: _Derived | None = None
     # Memory for state 20 ("regresa al trabajo").
     prev_state: int | None = None
@@ -570,6 +603,33 @@ def active_subagents(dv: _Derived, now: datetime, th: Thresholds) -> dict[str, R
     }
 
 
+def closure_of(log: SessionLog, now: datetime, th: Thresholds) -> tuple[str, datetime] | None:
+    """Why and since when the session is closed, or None while it is open."""
+    dv = log.derived
+    if dv.end_ts is not None:
+        return "session_end", dv.end_ts
+    if log.closed_process_at is not None:
+        return "proceso_terminado", log.closed_process_at
+    if (
+        dv.process is None
+        and dv.last_ts is not None
+        and (now - dv.last_ts).total_seconds() >= th.no_pid_close
+    ):
+        return "sin_pid_antiguo", dv.last_ts + timedelta(seconds=th.no_pid_close)
+    return None
+
+
+def pending_question(dv: _Derived) -> str | None:
+    """Text of the explicit question still waiting for the user, if any."""
+    for rec in dv.pending_tools.values():
+        if rec.tool_name in ASK_USER_TOOLS:
+            return rec.command or rec.tool_name
+    if dv.question is not None:
+        q = dv.question
+        return q.question_text or q.command or q.tool_name
+    return None
+
+
 def compute_state(
     log: SessionLog, presence: Presence, now: datetime, th: Thresholds
 ) -> StateResult:
@@ -579,7 +639,13 @@ def compute_state(
     subagents = active_subagents(dv, now, th)
 
     if dv.end_ts is not None:
-        return StateResult(12, dv.end_ts)
+        # "Se va" briefly, then "Cerrado" (21).
+        if (now - dv.end_ts).total_seconds() < th.exit_visible:
+            return StateResult(12, dv.end_ts)
+        return StateResult(21, dv.end_ts + timedelta(seconds=th.exit_visible))
+    closure = closure_of(log, now, th)
+    if closure is not None:
+        return StateResult(21, closure[1])
 
     if dv.pending_permission is not None:
         perm = dv.pending_permission
@@ -626,7 +692,7 @@ def compute_state(
             },
         )
     else:
-        result = _state_from_last_main(dv.last_main, start, now, th)
+        result = _state_from_last_main(dv.last_main, start, now, th, dv.question)
 
     # Idle / rest: only when the agent is not waiting on anything.
     if result.wait is None and result.number != 12 and dv.last_ts is not None:
@@ -650,9 +716,27 @@ def _latest(pending: dict[str, Record]) -> Record | None:
 
 
 def _state_from_last_main(
-    last: Record | None, start: datetime, now: datetime, th: Thresholds
+    last: Record | None,
+    start: datetime,
+    now: datetime,
+    th: Thresholds,
+    question: Record | None = None,
 ) -> StateResult:
     if last is None or last.event_type == EventType.SESSION_START:
+        if last is not None and question is not None:
+            # Session reopened with its question still unanswered.
+            return StateResult(
+                14,
+                last.ts,
+                "tu_respuesta",
+                {
+                    "herramienta": question.tool_name,
+                    "comando": None,
+                    "desde": question.ts.isoformat(),
+                    "evento": "pregunta_pendiente",
+                    "mensaje": _short(question.question_text or question.command, 120),
+                },
+            )
         return StateResult(1, last.ts if last else start)
     et = last.event_type
     age = (now - last.ts).total_seconds()
@@ -696,16 +780,18 @@ class AgentStateEngine:
         thresholds: Thresholds | None = None,
         clock: Callable[[], datetime] | None = None,
         browsers_provider: Callable[[], int] | None = None,
+        process_alive: Callable[[int, float | None], bool | None] | None = None,
     ) -> None:
         self.th = thresholds or Thresholds()
         self.clock = clock or (lambda: datetime.now(UTC))
         self.browsers_provider = browsers_provider or (lambda: 0)
+        self.process_alive = process_alive or _default_process_alive
+        self._last_process_check: datetime | None = None
         self.sessions: dict[str, SessionLog] = {}
         self.started_at = self.clock()
         self._seq = 0
         self._browsers = 0
         self._last_browser_seen: datetime | None = None
-        self._last_prompt: datetime | None = None
         self._snapshot: dict[str, Any] | None = None
 
     # -- ingestion ---------------------------------------------------------
@@ -725,10 +811,14 @@ class AgentStateEngine:
             self._detect_question(rec, event, log)
         self._update_tokens(log, event, rec.ts)
         log.add(rec)
-        if rec.event_type == EventType.USER_PROMPT_SUBMIT and (
-            self._last_prompt is None or rec.ts > self._last_prompt
+        # A newer event (or a new Claude Code process) reopens a session that
+        # was closed because its process ended.
+        if log.closed_process_at is not None and (
+            rec.ts > log.closed_process_at
+            or (rec.claude_pid is not None and rec.claude_pid != log.closed_pid)
         ):
-            self._last_prompt = rec.ts
+            log.closed_process_at = None
+            log.closed_pid = None
         self._snapshot = None
 
     @staticmethod
@@ -784,11 +874,22 @@ class AgentStateEngine:
 
     # -- presence ------------------------------------------------------------
 
+    def _open_last_prompt(self, now: datetime) -> datetime | None:
+        """Latest UserPromptSubmit among sessions that are not closed."""
+        latest: datetime | None = None
+        for log in self.sessions.values():
+            ts = log.derived.last_prompt_ts
+            if ts is None or closure_of(log, now, self.th) is not None:
+                continue
+            if latest is None or ts > latest:
+                latest = ts
+        return latest
+
     def presence(self, now: datetime | None = None) -> Presence:
         now = now or self.clock()
         browsers = self._browsers
         window = self.th.presence_window
-        last_prompt = self._last_prompt
+        last_prompt = self._open_last_prompt(now)
         prompt_recent = last_prompt is not None and (now - last_prompt).total_seconds() < window
         if browsers > 0:
             reason = f"{browsers} navegador(es) conectado(s) al WebSocket"
@@ -819,6 +920,12 @@ class AgentStateEngine:
         if browsers > 0:
             self._last_browser_seen = now
         self._browsers = browsers
+        if (
+            self._last_process_check is None
+            or (now - self._last_process_check).total_seconds() >= self.th.process_check
+        ):
+            self._last_process_check = now
+            self.check_processes(now)
         presence = self.presence(now)
         agents: list[dict[str, Any]] = []
         for log in list(self.sessions.values()):
@@ -844,6 +951,8 @@ class AgentStateEngine:
                 "inactivo": self.th.idle,
                 "presencia": self.th.presence_window,
                 "descanso_tras_desconexion": self.th.rest_after_disconnect,
+                "revision_de_procesos": self.th.process_check,
+                "cierre_sin_pid": self.th.no_pid_close,
             },
             "agentes": agents,
         }
@@ -852,15 +961,32 @@ class AgentStateEngine:
     def snapshot(self) -> dict[str, Any]:
         return self.tick()
 
+    def check_processes(self, now: datetime | None = None) -> None:
+        """Close open sessions whose registered Claude Code process is gone."""
+        now = now or self.clock()
+        for log in self.sessions.values():
+            dv = log.derived
+            if dv.end_ts is not None or log.closed_process_at is not None or dv.process is None:
+                continue
+            pid, created = dv.process
+            try:
+                alive = self.process_alive(pid, created)
+            except Exception:
+                alive = None
+            if alive is False:
+                log.closed_process_at = now
+                log.closed_pid = pid
+
     def _visible(self, log: SessionLog, now: datetime) -> bool:
+        """Visible for ``session_max_age`` after its last event or its closure."""
         dv = log.derived
         if dv.last_ts is None:
             return False
-        if (now - dv.last_ts).total_seconds() > self.th.session_max_age:
-            return False
-        return not (
-            dv.end_ts is not None and (now - dv.end_ts).total_seconds() > self.th.exit_visible
-        )
+        anchor = dv.last_ts
+        closure = closure_of(log, now, self.th)
+        if closure is not None and closure[1] > anchor:
+            anchor = closure[1]
+        return (now - anchor).total_seconds() <= self.th.session_max_age
 
     def state_for(self, session_id: str, now: datetime | None = None) -> StateResult:
         """State of one session including the state-20 memory (for tests)."""
@@ -869,6 +995,12 @@ class AgentStateEngine:
 
     def _state_with_memory(self, log: SessionLog, presence: Presence, now: datetime) -> StateResult:
         base = compute_state(log, presence, now, self.th)
+        if log.prev_state == 21 and base.number not in (21, 12):
+            # Closed session reopened: "regresa al trabajo", then its state.
+            log.return_since = now
+            log.return_until = now + timedelta(seconds=self.th.return_)
+            log.prev_state = 20
+            return StateResult(20, now)
         if base.number == 19:
             if log.prev_state != 19:
                 log.resting_since = base.since
@@ -898,6 +1030,10 @@ class AgentStateEngine:
         subagents = active_subagents(dv, now, self.th)
         if current_tool is None and subagents:
             current_tool = "Task/Agent"
+        closure = closure_of(log, now, self.th)
+        if closure is not None:
+            current_tool = None
+            subagents = {}
         last = dv.last_record
         return {
             "agente": {
@@ -917,6 +1053,9 @@ class AgentStateEngine:
                 "hora": last.ts.isoformat() if last else None,
             },
             "subagentes_activos": len(subagents),
+            "pregunta_pendiente": pending_question(dv),
+            "cierre": {"motivo": closure[0], "desde": closure[1].isoformat()} if closure else None,
+            "proceso": {"pid": dv.process[0], "creado": dv.process[1]} if dv.process else None,
             "indicadores": self._indicators(log, now),
             "eventos_recientes": [
                 {
@@ -1004,7 +1143,7 @@ async def bootstrap_from_db(engine: AgentStateEngine) -> int:
     from app.db.models import EventRecord, SessionRecord
     from app.models.events import EventAdapter
 
-    cutoff = engine.clock() - timedelta(seconds=engine.th.session_max_age)
+    cutoff = engine.clock() - timedelta(seconds=engine.th.session_max_age + engine.th.no_pid_close)
     count = 0
     async with AsyncSessionLocal() as db:
         session_ids = (
@@ -1084,3 +1223,9 @@ def get_state_engine() -> AgentStateEngine:
 def override_state_engine(instance: AgentStateEngine | None) -> None:
     global _engine
     _engine = instance
+
+
+def _default_process_alive(pid: int, created: float | None) -> bool | None:
+    from app.core.process_check import process_alive
+
+    return process_alive(pid, created)

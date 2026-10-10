@@ -40,6 +40,9 @@ interface Agente {
   herramienta_actual: string | null;
   ultimo_evento: { tipo: string | null; hora: string | null };
   subagentes_activos: number;
+  pregunta_pendiente: string | null;
+  cierre: { motivo: string; desde: string } | null;
+  proceso: { pid: number; creado: number | null } | null;
   indicadores: Record<string, number | string | null>;
   eventos_recientes: EventoReciente[];
 }
@@ -126,6 +129,23 @@ function TablaAgente({ a, ahora }: { a: Agente; ahora: string }) {
             {hace(a.ultimo_evento.hora, ahora)})
           </Fila>
           <Fila nombre="Subagentes activos">{a.subagentes_activos}</Fila>
+          <Fila nombre="Pregunta pendiente">{valor(a.pregunta_pendiente)}</Fila>
+          <Fila nombre="Cierre">
+            {a.cierre
+              ? `${a.cierre.motivo} desde las ${hora(a.cierre.desde)} (${hace(a.cierre.desde, ahora)})`
+              : "—"}
+          </Fila>
+          <Fila nombre="Proceso de Claude Code">
+            {a.proceso
+              ? `PID ${a.proceso.pid}, creado ${
+                  a.proceso.creado
+                    ? new Date(a.proceso.creado * 1000).toLocaleString("es", {
+                        hour12: false,
+                      })
+                    : "—"
+                }`
+              : "—"}
+          </Fila>
           {INDICADORES.map(([clave, nombre]) => (
             <Fila key={clave} nombre={nombre}>
               {valor(a.indicadores[clave])}

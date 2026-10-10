@@ -106,8 +106,9 @@ def post(tool: str, at: float, tid: str) -> AnyEvent:
 # ---------------------------------------------------------------------------
 
 
-def test_catalog_has_twenty_states() -> None:
-    assert sorted(STATE_NAMES) == list(range(1, 21))
+def test_catalog_has_twenty_one_states() -> None:
+    assert sorted(STATE_NAMES) == list(range(1, 22))
+    assert STATE_NAMES[21] == "Cerrado"
 
 
 def test_1_llega(engine: AgentStateEngine, clock: FakeClock) -> None:
@@ -172,11 +173,16 @@ def test_12_se_va(engine: AgentStateEngine, clock: FakeClock) -> None:
     assert state_at(engine, clock, 6) == (12, None)
 
 
-def test_ended_session_disappears_after_exit_window(
-    engine: AgentStateEngine, clock: FakeClock
-) -> None:
-    feed(engine, start(0), ev("session_end", 5))
-    clock.at(5 + engine.th.exit_visible + 1)
+def test_21_cerrado_by_session_end_after_se_va(engine: AgentStateEngine, clock: FakeClock) -> None:
+    feed(engine, start(0), ev("session_end", 5, reason="prompt_input_exit"))
+    assert state_at(engine, clock, 6) == (12, None)
+    assert state_at(engine, clock, 5 + engine.th.exit_visible + 1) == (21, None)
+    agent = engine.tick()["agentes"][0]
+    assert agent["cierre"]["motivo"] == "session_end"
+    # Closed agents stay visible for 24 h.
+    clock.at(5 + 23 * 3600)
+    assert len(engine.tick()["agentes"]) == 1
+    clock.at(5 + 25 * 3600)
     assert engine.tick()["agentes"] == []
 
 
@@ -723,3 +729,157 @@ def test_tokens_from_tail_of_a_large_transcript(
     assert ind["tokens_contexto"] == 401_000
     assert ind["contexto_usado_pct"] == 40.1
     assert ind["tokens_motivo"] is None
+
+
+# ---------------------------------------------------------------------------
+# Closed sessions (21): process ended, pending question, reopening
+# ---------------------------------------------------------------------------
+
+
+class FakeProcesses:
+    """pid -> creation time of live processes."""
+
+    def __init__(self) -> None:
+        self.live: dict[int, float] = {}
+
+    def __call__(self, pid: int, created: float | None) -> bool | None:
+        if pid not in self.live:
+            return False
+        return created is None or abs(self.live[pid] - created) <= 1
+
+
+@pytest.fixture
+def procs() -> FakeProcesses:
+    return FakeProcesses()
+
+
+@pytest.fixture
+def pengine(clock: FakeClock, browsers: Browsers, procs: FakeProcesses) -> AgentStateEngine:
+    return AgentStateEngine(
+        Thresholds(), clock=clock, browsers_provider=browsers, process_alive=procs
+    )
+
+
+def pev(event_type: str, at: float, pid: int = 4242, created: float = 1000.0, **data: Any):
+    return ev(event_type, at, claude_pid=pid, claude_pid_created=created, **data)
+
+
+def test_21_cerrado_when_process_ends(
+    pengine: AgentStateEngine, clock: FakeClock, procs: FakeProcesses
+) -> None:
+    procs.live[4242] = 1000.0
+    feed(pengine, pev("session_start", 0), pev("user_prompt_submit", 1, prompt="x"))
+    assert state_at(pengine, clock, 10)[0] == 3
+    del procs.live[4242]  # Claude Code closed (VS Code closed, PC restarted...)
+    assert state_at(pengine, clock, 45) == (21, None)  # next 30 s check
+    agent = pengine.tick()["agentes"][0]
+    assert agent["cierre"]["motivo"] == "proceso_terminado"
+    assert agent["proceso"] == {"pid": 4242, "creado": 1000.0}
+
+
+def test_pending_question_is_kept_when_closed(
+    pengine: AgentStateEngine, clock: FakeClock, procs: FakeProcesses
+) -> None:
+    procs.live[4242] = 1000.0
+    feed(
+        pengine,
+        pev("session_start", 0),
+        pev("stop", 5, last_assistant_message="Encontré un duplicado. ¿Lo borro también?"),
+    )
+    assert state_at(pengine, clock, 6) == (14, "tu_respuesta")
+    del procs.live[4242]
+    assert state_at(pengine, clock, 40) == (21, None)  # closed: not waiting anymore
+    agent = pengine.tick()["agentes"][0]
+    assert agent["pregunta_pendiente"].endswith("¿Lo borro también?")
+    assert agent["espera"] is None
+
+
+def test_reopen_with_pending_question_goes_20_then_14(
+    pengine: AgentStateEngine, clock: FakeClock, procs: FakeProcesses
+) -> None:
+    procs.live[4242] = 1000.0
+    feed(pengine, pev("session_start", 0), pev("stop", 5, last_assistant_message="¿Sigo?"))
+    del procs.live[4242]
+    assert state_at(pengine, clock, 40) == (21, None)
+    # claude --resume: new process, same session id.
+    procs.live[5151] = 2000.0
+    feed(pengine, pev("session_start", 100, pid=5151, created=2000.0, source="resume"))
+    assert state_at(pengine, clock, 100.5) == (20, None)
+    assert state_at(pengine, clock, 107) == (14, "tu_respuesta")
+    # The user answers: the question is gone.
+    feed(pengine, pev("user_prompt_submit", 110, pid=5151, created=2000.0, prompt="sí"))
+    assert state_at(pengine, clock, 111) == (2, None)
+    assert pengine.tick()["agentes"][0]["pregunta_pendiente"] is None
+
+
+def test_reopen_without_question_goes_20_then_its_state(
+    pengine: AgentStateEngine, clock: FakeClock, procs: FakeProcesses
+) -> None:
+    procs.live[4242] = 1000.0
+    feed(pengine, pev("session_start", 0), pev("stop", 5, last_assistant_message="Listo."))
+    del procs.live[4242]
+    assert state_at(pengine, clock, 40) == (21, None)
+    procs.live[5151] = 2000.0
+    feed(pengine, pev("session_start", 100, pid=5151, created=2000.0, source="resume"))
+    assert state_at(pengine, clock, 101) == (20, None)
+    assert state_at(pengine, clock, 107) == (1, None)
+    assert pengine.tick()["agentes"][0]["cierre"] is None
+
+
+def test_reopen_after_session_end(
+    pengine: AgentStateEngine, clock: FakeClock, procs: FakeProcesses
+) -> None:
+    procs.live[4242] = 1000.0
+    feed(pengine, pev("session_start", 0), pev("session_end", 5, reason="other"))
+    assert state_at(pengine, clock, 200) == (21, None)
+    procs.live[6000] = 3000.0
+    feed(pengine, pev("session_start", 300, pid=6000, created=3000.0, source="resume"))
+    assert state_at(pengine, clock, 300.5) == (20, None)
+    assert state_at(pengine, clock, 307) == (1, None)
+
+
+def test_reused_pid_with_another_creation_time_is_closed(
+    pengine: AgentStateEngine, clock: FakeClock, procs: FakeProcesses
+) -> None:
+    procs.live[4242] = 1000.0
+    feed(pengine, pev("session_start", 0), pev("user_prompt_submit", 1, prompt="x"))
+    assert state_at(pengine, clock, 5)[0] == 3
+    procs.live[4242] = 9999.0  # Windows gave PID 4242 to another process
+    assert state_at(pengine, clock, 40) == (21, None)
+    assert pengine.tick()["agentes"][0]["cierre"]["motivo"] == "proceso_terminado"
+
+
+def test_unknown_process_state_does_not_close(clock: FakeClock, browsers: Browsers) -> None:
+    engine = AgentStateEngine(
+        Thresholds(), clock=clock, browsers_provider=browsers, process_alive=lambda p, c: None
+    )
+    feed(engine, pev("session_start", 0))
+    assert state_at(engine, clock, 40)[0] == 1
+
+
+def test_session_without_pid_closes_after_24h(pengine: AgentStateEngine, clock: FakeClock) -> None:
+    feed(pengine, start(0), ev("stop", 5, last_assistant_message="¿Lo borro también?"))
+    assert state_at(pengine, clock, 23 * 3600) == (14, "tu_respuesta")
+    assert state_at(pengine, clock, 5 + 24 * 3600 + 1) == (21, None)
+    agent = pengine.tick()["agentes"][0]
+    assert agent["cierre"]["motivo"] == "sin_pid_antiguo"
+    assert agent["pregunta_pendiente"] == "¿Lo borro también?"
+    # Visible 24 h after closing, then gone.
+    clock.at(5 + 47 * 3600)
+    assert len(pengine.tick()["agentes"]) == 1
+    clock.at(5 + 49 * 3600)
+    assert pengine.tick()["agentes"] == []
+
+
+def test_closed_sessions_do_not_count_for_presence(
+    pengine: AgentStateEngine, clock: FakeClock, browsers: Browsers, procs: FakeProcesses
+) -> None:
+    browsers.count = 0
+    procs.live[4242] = 1000.0
+    feed(pengine, pev("session_start", 0), pev("user_prompt_submit", 10, prompt="x"))
+    clock.at(20)
+    assert pengine.tick()["presencia"]["estado"] == "conectado"
+    del procs.live[4242]
+    clock.at(50)
+    pengine.tick()  # process check closes the session
+    assert pengine.tick()["presencia"]["estado"] == "desconectado"

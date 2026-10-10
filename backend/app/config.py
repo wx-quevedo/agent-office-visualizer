@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     STATE_RETURN_SECONDS: float = 5
     # A subagent without activity for this long is considered finished.
     STATE_SUBAGENT_EXPIRY_SECONDS: float = 1800
+    # How often to check that each session's Claude Code process still exists.
+    STATE_PROCESS_CHECK_SECONDS: float = 30
+    # Sessions without a known process (older hook) close after this long
+    # without events ("sin_pid_antiguo").
+    STATE_NO_PID_CLOSE_HOURS: float = 24
     # Ended sessions stay listed ("se va") this long; older sessions are dropped.
     STATE_EXIT_VISIBLE_SECONDS: float = 120
     STATE_SESSION_MAX_AGE_HOURS: float = 24

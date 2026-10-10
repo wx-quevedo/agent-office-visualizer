@@ -45,6 +45,7 @@ try:
     )
     from claude_office_hooks.debug_logger import debug_log
     from claude_office_hooks.event_mapper import NEW_EVENT_TYPES, map_event
+    from claude_office_hooks.process_info import find_claude_process
 
     # Derived from package metadata; fallback covers the uninstalled case (ARC-021).
     try:
@@ -232,6 +233,12 @@ try:
                     enabled=DEBUG,
                 )
             return
+
+        # Claude Code process that owns the session (PID + creation time, so a
+        # reused PID is not mistaken for it). None when it cannot be found.
+        proc = find_claude_process()
+        payload["data"]["claude_pid"] = proc[0] if proc else None
+        payload["data"]["claude_pid_created"] = proc[1] if proc else None
 
         debug_log(args.event_type, raw_data, payload, enabled=DEBUG)
         send_event(payload)

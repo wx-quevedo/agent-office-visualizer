@@ -2,7 +2,7 @@
 
 Versión 2026-10-09. Documento vivo: https://claude.ai/code/artifact/0a5288ae-d07f-4175-9545-26ecfe769d07
 
-El avatar tiene 20 estados en tres grupos, más indicadores de esfuerzo encima, cada uno ligado a un evento de Claude Code. Se definen por lo que pasa, no por el dibujo: el arte en pixel se reemplaza al final sin tocar la lógica.
+El avatar tiene 21 estados en tres grupos, más indicadores de esfuerzo encima, cada uno ligado a un evento de Claude Code. Se definen por lo que pasa, no por el dibujo: el arte en pixel se reemplaza al final sin tocar la lógica.
 
 ## Ciclo de trabajo
 
@@ -43,9 +43,10 @@ Los hooks no saben si estás frente a la PC, así que tu presencia se deduce: es
 | --- | --- | --- | --- |
 | 18 | Inactivo contigo presente | Toma café junto a su escritorio | Sin eventos por 5 min y tú conectado |
 | 19 | Descansando sin ti | Va a la sala: juega videojuegos, lee o duerme una siesta (rota entre actividades) | Sin eventos y tú desconectado por 10 min |
-| 20 | Regresa al trabajo | Camina de vuelta, se sienta y se estira para empezar | Abres la oficina o le envías un encargo (`UserPromptSubmit`) |
+| 20 | Regresa al trabajo | Camina de vuelta, se sienta y se estira para empezar | Abres la oficina o le envías un encargo (`UserPromptSubmit`), o se reabre su sesión cerrada (si tenía una pregunta sin responder, luego pasa a 14) |
+| 21 | Cerrado | Su escritorio queda vacío; la pregunta pendiente, si la hay, queda anotada | La sesión ya no existe: `SessionEnd` (después de 12 "Se va"), el proceso de Claude Code registrado ya no existe (revisión cada 30 s) o, si no se conoce el proceso, 24 h sin eventos |
 
-Si un agente te estaba esperando cuando te desconectaste, no descansa: se queda en su estado de espera para que lo veas primero al volver.
+Si un agente te estaba esperando cuando te desconectaste, no descansa: se queda en su estado de espera para que lo veas primero al volver. Si su sesión de Claude Code se cerró, pasa a 21 aunque tuviera una pregunta pendiente; la pregunta se guarda y vuelve a mostrarse (14) cuando se reabre la sesión.
 
 ## Indicadores de esfuerzo
 
@@ -78,3 +79,5 @@ No son estados: se dibujan encima de cualquier estado para mostrar cuánto y có
 | Cuándo un agente "te espera: respuesta" (14) | Solo con pregunta explícita: `AskUserQuestion` o `ExitPlanMode` pendiente, o el último mensaje del asistente termina en "?". Si no, `Stop` lleva a 11 y tras 5 min a 18 o 19 según la presencia | Un agente que solo terminó no debe quedar esperándote para siempre |
 | Descanso | 10 min desde la última señal tuya (último navegador visto o último encargo); un reinicio del backend lo atrasa | Se puede medir sin instalar nada más |
 | Subagentes colgados | Un subagente sin actividad por 30 min (configurable) se da por terminado | Sesiones cerradas a la fuerza no deben dejar subagentes eternos |
+| Agente cuya sesión de Claude Code se cerró | No está activo: pasa a 21 "Cerrado" aunque tenga una pregunta pendiente; la pregunta se guarda como dato | Una sesión cerrada no puede esperar a nadie |
+| Reabrir una sesión cerrada | Vuelve al trabajo (20) y, si su pregunta seguía sin respuesta, pasa a 14 | La pregunta sigue vigente cuando la sesión vuelve |

@@ -116,7 +116,7 @@ _api_key_holder: list[str] = [""]
 TIMEOUT = 0.25
 EXTRA_TIMEOUT = 0.25
 SEND_BUDGET = 0.25
-EXTRA_BUDGET = 0.1
+EXTRA_BUDGET = 0.08
 
 
 def get_api_key() -> str:

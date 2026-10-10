@@ -133,6 +133,8 @@ class EventData(BaseModel):
     tool_agent_type: str | None = None
     last_assistant_message: str | None = None
     reports_tool_failures: bool | None = None
+    claude_pid: int | None = None
+    claude_pid_created: float | None = None
 
 
 class Event(BaseModel):
@@ -224,6 +226,10 @@ class EventDataBase(BaseModel):
     # Set by hooks that map PostToolUseFailure: lets consumers tell "no
     # failures" apart from "the producer cannot report failures".
     reports_tool_failures: bool | None = None
+    # Claude Code process that owns the session: PID and creation time (Unix
+    # seconds), so a PID reused by Windows is not mistaken for it.
+    claude_pid: int | None = None
+    claude_pid_created: float | None = None
 
 
 class SessionEventData(EventDataBase):
