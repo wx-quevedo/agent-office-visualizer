@@ -7,6 +7,7 @@ import type {
   PuntoSofa,
 } from "./comportamiento";
 import type { EscritorioCerrado } from "./adaptador";
+import type { PuntoFila } from "./entornos/tipos";
 
 // ── Scene state of /oficina/3d (replaces the Agent Office 3D store) ──
 // Filled by the adapter from GET /api/v1/agents/state; the scene components
@@ -47,6 +48,8 @@ export interface AgentView {
   origen: "lugar" | "puerta";
   /** Resting (19): sofa seat or a standing spot nearby. */
   descanso: (PuntoSofa & { tipo: "sofa" | "cerca"; indice: number }) | null;
+  /** Spot in the queue at the counter (Sala de control, 13 and 14), or null. */
+  fila: PuntoFila | null;
   etiqueta: Etiqueta;
   /** Waiting for your permission (13). */
   permission: boolean;
@@ -75,6 +78,9 @@ interface OfficeState {
   selectedId: string | null;
   hoveredId: string | null;
   cameraMode: CameraMode;
+  /** You are present (presence of the engine): you sit at your desk. */
+  presente: boolean;
+  setPresente(v: boolean): void;
   /** Desks of closed agents (note with the question, or empty and kept). */
   cerrados: EscritorioCerrado[];
   /** Agents whose character already went out through the door. */
@@ -97,6 +103,10 @@ export const useOffice = create<OfficeState>()((set, get) => ({
   selectedId: null,
   hoveredId: null,
   cameraMode: "iso",
+  presente: false,
+  setPresente: (v) => {
+    if (get().presente !== v) set({ presente: v });
+  },
   cerrados: [],
   salidos: new Set<string>(),
   setCerrados: (list) => {

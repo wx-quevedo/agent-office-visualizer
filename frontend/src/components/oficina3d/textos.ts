@@ -37,6 +37,9 @@ const TEXTOS = {
   "detalle.clic": "Clic para ver el detalle",
 
   "pantalla.titulo": "OFICINA DE AGENTES",
+  "pantalla.nadie": "nadie",
+  "tuPuesto.letrero": "Tú",
+  "barra.entorno": "Entorno",
 
   "barra.editar": "Editar oficina",
   "editor.titulo": "Editar oficina",

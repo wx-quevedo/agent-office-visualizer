@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any, Literal
@@ -31,7 +32,8 @@ TIPOS_MUEBLE = ("plant", "desk", "sofa", "coffee", "meeting", "shelf", "lamp")
 LIMITE_X = 22.5
 LIMITE_Z = 15.5
 MAX_MUEBLES = 200
-MAX_BYTES = 64 * 1024
+MAX_BYTES = 128 * 1024
+MAX_ENTORNOS = 8
 _COLOR = r"^#[0-9a-fA-F]{6}$"
 
 _BACKEND_DIR = Path(__file__).resolve().parents[3]
@@ -48,11 +50,12 @@ class Mueble(BaseModel):
     ry: float = Field(ge=-7, le=7, allow_inf_nan=False)
 
 
-class Distribucion(BaseModel):
+class Disposicion(BaseModel):
+    """Furniture and colours of one environment."""
+
     # JSON keys keep the camelCase of the original layout format.
     model_config = ConfigDict(extra="forbid", populate_by_name=True, serialize_by_alias=True)
 
-    version: int = Field(default=1, ge=1, le=99)
     items: list[Mueble] = Field(default_factory=lambda: [], max_length=MAX_MUEBLES)
     floor_color: str | None = Field(default=None, pattern=_COLOR, alias="floorColor")
     wall_color: str | None = Field(default=None, pattern=_COLOR, alias="wallColor")
@@ -65,6 +68,26 @@ class Distribucion(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("hay muebles con el mismo id")
         return items
+
+
+class Distribucion(Disposicion):
+    """Whole layout: the top level is the Original environment's (compatible
+    with files saved before environments); ``entornos`` keeps every other
+    environment's layout and ``entorno`` is the active one."""
+
+    version: int = Field(default=1, ge=1, le=99)
+    entorno: str = Field(default="original", max_length=24, pattern=r"^[a-z]+$")
+    entornos: dict[str, Disposicion] = Field(default_factory=lambda: {})
+
+    @field_validator("entornos")
+    @classmethod
+    def _claves_validas(cls, entornos: dict[str, Disposicion]) -> dict[str, Disposicion]:
+        if len(entornos) > MAX_ENTORNOS:
+            raise ValueError(f"más de {MAX_ENTORNOS} entornos")
+        for clave in entornos:
+            if not re.fullmatch(r"[a-z]{1,24}", clave):
+                raise ValueError(f"clave de entorno no válida: {clave!r}")
+        return entornos
 
 
 def ruta_distribucion() -> Path:

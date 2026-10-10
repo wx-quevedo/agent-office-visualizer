@@ -268,7 +268,8 @@ export default function PixelPerson({
     const st = getState ? getState() : { sit: pose === "sit", moving };
     const sit = st.sit;
     const sofa = sit && st.pose === "sofa";
-    const brazo = sit && st.pose === "brazoAlzado";
+    // Arm up while seated or standing still (queue at the counter).
+    const brazo = st.pose === "brazoAlzado" && !st.moving;
     const working =
       sit && !sofa && (status === "working" || status === "collab");
     const thinking = sit && !sofa && status === "thinking";

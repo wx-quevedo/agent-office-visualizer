@@ -2,12 +2,13 @@ import { create } from "zustand";
 import { bloqueos, type Bloqueo } from "./caminos";
 import {
   distribucionActual,
+  distribucionCon,
   guardarDistribucion,
   useLayout,
   type Distribucion,
   type PlacedItem,
 } from "./distribucion";
-import { LIMITE_X, LIMITE_Z } from "./muebles";
+import { entornoActivo } from "./entornos/activo";
 import { temaPorClave } from "./temas";
 
 // ── Office editor (adapted from layoutStore of Agent Office 3D, MIT) ──
@@ -72,10 +73,8 @@ export const useEditor = create<EditorState>()((set, get) => {
     }));
     aplicar(f);
   };
-  const conItems = (items: PlacedItem[]): Foto => ({
-    ...distribucionActual(),
-    items,
-  });
+  // Changes always apply to the layout of the active environment.
+  const conItems = (items: PlacedItem[]): Foto => distribucionCon({ items });
 
   return {
     activo: false,
@@ -114,7 +113,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     async guardar() {
       const d = distribucionActual();
-      if (bloqueos(d.items).length > 0) {
+      if (bloqueos(useLayout.getState().items).length > 0) {
         set({
           mensaje:
             "Hay muebles que tapan un camino o un escritorio: muévelos antes de guardar.",
@@ -149,8 +148,8 @@ export const useEditor = create<EditorState>()((set, get) => {
       const it: PlacedItem = {
         id: nuevoId(),
         type,
-        x: ajustar(x, LIMITE_X),
-        z: ajustar(z, LIMITE_Z),
+        x: ajustar(x, entornoActivo().limites.x),
+        z: ajustar(z, entornoActivo().limites.z),
         ry: 0,
       };
       cambiar(conItems([...useLayout.getState().items, it]));
@@ -167,13 +166,15 @@ export const useEditor = create<EditorState>()((set, get) => {
     arrastrar(x, z) {
       const id = get().arrastrando;
       if (!id) return;
-      const items = useLayout
-        .getState()
-        .items.map((it) =>
-          it.id === id
-            ? { ...it, x: ajustar(x, LIMITE_X), z: ajustar(z, LIMITE_Z) }
-            : it,
-        );
+      const items = useLayout.getState().items.map((it) =>
+        it.id === id
+          ? {
+              ...it,
+              x: ajustar(x, entornoActivo().limites.x),
+              z: ajustar(z, entornoActivo().limites.z),
+            }
+          : it,
+      );
       aplicar(conItems(items)); // no history while dragging
     },
     terminarArrastre() {
@@ -218,15 +219,17 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
     aplicarTema(key) {
       const t = temaPorClave(key);
-      cambiar({
-        ...distribucionActual(),
-        tema: t.key,
-        floorColor: t.floor,
-        wallColor: t.wall,
-      });
+      cambiar(
+        distribucionCon({
+          tema: t.key,
+          floorColor: t.floor,
+          wallColor: t.wall,
+        }),
+      );
     },
     importar(d) {
-      cambiar({ ...d, version: 1 });
+      // Every environment's layout from the file; the active environment stays.
+      cambiar({ ...d, version: 1, entorno: useLayout.getState().entorno });
       set({
         seleccion: null,
         mensaje: "Distribución importada: revisa y presiona Guardar.",

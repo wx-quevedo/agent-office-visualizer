@@ -32,7 +32,7 @@ const DESKTOP = "#f2efe9"; // oq stol usti
 const ACCENT = "#4c8bf5"; // ko'k aksent
 
 // Barcha qutilar — BITTA birlik geometriya (scale bilan) + KESHLANGAN material.
-function Box({
+export function Box({
   p,
   s,
   c,
@@ -55,7 +55,7 @@ function Box({
   );
 }
 
-function Floor({
+export function Floor({
   x0,
   x1,
   z0,
@@ -82,7 +82,7 @@ function Floor({
 
 // Dekorativ gilam — poldan ozgina baland (z-fight yo'q), ikki qatlamli (chegara
 // + ichki rang). Yassi, shu bois agentlar ustidan bemalol yuradi (collision yo'q).
-function Rug({
+export function Rug({
   p,
   w,
   d,

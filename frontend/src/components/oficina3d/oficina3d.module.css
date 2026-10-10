@@ -68,6 +68,24 @@
   color: var(--negro);
 }
 
+.entorno {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--gris-oscuro);
+}
+
+.entorno select {
+  min-height: 40px;
+  border: 2px solid var(--negro);
+  background: var(--blanco);
+  color: var(--negro);
+  font: inherit;
+  font-weight: 600;
+  padding: 0 8px;
+}
+
 .acciones {
   display: flex;
   gap: 8px;
@@ -188,6 +206,14 @@
     gap: 0;
     padding: 4px 8px;
     font-size: 11px;
+  }
+
+  .entorno {
+    flex: 1 1 100%;
+  }
+
+  .entorno select {
+    flex: 1;
   }
 
   .acciones {

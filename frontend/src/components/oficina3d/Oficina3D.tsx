@@ -21,7 +21,14 @@ import {
   estadoInicial,
   type EstadoAdaptador,
 } from "./adaptador";
-import { cargarDistribucion } from "./distribucion";
+import {
+  cargarDistribucion,
+  distribucionActual,
+  guardarDistribucion,
+  useLayout,
+} from "./distribucion";
+import { activarEntorno, ENTORNOS } from "./entornos/activo";
+import type { ClaveEntorno } from "./entornos/tipos";
 import { useEditor } from "./editor";
 import EditorPanel from "./EditorPanel";
 import Escena3D from "./Escena3D";
@@ -73,10 +80,20 @@ export default function Oficina3D() {
     setAbrir(abrirAgente);
   }, [abrirAgente, setAbrir]);
 
-  // Layout from the repo (frontend/public/oficina3d/distribucion.json).
+  // Layout of this copy (environment, furniture, theme). Read again every
+  // 30 s (not while editing) so the PC and the iPhone show the same environment.
   useEffect(() => {
     void cargarDistribucion();
+    const id = setInterval(() => {
+      if (!useEditor.getState().activo) void cargarDistribucion();
+    }, 30000);
+    return () => clearInterval(id);
   }, []);
+
+  // Your desk: you sit there while the presence says you are connected.
+  useEffect(() => {
+    useOffice.getState().setPresente(datos?.presencia?.estado === "conectado");
+  }, [datos]);
 
   // Phones (< 700 px): low quality and no shadows by default.
   useEffect(() => {
@@ -99,15 +116,29 @@ export default function Oficina3D() {
   // Engine state → scene: behaviour per state, stable desks, walking in and
   // out through the door, closed desks (note or kept empty for one hour).
   const salidos = useOffice((st) => st.salidos);
+  const clave = useLayout((st) => st.entorno);
+  const ent = activarEntorno(clave);
+  const claveAnterior = useRef(clave);
   useEffect(() => {
     if (!datos) return;
     const office = useOffice.getState();
+    if (claveAnterior.current !== clave) {
+      // New environment: agents appear directly at their places (no walk from the door).
+      claveAnterior.current = clave;
+      memoria.current = estadoInicial();
+      office.olvidarSalidos([...office.salidos]);
+    }
     const r = adaptar(datos.agentes, memoria.current, Date.now(), salidos);
     memoria.current = r.estado;
     setAgents(r.vistas);
     office.setCerrados(r.cerrados);
     office.olvidarSalidos(r.reentradas);
-  }, [datos, salidos, setAgents]);
+  }, [datos, salidos, setAgents, clave]);
+
+  const cambiarEntorno = async (k: ClaveEntorno) => {
+    useLayout.getState().cambiarEntorno(k);
+    await guardarDistribucion(distribucionActual());
+  };
 
   const n = datos ? contar3d(datos.agentes) : null;
 
@@ -130,6 +161,22 @@ export default function Oficina3D() {
             <b>{n ? n.libres : "–"}</b> {t("barra.libres")}
           </span>
         </div>
+        <label className={s.entorno}>
+          <span>{t("barra.entorno")}</span>
+          <select
+            value={clave}
+            disabled={editando}
+            onChange={(e) =>
+              void cambiarEntorno(e.target.value as ClaveEntorno)
+            }
+          >
+            {ENTORNOS.map((e) => (
+              <option key={e.clave} value={e.clave}>
+                {e.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className={s.acciones}>
           <button
             type="button"
@@ -171,7 +218,10 @@ export default function Oficina3D() {
       <main className={s.lienzo}>
         {editando && <EditorPanel />}
         <Escena3D
-          zoom={encuadre.zoom ?? (angosta ? 10 : 20)}
+          zoom={
+            encuadre.zoom ??
+            (angosta ? Math.round((10 * 46) / ent.tamano.ancho) : ent.zoom)
+          }
           vertical={angosta}
           centro={encuadre.centro}
         />

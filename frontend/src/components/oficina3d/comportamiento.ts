@@ -7,10 +7,13 @@
  * monitor. The scene components only read the result.
  */
 
+import { entornoActivo } from "./entornos/activo";
+import type { PuntoSofa } from "./entornos/tipos";
 import type { AgentStatus } from "./store";
 
 /** Where the character goes. */
-export type Destino = "escritorio" | "pasear" | "sofa" | "salida";
+/** "fila": queueing at the counter of the environment (13 and 14 in Sala de control). */
+export type Destino = "escritorio" | "pasear" | "sofa" | "salida" | "fila";
 
 /** What the character does at its place. */
 export type Pose =
@@ -168,79 +171,42 @@ export function etiqueta(
 }
 
 // -- break room sofa ------------------------------------------------------------------
+// The places come from the active environment (entornos/); the Original ones
+// are re-exported here for compatibility.
 
-export interface PuntoSofa {
-  /** Where the character sits (or stands). */
-  x: number;
-  z: number;
-  /** Facing (rotation.y of the character). */
-  ry: number;
-  /** Approach point in front of the seat, reachable on foot. */
-  ax: number;
-  az: number;
-}
-
-/**
- * The two sofas of the break room (OfficeDecor: against the far wall at
- * x = -1.8, z = 11.9 and 14.4, facing +x towards the camera): two seats each.
- * The approach point is in front of each seat.
- */
-export const ASIENTOS_SOFA: PuntoSofa[] = [11.35, 12.45, 13.85, 14.95].map(
-  (z) => ({ x: -1.7, z, ry: -Math.PI / 2, ax: -0.75, az: z }),
-);
-
-/** Corridor point between the door side and the sofas (avoids the coffee table). */
-export const PASILLO_SOFA = { x: -0.75, z: 15.2 };
-
-/** Standing spots near the sofas for agents that found no seat; they face the sofas. */
-export const LUGARES_CERCA: PuntoSofa[] = [
-  [2.4, 12.0],
-  [2.6, 14.2],
-  [3.8, 11.2],
-  [4.0, 13.2],
-  [3.6, 15.0],
-  [5.2, 12.0],
-  [5.4, 14.2],
-  [1.8, 10.4],
-].map(([x, z]) => ({
-  x,
-  z,
-  ry: Math.atan2(-(-1.7 - x), -(13.1 - z)),
-  ax: x,
-  az: z,
-}));
+export type { PuntoSofa } from "./entornos/tipos";
+export {
+  ASIENTOS_SOFA,
+  ENTRADA,
+  LUGARES_CERCA,
+  PASILLO_SOFA,
+  PUERTA,
+} from "./entornos/original";
 
 export type LugarDescanso = { tipo: "sofa" | "cerca"; indice: number };
 
 /**
  * Resting agents (19), ordered by desk so the assignment is stable: the first
- * ones get a sofa seat, the rest stand nearby.
+ * ones get a sofa seat of the active environment, the rest stand nearby.
  */
 export function asignarDescanso(
   descansan: Array<{ id: string; seatIndex: number }>,
 ): Record<string, LugarDescanso> {
+  const { asientos, cerca } = entornoActivo().descanso;
   const orden = [...descansan].sort(
     (a, b) => a.seatIndex - b.seatIndex || a.id.localeCompare(b.id),
   );
   const out: Record<string, LugarDescanso> = {};
   orden.forEach((a, i) => {
     out[a.id] =
-      i < ASIENTOS_SOFA.length
+      i < asientos.length
         ? { tipo: "sofa", indice: i }
-        : {
-            tipo: "cerca",
-            indice: (i - ASIENTOS_SOFA.length) % LUGARES_CERCA.length,
-          };
+        : { tipo: "cerca", indice: (i - asientos.length) % cerca.length };
   });
   return out;
 }
 
 export function puntoDescanso(l: LugarDescanso): PuntoSofa {
-  return l.tipo === "sofa" ? ASIENTOS_SOFA[l.indice] : LUGARES_CERCA[l.indice];
+  const { asientos, cerca } = entornoActivo().descanso;
+  return l.tipo === "sofa" ? asientos[l.indice] : cerca[l.indice];
 }
-
-// -- entrance -------------------------------------------------------------------------
-
-/** Entrance door on the west wall (OfficeDecor draws it) and the point inside it. */
-export const PUERTA = { x: -22.55, z: 4 };
-export const ENTRADA = { x: -21.2, z: 4 };

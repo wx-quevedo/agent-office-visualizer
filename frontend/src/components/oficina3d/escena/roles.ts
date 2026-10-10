@@ -1,3 +1,6 @@
+import { entornoActivo } from "../entornos/activo";
+import { sitPoint as sitPointEntorno, type Puesto } from "../entornos/tipos";
+
 // ── Rol presetlari + Pixel Agents personaj palitralari ───────
 // Pixel Agents 6 personajini (JIK-A-4 Metro City) chuqur o'rganib,
 // har birini voxel/blokli chibi 3D personaj sifatida qayta yaratamiz.
@@ -169,51 +172,22 @@ export function characterFor(
   };
 }
 
-export interface Seat {
-  x: number;
-  z: number;
-  ry: number;
+// Desks come from the active environment (entornos/): the Original ones are
+// the 10 desks of Agent Office 3D; other environments grow in their own way.
+export type Seat = Puesto;
+
+/** Desks always drawn in the active environment. */
+export function cantidadPuestosBase(): number {
+  return entornoActivo().puestosBase;
 }
 
-// Ish joylari — hamma markazga qaraydi.
-//  • 1-6: asosiy ikki ustun (chap/o'ng, x=±5.5).
-//  • 7-10: markazdagi qo'shimcha stollar (x=±13) — ofis to'ladi (Variant B).
-export const SEATS: Seat[] = [
-  { x: -5.5, z: -3.2, ry: -Math.PI / 2 },
-  { x: -5.5, z: 0, ry: -Math.PI / 2 },
-  { x: -5.5, z: 3.2, ry: -Math.PI / 2 },
-  { x: 5.5, z: -3.2, ry: Math.PI / 2 },
-  { x: 5.5, z: 0, ry: Math.PI / 2 },
-  { x: 5.5, z: 3.2, ry: Math.PI / 2 },
-  // Qo'shimcha stollar (avval "bo'sh stol" edi — endi overflow agentlar shu yerda)
-  { x: -13, z: -3, ry: -Math.PI / 2 },
-  { x: -13, z: 3, ry: -Math.PI / 2 },
-  { x: 13, z: -3, ry: Math.PI / 2 },
-  { x: 13, z: 3, ry: Math.PI / 2 },
-];
-
-/** O'rindiq soni — dinamik (SEATS uzunligidan). */
-export const SEAT_COUNT = SEATS.length;
-
-/** Indeks bo'yicha o'rindiq. SEATS'dan tashqari (juda ko'p agent) — ustma-ust
- *  bo'lmasin uchun markaziy ochiq maydonda neat qator generatsiya qilinadi. */
+/** Desk of position `index` in the active environment (grows without overlapping). */
 export function seatFor(index: number): Seat {
-  if (index >= 0 && index < SEATS.length) return SEATS[index];
-  const o = index - SEATS.length;
-  const cols = 5;
-  const col = o % cols;
-  const row = Math.floor(o / cols);
-  return { x: -4.4 + col * 2.2, z: -5.2 - row * 2.0, ry: Math.PI };
+  return entornoActivo().puesto(index);
 }
 
-/** Personaj o'tirish nuqtasi (stul markazi, yo'nalishga mos) — Workstation
- *  stuli bilan bir xil formula: (0.72·sin(ry), 0.72·cos(ry)) siljish. */
-export function sitPoint(seat: Seat): { x: number; z: number } {
-  return {
-    x: seat.x + 0.72 * Math.sin(seat.ry),
-    z: seat.z + 0.72 * Math.cos(seat.ry),
-  };
-}
+/** Chair point of a desk (same formula as the Workstation chair). */
+export const sitPoint = sitPointEntorno;
 
 export const STATUS_COLOR: Record<string, string> = {
   idle: "#8e8e93",

@@ -24,9 +24,24 @@ import {
   puntoDescanso,
   type Comportamiento,
 } from "./comportamiento";
+import { entornoActivo } from "./entornos/activo";
 import type { AgentView, SubagentView } from "./store";
 
 export { comportamiento } from "./comportamiento";
+
+/**
+ * Queue at the counter: the agents waiting for you, the one waiting longest
+ * first (closest to your desk); ties by session id. Returns id → position.
+ */
+export function ordenarFila(
+  esperan: Array<{ id: string; desde: string }>,
+): Record<string, number> {
+  const orden = [...esperan].sort((a, b) => {
+    const d = Date.parse(a.desde) - Date.parse(b.desde);
+    return d !== 0 && !Number.isNaN(d) ? d : a.id.localeCompare(b.id);
+  });
+  return Object.fromEntries(orden.map((a, i) => [a.id, i]));
+}
 
 /**
  * Stable desks: an agent keeps its desk while it exists; a new agent takes the
@@ -135,6 +150,16 @@ export function adaptar(
     .filter((id) => conPuesto.has(id));
   const puestos = asignarPuestos(previo.puestos, ids);
 
+  // Environments with a counter: who waits for you queues there.
+  const mostrador = entornoActivo().mostrador;
+  const fila = mostrador
+    ? ordenarFila(
+        escena
+          .filter((x) => x.c.espera !== null)
+          .map((x) => ({ id: x.a.agente.session_id, desde: x.a.estado.desde })),
+      )
+    : {};
+
   const descanso = asignarDescanso(
     escena
       .filter((x) => x.c.destino === "sofa")
@@ -162,7 +187,9 @@ export function adaptar(
       cuenta: a.agente.cuenta,
       seatIndex: puestos[id],
       status: c.status,
-      destino: c.destino,
+      destino: mostrador && fila[id] !== undefined ? "fila" : c.destino,
+      fila:
+        mostrador && fila[id] !== undefined ? mostrador.fila(fila[id]) : null,
       pose: c.pose,
       monitor: c.monitor,
       origen,

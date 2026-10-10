@@ -1,23 +1,25 @@
 /**
  * Placed furniture must not block the agents' paths or the work desks.
- * Pure logic, tested in tests/oficina3d-editor.test.ts.
+ * Pure logic, tested in tests/oficina3d-editor.test.ts and tests/entornos.test.ts.
  *
- * Protected paths: every edge of the navigation graph (nav.ts), the last step
- * from each desk chair to its graph node, the entrance (door → inside → graph),
- * and the break room (corridor, sofa approach points, standing spots).
- * Protected zones: each desk and its chair.
+ * Original environment: every edge of its hand-made graph, the last step from
+ * each desk chair to its node, the entrance and the break room are protected.
+ * Grid environments (Puente de mando, Sala de control...): the routes the
+ * agents really use are protected — from the entrance to every base desk, to
+ * your desk, to the break room seats and standing spots, and to the queue.
+ * Protected zones: each desk and its chair, and your desk.
  */
 
+import { entornoActivo } from "./entornos/activo";
 import {
-  ASIENTOS_SOFA,
-  ENTRADA,
-  LUGARES_CERCA,
-  PASILLO_SOFA,
-  PUERTA,
-} from "./comportamiento";
+  rectPuesto,
+  sitPoint,
+  type Entorno,
+  type Rect,
+  type WP,
+} from "./entornos/tipos";
 import type { PlacedItem } from "./distribucion";
-import { EDGES, nearestNode, NODES, type WP } from "./escena/nav";
-import { SEAT_COUNT, seatFor, sitPoint } from "./escena/roles";
+import { EDGES, nearestNode, NODES, pathBetween } from "./escena/nav";
 import { huella } from "./muebles";
 
 /** Room an agent needs around a path (its radius plus a margin). */
@@ -25,57 +27,82 @@ const MARGEN = 0.22;
 const PASO = 0.1;
 
 type Segmento = [WP, WP];
-interface Rect {
-  x0: number;
-  x1: number;
-  z0: number;
-  z1: number;
+
+function base(e: Entorno) {
+  return Array.from({ length: e.puestosBase }, (_, i) => e.puesto(i));
 }
 
-function segmentosProtegidos(): Segmento[] {
+function segmentosOriginal(e: Entorno): Segmento[] {
   const s: Segmento[] = EDGES.map(([a, b]) => [NODES[a], NODES[b]]);
-  for (let i = 0; i < SEAT_COUNT; i++) {
-    const p = sitPoint(seatFor(i));
+  for (const p of base(e).map(sitPoint))
     s.push([p, NODES[nearestNode(p.x, p.z)]]);
-  }
   s.push(
-    [PUERTA, ENTRADA],
-    [ENTRADA, NODES[nearestNode(ENTRADA.x, ENTRADA.z)]],
+    [e.puerta, e.entrada],
+    [e.entrada, NODES[nearestNode(e.entrada.x, e.entrada.z)]],
   );
-  const sala = NODES.lounge_i;
+  const sala = NODES[e.descanso.nodo];
   if (sala) {
-    s.push([sala, PASILLO_SOFA]);
-    for (const a of ASIENTOS_SOFA) s.push([PASILLO_SOFA, { x: a.ax, z: a.az }]);
-    for (const c of LUGARES_CERCA) s.push([sala, { x: c.x, z: c.z }]);
+    const pasillo = e.descanso.pasillo ?? sala;
+    s.push([sala, pasillo]);
+    for (const a of e.descanso.asientos)
+      s.push([pasillo, { x: a.ax, z: a.az }]);
+    for (const c of e.descanso.cerca) s.push([sala, { x: c.x, z: c.z }]);
   }
   return s;
 }
 
-function zonasProtegidas(): Rect[] {
+/** Route on the graph from the entrance to a point, as segments. */
+function ruta(e: Entorno, destino: WP): Segmento[] {
+  const nodos = pathBetween(
+    nearestNode(e.entrada.x, e.entrada.z),
+    nearestNode(destino.x, destino.z),
+  );
+  const puntos = [e.puerta, e.entrada, ...nodos, destino];
+  const out: Segmento[] = [];
+  for (let i = 1; i < puntos.length; i++) out.push([puntos[i - 1], puntos[i]]);
+  return out;
+}
+
+function segmentosRutas(e: Entorno): Segmento[] {
+  const destinos: WP[] = [
+    ...base(e).map(sitPoint),
+    sitPoint(e.tuPuesto),
+    ...e.descanso.asientos.map((a) => ({ x: a.ax, z: a.az })),
+    ...e.descanso.cerca,
+  ];
+  if (e.mostrador)
+    for (let i = 0; i < 9; i++) destinos.push(e.mostrador.fila(i));
+  return destinos.flatMap((d) => ruta(e, d));
+}
+
+function zonasProtegidas(e: Entorno): Rect[] {
   const z: Rect[] = [];
-  for (let i = 0; i < SEAT_COUNT; i++) {
-    const seat = seatFor(i);
-    const hx =
-      Math.abs(0.75 * Math.cos(seat.ry)) + Math.abs(0.4 * Math.sin(seat.ry));
-    const hz =
-      Math.abs(0.75 * Math.sin(seat.ry)) + Math.abs(0.4 * Math.cos(seat.ry));
-    z.push({
-      x0: seat.x - hx,
-      x1: seat.x + hx,
-      z0: seat.z - hz,
-      z1: seat.z + hz,
-    });
-    const p = sitPoint(seat);
-    z.push({ x0: p.x - 0.4, x1: p.x + 0.4, z0: p.z - 0.4, z1: p.z + 0.4 });
+  for (const p of base(e)) {
+    z.push(rectPuesto(p));
+    const s = sitPoint(p);
+    z.push({ x0: s.x - 0.4, x1: s.x + 0.4, z0: s.z - 0.4, z1: s.z + 0.4 });
   }
+  const t = e.tuPuesto;
+  z.push({ x0: t.x - 1.1, x1: t.x + 1.1, z0: t.z - 0.55, z1: t.z + 0.55 });
+  const s = sitPoint(t);
+  z.push({ x0: s.x - 0.45, x1: s.x + 0.45, z0: s.z - 0.45, z1: s.z + 0.45 });
   return z;
 }
 
-// The protected geometry does not change at runtime: computed once.
-let cache: { segmentos: Segmento[]; zonas: Rect[] } | null = null;
+// The protected geometry depends only on the environment: computed once per environment.
+const cache = new Map<string, { segmentos: Segmento[]; zonas: Rect[] }>();
 function geometria() {
-  cache ??= { segmentos: segmentosProtegidos(), zonas: zonasProtegidas() };
-  return cache;
+  const e = entornoActivo();
+  let g = cache.get(e.clave);
+  if (!g) {
+    g = {
+      segmentos:
+        e.clave === "original" ? segmentosOriginal(e) : segmentosRutas(e),
+      zonas: zonasProtegidas(e),
+    };
+    cache.set(e.clave, g);
+  }
+  return g;
 }
 
 function rectDe(it: PlacedItem, margen: number): Rect {
@@ -113,7 +140,7 @@ export interface Bloqueo {
   motivo: MotivoBloqueo;
 }
 
-/** Pieces that block a path or a desk (empty: the layout can be saved). */
+/** Pieces that block a path or a desk of the active environment (empty: it can be saved). */
 export function bloqueos(items: PlacedItem[]): Bloqueo[] {
   const { segmentos, zonas } = geometria();
   const out: Bloqueo[] = [];

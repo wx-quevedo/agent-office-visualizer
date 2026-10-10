@@ -32,7 +32,11 @@ const eslintConfig = defineConfig([
   // variation on mount. Those are the normal R3F patterns, which the React
   // Compiler rules flag; they stay off only for the scene files.
   {
-    files: ["src/components/oficina3d/escena/**", "src/components/oficina3d/Escena3D.tsx"],
+    files: [
+      "src/components/oficina3d/escena/**",
+      "src/components/oficina3d/entornos/decoracion.tsx",
+      "src/components/oficina3d/Escena3D.tsx",
+    ],
     rules: {
       "react-hooks/refs": "off",
       "react-hooks/immutability": "off",

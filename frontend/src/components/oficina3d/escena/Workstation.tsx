@@ -270,6 +270,89 @@ const SAND_M = basicMat("#e0b04a", { toneMapped: false });
 const BAR_BG_M = basicMat("#ffffff", { toneMapped: false });
 const BAR_FG_M = basicMat("#111111", { toneMapped: false });
 const NOTA_M = stdMat("#fbfaf4", { roughness: 0.8 });
+const LUZ_M = basicMat("#4c8bf5", {
+  transparent: true,
+  opacity: 0.9,
+  toneMapped: false,
+});
+const HALO_M = basicMat("#4c8bf5", {
+  transparent: true,
+  opacity: 0.22,
+  toneMapped: false,
+});
+
+/** Project name on the monitor side of the desk, facing away from the agent. */
+function PlacaNombre({ texto }: { texto: string }) {
+  const tex = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 112;
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => {
+    const ctx = (tex.image as HTMLCanvasElement).getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 512, 112);
+    ctx.fillStyle = "#111111";
+    ctx.fillRect(0, 0, 512, 8);
+    ctx.font = "bold 54px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(fitText(ctx, texto, 488), 256, 78);
+    tex.needsUpdate = true;
+  }, [tex, texto]);
+  useEffect(() => () => tex.dispose(), [tex]);
+  return (
+    <group position={[0, DESK_TOP + 0.13, -0.405]} rotation={[0, Math.PI, 0]}>
+      <B s={[0.82, 0.2, 0.02]} m={DESK_EDGE_M} cast={false} />
+      <mesh position={[0, 0, 0.012]}>
+        <planeGeometry args={[0.78, 0.17]} />
+        <meshBasicMaterial map={tex} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Soft blue light along the desk edge and on the floor around it. */
+function BordeLuz() {
+  return (
+    <group>
+      <B
+        p={[0, DESK_TOP + 0.035, 0.41]}
+        s={[1.52, 0.025, 0.02]}
+        m={LUZ_M}
+        cast={false}
+      />
+      <B
+        p={[0, DESK_TOP + 0.035, -0.41]}
+        s={[1.52, 0.025, 0.02]}
+        m={LUZ_M}
+        cast={false}
+      />
+      <B
+        p={[0.76, DESK_TOP + 0.035, 0]}
+        s={[0.02, 0.025, 0.82]}
+        m={LUZ_M}
+        cast={false}
+      />
+      <B
+        p={[-0.76, DESK_TOP + 0.035, 0]}
+        s={[0.02, 0.025, 0.82]}
+        m={LUZ_M}
+        cast={false}
+      />
+      <mesh
+        position={[0, 0.015, 0.2]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        material={HALO_M}
+      >
+        <circleGeometry args={[1.35, 40]} />
+      </mesh>
+    </group>
+  );
+}
 const LINEA_M = basicMat("#555555");
 
 /** 15 — waits for a program: an hourglass that turns over slowly. */
@@ -406,11 +489,20 @@ function Workstation({
   seatIndex,
   agent,
   cerrado,
+  placa,
+  resaltado = false,
+  sillaGirada = false,
 }: {
   seatIndex: number;
   agent?: AgentView;
   /** Desk of a closed agent (21): a note when it left a question. */
   cerrado?: EscritorioCerrado;
+  /** Project name on a plate at the monitor side (environments with nameplates). */
+  placa?: string;
+  /** Soft blue light on the desk edge: the agent waits for you (Puente de mando). */
+  resaltado?: boolean;
+  /** The agent left its desk to queue at the counter: chair turned. */
+  sillaGirada?: boolean;
 }) {
   const seat = seatFor(seatIndex);
   const select = useOffice((s) => s.select);
@@ -487,6 +579,8 @@ function Workstation({
         />
       </group>
 
+      {placa && <PlacaNombre texto={placa} />}
+      {resaltado && <BordeLuz />}
       {/* 15/16: drawn badge over the monitor */}
       {agent && <DistintivoMonitor tipo={agent.monitor} />}
       {/* 21 with a pending question: paper note */}
@@ -563,7 +657,7 @@ function Workstation({
       )}
 
       {/* Zamonaviy ergonomik kursi (5-yulduzli baza) */}
-      <group position={[0, 0, 0.62]}>
+      <group position={[0, 0, 0.62]} rotation={[0, sillaGirada ? 0.9 : 0, 0]}>
         <B p={[0, 0.46, 0]} s={[0.48, 0.07, 0.48]} m={CHAIR_M} />
         <B p={[0, 0.74, 0.22]} s={[0.46, 0.5, 0.06]} m={CHAIR_M} />
         {/* qo'l tayanchlar */}

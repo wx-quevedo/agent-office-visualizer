@@ -16,10 +16,11 @@ import AgentAvatar from "./escena/AgentAvatar";
 import { capaEtiquetas } from "./escena/capaEtiquetas";
 import { setActiveSeats, setPlacedRects } from "./escena/collision";
 import { footprint } from "./escena/furniture";
-import OfficeDecor from "./escena/OfficeDecor";
 import PlacedFurniture from "./escena/PlacedFurniture";
 import Room from "./escena/Room";
-import { SEAT_COUNT } from "./escena/roles";
+import { cantidadPuestosBase } from "./escena/roles";
+import { activarEntorno } from "./entornos/activo";
+import { DecoracionEntorno, PuestoUsuario } from "./entornos/decoracion";
 import { updateFrustum } from "./escena/visibility";
 import Workstation from "./escena/Workstation";
 import { dprFor, shadowEvery, useSettings } from "./settings";
@@ -59,6 +60,11 @@ export default function Escena3D({
   const order = useOffice((s) => s.order);
   const agents = useOffice((s) => s.agents);
   const cerrados = useOffice((s) => s.cerrados);
+  const presente = useOffice((s) => s.presente);
+  // Active environment (from the saved layout): its building, desks, paths.
+  const clave = useLayout((s) => s.entorno);
+  const ent = activarEntorno(clave);
+  const SEAT_COUNT = cantidadPuestosBase();
   const hover = useOffice((s) => s.hover);
   const quality = useSettings((s) => s.quality);
   const shadows = useSettings((s) => s.shadows);
@@ -82,7 +88,7 @@ export default function Escena3D({
       .filter((i): i is number => typeof i === "number" && i >= SEAT_COUNT);
     setActiveSeats([...base, ...overflow]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seatKey]);
+  }, [seatKey, clave]);
 
   // Layout furniture collision (characters do not walk through it).
   const placed = useLayout((s) => s.items);
@@ -99,6 +105,17 @@ export default function Escena3D({
       }),
     );
   }, [placed]);
+
+  // Desk details of the environment: project nameplate, light while the
+  // agent waits for you, chair turned while it queues at the counter.
+  const extrasPuesto = (a: (typeof agents)[string] | undefined) =>
+    a
+      ? {
+          placa: ent.placaNombre ? a.folderName : undefined,
+          resaltado: ent.resaltarEspera && (a.permission || a.question),
+          sillaGirada: a.destino === "fila",
+        }
+      : {};
 
   return (
     <div style={{ position: "absolute", inset: 0 }}>
@@ -133,52 +150,59 @@ export default function Escena3D({
           maxPolarAngle={Math.PI * 0.44}
           minPolarAngle={Math.PI * 0.18}
         />
-        <Room mode="iso" />
-        <OfficeDecor />
-        <PlacedFurniture />
-        {/* The 10 main desks are always there (lit when used). */}
-        {Array.from({ length: SEAT_COUNT }, (_, i) => {
-          const occ = order
-            .map((id) => agents[id])
-            .find((a) => a && a.seatIndex === i);
-          const cerrado = occ
-            ? undefined
-            : cerrados.find((c) => c.seatIndex === i);
-          return (
-            <Workstation
-              key={`seat-${i}`}
-              seatIndex={i}
-              agent={occ}
-              cerrado={cerrado}
-            />
-          );
-        })}
-        {/* Overflow agents (11+) bring their own desk. */}
-        {order
-          .map((id) => agents[id])
-          .filter((a) => a && a.seatIndex >= SEAT_COUNT)
-          .map((a) => (
-            <Workstation
-              key={`ov-${a!.id}`}
-              seatIndex={a!.seatIndex}
-              agent={a!}
-            />
-          ))}
-        {/* Overflow desks of closed agents (note or kept empty). */}
-        {cerrados
-          .filter((c) => c.seatIndex >= SEAT_COUNT)
-          .map((c) => (
-            <Workstation
-              key={`ovc-${c.sessionId}`}
-              seatIndex={c.seatIndex}
-              cerrado={c}
-            />
-          ))}
-        {capaLista &&
-          order.map((id) => {
-            const a = agents[id];
-            return a ? <AgentAvatar key={`av-${id}`} agent={a} /> : null;
+        {/* Everything below remounts when the environment changes: agents
+            appear directly at their places. */}
+        <group key={clave}>
+          <Room mode="iso" ancho={ent.tamano.ancho} fondo={ent.tamano.fondo} />
+          <DecoracionEntorno clave={clave} entorno={ent} />
+          <PuestoUsuario puesto={ent.tuPuesto} presente={presente} />
+          <PlacedFurniture />
+          {/* The 10 main desks are always there (lit when used). */}
+          {Array.from({ length: SEAT_COUNT }, (_, i) => {
+            const occ = order
+              .map((id) => agents[id])
+              .find((a) => a && a.seatIndex === i);
+            const cerrado = occ
+              ? undefined
+              : cerrados.find((c) => c.seatIndex === i);
+            return (
+              <Workstation
+                key={`seat-${i}`}
+                seatIndex={i}
+                agent={occ}
+                cerrado={cerrado}
+                {...extrasPuesto(occ)}
+              />
+            );
           })}
+          {/* Overflow agents (11+) bring their own desk. */}
+          {order
+            .map((id) => agents[id])
+            .filter((a) => a && a.seatIndex >= SEAT_COUNT)
+            .map((a) => (
+              <Workstation
+                key={`ov-${a!.id}`}
+                seatIndex={a!.seatIndex}
+                agent={a!}
+                {...extrasPuesto(a!)}
+              />
+            ))}
+          {/* Overflow desks of closed agents (note or kept empty). */}
+          {cerrados
+            .filter((c) => c.seatIndex >= SEAT_COUNT)
+            .map((c) => (
+              <Workstation
+                key={`ovc-${c.sessionId}`}
+                seatIndex={c.seatIndex}
+                cerrado={c}
+              />
+            ))}
+          {capaLista &&
+            order.map((id) => {
+              const a = agents[id];
+              return a ? <AgentAvatar key={`av-${id}`} agent={a} /> : null;
+            })}
+        </group>
       </Canvas>
       <div
         ref={capa}

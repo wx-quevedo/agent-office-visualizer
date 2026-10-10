@@ -47,7 +47,7 @@ import {
   STATUS_COLOR,
 } from "./roles";
 import { t } from "../textos";
-import { ENTRADA, PASILLO_SOFA, PUERTA } from "../comportamiento";
+import { entornoActivo } from "../entornos/activo";
 import { MarcaCuenta } from "@/components/marca/Marca";
 import { duracion, recortar } from "@/components/oficina/logica";
 import { useEditor } from "../editor";
@@ -178,6 +178,9 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
 
   // Desk seat point (chair centre).
   const sit = useRef<WP>({ ...sitPoint(seat) });
+  // Door, entrance and break room of the active environment (the scene
+  // remounts when the environment changes).
+  const ent = entornoActivo();
   // Agents that appear after the first load walk in from the entrance door.
   const desdePuerta = useRef(agent.origen === "puerta");
   // First load while resting (19): already in the break room ("its place").
@@ -188,17 +191,17 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
   const group = useRef<THREE.Group>(null);
   const pos = useRef<WP>(
     desdePuerta.current
-      ? { ...PUERTA }
+      ? { ...ent.puerta }
       : descansoInicial.current
         ? { x: descansoInicial.current.x, z: descansoInicial.current.z }
         : { ...sit.current },
   );
-  const path = useRef<WP[]>(desdePuerta.current ? [{ ...ENTRADA }] : []);
+  const path = useRef<WP[]>(desdePuerta.current ? [{ ...ent.entrada }] : []);
   const curNode = useRef(
     desdePuerta.current
-      ? nearestNode(ENTRADA.x, ENTRADA.z)
+      ? nearestNode(ent.entrada.x, ent.entrada.z)
       : descansoInicial.current
-        ? "lounge_i"
+        ? ent.descanso.nodo
         : nearestNode(sit.current.x, sit.current.z),
   );
   const pendingNode = useRef<string | null>(null);
@@ -220,6 +223,8 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
   const descansoRef = useRef(agent.descanso);
   descansoRef.current = agent.descanso;
   const descansoAnterior = useRef(agent.descanso);
+  const filaRef = useRef(agent.fila);
+  filaRef.current = agent.fila;
   const prevDestino = useRef(agent.destino);
   // Sitting on the sofa / gliding between the approach point and the seat
   // (no collision for that last step: the seat is inside the sofa box).
@@ -300,8 +305,10 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
           // Off the sofa: back through the corridor to the lounge node.
           enSofa.current = false;
           seated.current = false;
-          path.current = [{ ...PASILLO_SOFA }];
-          pendingNode.current = "lounge_i";
+          path.current = ent.descanso.pasillo
+            ? [{ ...ent.descanso.pasillo }]
+            : [];
+          pendingNode.current = ent.descanso.nodo;
         }
       }
       g.rotation.y = dampAngle(g.rotation.y, d.ry, 6, dt);
@@ -334,8 +341,8 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
         const mvz = (dz / dist) * SPEED * dt;
         // The door is inside the outer wall: no collision for that last step.
         const libre =
-          Math.hypot(t.x - PUERTA.x, t.z - PUERTA.z) < 0.05 ||
-          Math.hypot(p.x - PUERTA.x, p.z - PUERTA.z) < 1.2;
+          Math.hypot(t.x - ent.puerta.x, t.z - ent.puerta.z) < 0.05 ||
+          Math.hypot(p.x - ent.puerta.x, p.z - ent.puerta.z) < 1.2;
         const res = libre
           ? { x: p.x + mvx, z: p.z + mvz }
           : slide(p.x, p.z, mvx, mvz, 0.16);
@@ -392,6 +399,15 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
     if (enSofa.current && !deslizar.current && descansoRef.current) {
       g.rotation.y = dampAngle(g.rotation.y, descansoRef.current.ry, 4, dt);
     }
+    // In the queue: face your desk.
+    if (
+      !moving &&
+      destino === "fila" &&
+      filaRef.current &&
+      path.current.length === 0
+    ) {
+      g.rotation.y = dampAngle(g.rotation.y, filaRef.current.ry, 4, dt);
+    }
     // Standing near the sofa (no seat left): face the sofas.
     if (
       !moving &&
@@ -405,7 +421,7 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
     g.position.z = p.z;
 
     // Entrance (grow at the door) and exit (shrink at the door).
-    const enPuerta = Math.hypot(p.x - PUERTA.x, p.z - PUERTA.z) < 0.15;
+    const enPuerta = Math.hypot(p.x - ent.puerta.x, p.z - ent.puerta.z) < 0.15;
     const objetivo = destino === "salida" && enPuerta ? 0 : 1;
     escala.current += (objetivo - escala.current) * Math.min(1, dt * 5);
     g.scale.setScalar(Math.max(0.001, escala.current));
@@ -471,22 +487,38 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
         }
         return; // standing spot: stay
       }
-      const route = pathBetween(curNode.current, "lounge_i");
-      // Sofa seats are reached through the corridor (the coffee table is in the way).
-      const via = d.tipo === "sofa" ? [{ ...PASILLO_SOFA }] : [];
+      const route = pathBetween(curNode.current, ent.descanso.nodo);
+      // Sofa seats may be reached through a corridor (e.g. a coffee table in the way).
+      const via =
+        d.tipo === "sofa" && ent.descanso.pasillo
+          ? [{ ...ent.descanso.pasillo }]
+          : [];
       path.current = [...route, ...via, { x: d.ax, z: d.az }];
-      pendingNode.current = "lounge_i";
+      pendingNode.current = ent.descanso.nodo;
+      return;
+    }
+    if (destino === "fila") {
+      // Queue at the counter (Sala de control): walk to the assigned spot.
+      const f = filaRef.current;
+      seated.current = false;
+      if (!f || Math.hypot(p.x - f.x, p.z - f.z) < 0.15) return;
+      const target = nearestNode(f.x, f.z);
+      path.current = [
+        ...pathBetween(curNode.current, target),
+        { x: f.x, z: f.z },
+      ];
+      pendingNode.current = null;
       return;
     }
     if (destino === "salida") {
-      if (Math.hypot(p.x - PUERTA.x, p.z - PUERTA.z) < 0.15) return; // at the door
-      if (Math.hypot(p.x - ENTRADA.x, p.z - ENTRADA.z) < 0.25) {
-        path.current = [{ ...PUERTA }];
+      if (Math.hypot(p.x - ent.puerta.x, p.z - ent.puerta.z) < 0.15) return; // at the door
+      if (Math.hypot(p.x - ent.entrada.x, p.z - ent.entrada.z) < 0.25) {
+        path.current = [{ ...ent.puerta }];
         return;
       }
-      const target = nearestNode(ENTRADA.x, ENTRADA.z);
+      const target = nearestNode(ent.entrada.x, ent.entrada.z);
       const route = pathBetween(curNode.current, target);
-      path.current = [...route, { ...ENTRADA }, { ...PUERTA }];
+      path.current = [...route, { ...ent.entrada }, { ...ent.puerta }];
       pendingNode.current = null;
       return;
     }
@@ -614,7 +646,8 @@ function AgentAvatar({ agent }: { agent: AgentView }) {
           speed: speedRef.current,
           pose: enSofa.current
             ? "sofa"
-            : seated.current && poseRef.current === "brazoAlzado"
+            : (seated.current || destinoRef.current === "fila") &&
+                poseRef.current === "brazoAlzado"
               ? "brazoAlzado"
               : "normal",
         })}

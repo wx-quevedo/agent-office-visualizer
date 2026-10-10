@@ -1,3 +1,4 @@
+import { entornoActivo } from "../entornos/activo";
 import { NODES } from "./nav";
 
 // ── Agent "hozirligi" reyestri (ijtimoiy hayot uchun) ────────
@@ -85,13 +86,9 @@ export function clearMeeting(id: string): void {
 
 // Ijtimoiy uchrashuv joylari (xona ichki tugunlari). Katta ofisda tasodifiy
 // yaqinlashish bo'lmagani uchun umumiy hub'ga chaqiramiz ("tanaffusга chiqishdi").
-const SOCIAL_HUBS = [
-  "kitchen_i",
-  "lounge_i",
-  "meeting_i",
-  "library_i",
-  "focus_i",
-];
+// Meeting points come from the active environment.
+const socialHubs = (): string[] =>
+  entornoActivo().encuentros.filter((h) => NODES[h]);
 
 /** Bo'sh, juftlashmagan sherik izlaydi. Faqat KICHIK id tashabbus qiladi.
  *  Ikkoviga umumiy hub + qarama-qarshi tomon (side ±1) beriladi. */
@@ -115,7 +112,7 @@ export function seekMeeting(
     mz = (z + partner.z) / 2;
   let node = "",
     bd = Infinity;
-  for (const h of SOCIAL_HUBS) {
+  for (const h of socialHubs()) {
     if (occupiedHubs.has(h)) continue; // band hub — boshqa juftga qoldiramiz
     const n = NODES[h];
     const d = (n.x - mx) ** 2 + (n.z - mz) ** 2;

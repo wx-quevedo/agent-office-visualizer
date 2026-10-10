@@ -89,8 +89,19 @@ function applyWall(
   m.depthWrite = op > 0.6; // qattiq bo'lsa chuqurlik yozadi (fon), shaffofда yo'q
 }
 
-export default function Room({ mode }: { mode: CameraMode }) {
-  const { W, D, WH } = ROOM;
+export default function Room({
+  mode,
+  ancho = ROOM.W,
+  fondo = ROOM.D,
+}: {
+  mode: CameraMode;
+  /** Room size of the active environment (Original: 46 × 32). */
+  ancho?: number;
+  fondo?: number;
+}) {
+  const W = ancho;
+  const D = fondo;
+  const { WH } = ROOM;
   const fpv = mode === "fpv";
   const floorColor = useLayout((s) => s.floorColor);
   const wallColor = useLayout((s) => s.wallColor);

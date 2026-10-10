@@ -104,12 +104,55 @@ def test_default_path_is_next_to_the_event_log(monkeypatch: pytest.MonkeyPatch) 
 
 def test_known_furniture_matches_the_frontend_catalog() -> None:
     catalogo = (
-        oficina3d.BASE_REPO.parents[2]
-        / "src"
-        / "components"
-        / "oficina3d"
-        / "muebles.ts"
+        oficina3d.BASE_REPO.parents[2] / "src" / "components" / "oficina3d" / "muebles.ts"
     ).read_text(encoding="utf-8")
     for tipo in oficina3d.TIPOS_MUEBLE:
         assert f'type: "{tipo}"' in catalogo
     assert catalogo.count('type: "') == len(oficina3d.TIPOS_MUEBLE)
+
+
+def test_active_environment_and_layouts_per_environment(client: TestClient, ruta: Path) -> None:
+    d = {
+        "version": 1,
+        "items": [mueble("o1")],
+        "tema": "claro",
+        "entorno": "control",
+        "entornos": {
+            "puente": {
+                "items": [mueble("p1", type="lamp")],
+                "tema": "noche",
+                "floorColor": "#40454e",
+            },
+            "control": {"items": [], "tema": "fresco"},
+        },
+    }
+    assert client.put(URL, json=d).status_code == 200
+    leido = client.get(URL).json()["distribucion"]
+    assert leido["entorno"] == "control"
+    assert leido["items"][0]["id"] == "o1"  # the Original's layout stays at the top
+    assert leido["entornos"]["puente"]["items"][0]["type"] == "lamp"
+    assert leido["entornos"]["puente"]["floorColor"] == "#40454e"
+    assert leido["entornos"]["control"]["tema"] == "fresco"
+
+
+@pytest.mark.parametrize(
+    "malo",
+    [
+        {"entorno": "Puente!"},
+        {"entornos": {"../x": {"items": []}}},
+        {"entornos": {"puente": {"items": [mueble(type="nave")]}}},
+        {"entornos": {f"e{chr(97 + i)}": {} for i in range(9)}},
+    ],
+)
+def test_invalid_environments_are_rejected(
+    client: TestClient, ruta: Path, malo: dict[str, object]
+) -> None:
+    assert client.put(URL, json={"version": 1, **malo}).status_code == 422
+    assert not ruta.exists()
+
+
+def test_files_without_environment_default_to_original(client: TestClient, ruta: Path) -> None:
+    assert client.put(URL, json={"version": 1, "items": [mueble("a")]}).status_code == 200
+    leido = client.get(URL).json()["distribucion"]
+    assert leido["entorno"] == "original"
+    assert leido["entornos"] == {}
