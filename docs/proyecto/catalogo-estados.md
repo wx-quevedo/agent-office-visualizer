@@ -61,9 +61,9 @@ No son estados: se dibujan encima de cualquier estado para mostrar cuánto y có
 | Problemas | Humo o señal roja | Herramientas que fallan seguidas (2 o más) |
 | Subagentes | Un número sobre el agente | Subagentes activos |
 
-## Decisiones pendientes
+## Decisiones confirmadas (2026-10-09)
 
-| Decisión | Respuesta sugerida | Por qué |
+| Decisión | Decisión | Por qué |
 | --- | --- | --- |
 | Cuándo un comando cuenta como "espera un programa" | Más de 30 s sin terminar | Los comandos rápidos no deben cambiar el estado a cada rato |
 | Cuándo estás "desconectado" | Sin la oficina abierta y 10 min sin responder a ningún agente | Es lo único que se puede medir sin instalar nada más |

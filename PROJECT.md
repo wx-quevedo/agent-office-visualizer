@@ -33,6 +33,14 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 | 2026-10-09 | Mostrar a quién espera el agente (a ti, a un programa, a una subida, a otros agentes) | Ninguna herramienta revisada lo hace; es el diferencial del proyecto |
 | 2026-10-09 | Cuando el usuario se desconecta, el avatar descansa; al volver, regresa al trabajo | Da vida a la oficina y deja claro quién sigue esperando |
 | 2026-10-09 | Alertas con sonido y notificación del sistema (PC y celular) | claude-office solo avisa dentro de la página |
+| 2026-10-09 | Autoskills: frontend-design, python-testing-patterns y fastapi-python | Cubren interfaz y backend; python-executor descartada por advertencia de seguridad |
+| 2026-10-09 | Versionar frontend/AGENTS.md y frontend/CLAUDE.md | Guías de Next.js 16.3 útiles para el agente |
+| 2026-10-09 | Las 6 vulnerabilidades de npm quedan registradas para después | Herramienta local; no bloquea |
+| 2026-10-09 | "Espera un programa" = comando de más de 30 s | Evita cambios de estado a cada rato |
+| 2026-10-09 | "Desconectado" = sin la oficina abierta y 10 min sin responder a ningún agente | Se puede medir sin instalar nada más |
+| 2026-10-09 | Subagentes como un número sobre el agente | No quitan protagonismo al agente |
+| 2026-10-09 | Descanso: videojuego, lectura y siesta, rotando | Variedad sin distraer de los que esperan |
+| 2026-10-09 | Tamaño del agente: el doble del actual | El agente es lo principal |
 
 ## Ajustes heredados de la instalación diaria
 
@@ -52,7 +60,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-09 | Investigación de herramientas similares y catálogo de estados del avatar (en `docs/proyecto/`) |
 | 2026-10-09 | Creación del repositorio propio a partir de claude-office |
 | 2026-10-09 | Commit inicial `7dcaffb`: base claude-office 0.24.1 (`3522c16`) con los 5 ajustes locales, PROJECT.md y `docs/proyecto/` |
-| 2026-10-09 | Puertos configurables (`BACKEND_PORT`, `FRONTEND_PORT`, `NEXT_PUBLIC_BACKEND_PORT`) y `make dev-local` en 3100/8100, con resúmenes IA desactivados. Probado junto a la oficina diaria con el escenario `complex` (hash en el registro del commit siguiente) |
+| 2026-10-09 | Puertos configurables (`BACKEND_PORT`, `FRONTEND_PORT`, `NEXT_PUBLIC_BACKEND_PORT`) y `make dev-local` en 3100/8100, con resúmenes IA desactivados. Probado junto a la oficina diaria con el escenario `complex`. Commit `b690783` |
+| 2026-10-09 | Registro de decisiones del catálogo de estados, `frontend/AGENTS.md` y `frontend/CLAUDE.md` versionados. Autoskills sin instalar: la herramienta no permite elegir skills sueltas sin terminal interactiva (hash en el registro del commit siguiente) |
 
 ## Cómo levantar
 
@@ -97,10 +106,11 @@ Abrir http://localhost:3100 (desde el iPhone: http://<TAILSCALE_IP>:3100).
 | iPhone cargaba la página sin datos | Next.js en modo desarrollo bloqueaba sus recursos; se agregó `allowedDevOrigins` |
 | La PC dependía de Tailscale para ver la oficina | El frontend usa el host de la página para buscar el backend |
 | En Windows, la recarga del backend detiene el frontend | Pendiente: reiniciar `make dev` tras cambios de código del backend |
-| Next.js 16.3 genera `frontend/AGENTS.md` y `frontend/CLAUDE.md` al arrancar | Pendiente: decidir si se versionan o se desactiva con `agentRules: false` en `next.config.ts`; por ahora sin versionar |
+| Next.js 16.3 genera `frontend/AGENTS.md` y `frontend/CLAUDE.md` al arrancar | Se versionan (decisión 2026-10-09) para que `next dev` no los vuelva a dejar como cambios sueltos |
+| `npm install` del frontend reporta 6 vulnerabilidades (5 altas, 1 crítica) | Pendiente: revisar con `npm audit`; herramienta local, no bloquea |
+| autoskills no permite elegir skills sueltas por línea de comandos; sin terminal interactiva instala todas las sugeridas | Pendiente: instalar frontend-design, python-testing-patterns y fastapi-python desde una terminal propia con el selector interactivo |
 
 ## Próximos pasos
 
-1. Confirmar las decisiones pendientes del catálogo de estados.
-2. Implementar por fases: agente más grande, estados de espera con "a quién espera", ausencia y regreso, indicadores de esfuerzo, avisos.
-3. App móvil con notificaciones.
+1. Implementar por fases: agente más grande, estados de espera con "a quién espera", ausencia y regreso, indicadores de esfuerzo, avisos.
+2. App móvil con notificaciones.
