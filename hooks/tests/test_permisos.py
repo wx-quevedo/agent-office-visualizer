@@ -92,6 +92,15 @@ def test_rechazada_da_deny_con_motivo() -> None:
     assert "Usa la rama de prueba" in decision["message"]
 
 
+def test_la_oficina_deja_de_esperar_sin_decision() -> None:
+    """The phone left: the backend answers pending but no longer waiting."""
+    out, llamadas, _ = flujo(
+        [{"estado": "pendiente", "esperando": True}, {"estado": "pendiente", "esperando": False}]
+    )
+    assert out is None
+    assert len([m for m, _ in llamadas if m == "GET"]) == 2
+
+
 @pytest.mark.parametrize("estado", ["vencida", "resuelta_fuera", "rara"])
 def test_sin_decision(estado: str) -> None:
     out, _, _ = flujo([{"estado": estado}])

@@ -110,6 +110,12 @@ describe("tiempo y estado de la solicitud", () => {
   });
 });
 
+describe("política por defecto", () => {
+  it("espera solo cuando estás en el celular", () => {
+    expect(CONFIG_POR_DEFECTO.politica).toBe("solo_en_el_celular");
+  });
+});
+
 describe("aviso de permiso", () => {
   const a = (p: Permiso | null) => ({ permiso: p }) as unknown as Agente;
 
@@ -121,5 +127,9 @@ describe("aviso de permiso", () => {
       "Responde en VS Code.",
     );
     expect(dondeResponder(a(null))).toBe("Responde en VS Code.");
+    // the phone left: the office stopped waiting
+    expect(dondeResponder(a(permiso({ esperando: false, vence: null })))).toBe(
+      "Responde en VS Code.",
+    );
   });
 });

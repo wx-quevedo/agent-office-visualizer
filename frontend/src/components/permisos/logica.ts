@@ -27,7 +27,7 @@ export interface Permiso {
   decidida: string | null;
 }
 
-export type Politica = "solo_fuera_de_la_pc" | "siempre" | "nunca";
+export type Politica = "solo_en_el_celular" | "siempre" | "nunca";
 
 export interface ConfigPermisos {
   politica: Politica;
@@ -39,16 +39,16 @@ export interface ConfigPermisos {
 export const POLITICAS: Array<{ id: Politica; nombre: string; ayuda: string }> =
   [
     {
-      id: "solo_fuera_de_la_pc",
-      nombre: "Solo cuando no estoy en la PC",
+      id: "solo_en_el_celular",
+      nombre: "Solo cuando estoy en el celular",
       ayuda:
-        "Espera tu respuesta en la oficina si no hay una página abierta en la PC (por ejemplo, solo el celular). En la PC responde VS Code como siempre.",
+        "Espera tu respuesta en la oficina solo si la tienes abierta en el celular y no en la PC. Si no la tienes abierta en ningún lado, o la tienes en la PC, responde VS Code como siempre. Si cierras la oficina en el celular mientras espera, deja de esperar.",
     },
     {
       id: "siempre",
       nombre: "Siempre",
       ayuda:
-        "Siempre espera tu respuesta en la oficina, hasta el tiempo límite.",
+        "Siempre espera tu respuesta en la oficina, hasta el tiempo límite, aunque nadie la tenga abierta.",
     },
     {
       id: "nunca",
@@ -58,7 +58,7 @@ export const POLITICAS: Array<{ id: Politica; nombre: string; ayuda: string }> =
   ];
 
 export const CONFIG_POR_DEFECTO: ConfigPermisos = {
-  politica: "solo_fuera_de_la_pc",
+  politica: "solo_en_el_celular",
   espera_seg: 90,
   confirmar: [
     "rm",

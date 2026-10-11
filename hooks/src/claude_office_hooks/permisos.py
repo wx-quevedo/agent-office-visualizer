@@ -140,6 +140,8 @@ def pedir_decision(
                 return salida_rechazar(motivo if isinstance(motivo, str) else None)
             if estado != "pendiente":
                 return None  # expired or answered in VS Code
+            if s.get("esperando") is False:
+                return None  # the office stopped waiting (the phone left)
             if reloj() - t0 < 1.0:
                 dormir(1.0)  # a backend that does not hold the long-poll: do not hammer it
     except Exception:

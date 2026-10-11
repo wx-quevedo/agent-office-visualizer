@@ -32,12 +32,28 @@ def reloj() -> Reloj:
     return Reloj()
 
 
+class Dispositivos:
+    """Where the office is open (PC and phone heartbeats within the presence window)."""
+
+    def __init__(self, pc: bool = False, celular: bool = True) -> None:
+        self.pc = pc
+        self.celular = celular
+
+    def __call__(self) -> tuple[bool, bool]:
+        return self.pc, self.celular
+
+
 @pytest.fixture
-def reg(tmp_path: Path, reloj: Reloj) -> RegistroPermisos:
-    return RegistroPermisos(tmp_path, clock=reloj)
+def disp() -> Dispositivos:
+    return Dispositivos()
 
 
-def crear(reg: RegistroPermisos, id_: str = "solicitud-1", en_la_pc: bool = False, **kw: Any):
+@pytest.fixture
+def reg(tmp_path: Path, reloj: Reloj, disp: Dispositivos) -> RegistroPermisos:
+    return RegistroPermisos(tmp_path, clock=reloj, presencia=disp)
+
+
+def crear(reg: RegistroPermisos, id_: str = "solicitud-1", **kw: Any):
     datos: dict[str, Any] = {
         "session_id": "prueba-permisos",
         "herramienta": "Bash",
@@ -53,29 +69,104 @@ def crear(reg: RegistroPermisos, id_: str = "solicitud-1", en_la_pc: bool = Fals
         datos["entrada"],
         datos["cuenta"],
         datos["proyecto"],
-        en_la_pc=en_la_pc,
     )
 
 
 # -- policy and presence ------------------------------------------------------------
 
 
-def test_por_defecto_espera_solo_fuera_de_la_pc(reg: RegistroPermisos) -> None:
-    assert reg.config.politica == "solo_fuera_de_la_pc"
+@pytest.mark.parametrize(
+    ("pc", "celular", "espera"),
+    [
+        (False, False, False),  # nobody has the office open
+        (True, False, False),  # only the PC: VS Code answers
+        (False, True, True),  # only the phone: the office waits
+        (True, True, False),  # PC and phone: VS Code answers
+    ],
+)
+def test_por_defecto_espera_solo_en_el_celular(
+    reg: RegistroPermisos, disp: Dispositivos, pc: bool, celular: bool, espera: bool
+) -> None:
+    assert reg.config.politica == "solo_en_el_celular"
     assert reg.config.espera_seg == 90
-    fuera = crear(reg, "solicitud-a", en_la_pc=False)
-    assert fuera.esperando and fuera.vence is not None
-    en_pc = crear(reg, "solicitud-b", en_la_pc=True, session_id="otra")
-    assert not en_pc.esperando and en_pc.vence is None
+    disp.pc, disp.celular = pc, celular
+    s = crear(reg)
+    assert s.esperando is espera
+    assert (s.vence is not None) is espera
+
+
+def test_el_celular_se_desconecta_durante_la_espera(
+    reg: RegistroPermisos, disp: Dispositivos
+) -> None:
+    assert crear(reg).esperando
+    disp.celular = False
+    s = reg.obtener("solicitud-1")
+    assert s is not None and s.estado == "pendiente" and not s.esperando
+    assert s.vista(reg.clock())["esperando"] is False
+    with pytest.raises(PermisoError) as e:
+        reg.decidir("solicitud-1", True, None, "celular")
+    assert e.value.status == 409
+    assert reg.historial()[0]["esperando"] == 0
+
+
+async def test_long_poll_suelta_cuando_el_celular_se_desconecta(tmp_path: Path) -> None:
+    disp = Dispositivos()
+    reg = RegistroPermisos(tmp_path, presencia=disp)
+    crear(reg)
+
+    async def desconectar() -> None:
+        await asyncio.sleep(0.3)
+        disp.celular = False
+
+    tarea = asyncio.create_task(desconectar())
+    inicio = asyncio.get_running_loop().time()
+    s = await reg.esperar("solicitud-1", 10)
+    await tarea
+    assert s is not None and s.estado == "pendiente" and not s.esperando
+    assert asyncio.get_running_loop().time() - inicio < 3
 
 
 @pytest.mark.parametrize(
-    ("politica", "en_pc", "espera"),
-    [("siempre", True, True), ("siempre", False, True), ("nunca", False, False)],
+    ("politica", "pc", "celular", "espera"),
+    [
+        ("siempre", True, False, True),
+        ("siempre", False, False, True),
+        ("nunca", False, True, False),
+    ],
 )
-def test_politicas(reg: RegistroPermisos, politica: str, en_pc: bool, espera: bool) -> None:
+def test_politicas(
+    reg: RegistroPermisos,
+    disp: Dispositivos,
+    politica: str,
+    pc: bool,
+    celular: bool,
+    espera: bool,
+) -> None:
     reg.guardar_config(Configuracion(politica=politica))  # type: ignore[arg-type]
-    assert crear(reg, en_la_pc=en_pc).esperando is espera
+    disp.pc, disp.celular = pc, celular
+    assert crear(reg).esperando is espera
+
+
+def test_siempre_no_suelta_sin_celular(reg: RegistroPermisos, disp: Dispositivos) -> None:
+    reg.guardar_config(Configuracion(politica="siempre"))
+    crear(reg)
+    disp.celular = False
+    assert reg.obtener("solicitud-1").esperando  # type: ignore[union-attr]
+
+
+def test_politica_antigua_se_convierte_al_cargar(tmp_path: Path) -> None:
+    (tmp_path / "permisos.json").write_text(
+        json.dumps({"politica": "solo_fuera_de_la_pc", "espera_seg": 120, "confirmar": ["rm"]}),
+        encoding="utf-8",
+    )
+    reg = RegistroPermisos(tmp_path)
+    assert reg.config.politica == "solo_en_el_celular"
+    assert reg.config.espera_seg == 120 and reg.config.confirmar == ["rm"]
+    guardado = json.loads((tmp_path / "permisos.json").read_text(encoding="utf-8"))
+    assert guardado["politica"] == "solo_en_el_celular"
+    assert permisos.validar_config({"politica": "solo_fuera_de_la_pc"}).politica == (
+        "solo_en_el_celular"
+    )
 
 
 def test_detalle_es_el_comando_completo(reg: RegistroPermisos) -> None:
@@ -109,7 +200,7 @@ def test_se_decide_una_sola_vez_y_queda_en_el_registro(reg: RegistroPermisos) ->
     assert e.value.status == 409
     fila = reg.historial()[0]
     assert fila["estado"] == "rechazada" and fila["dispositivo"] == "celular"
-    assert fila["detalle"] == "git status" and fila["politica"] == "solo_fuera_de_la_pc"
+    assert fila["detalle"] == "git status" and fila["politica"] == "solo_en_el_celular"
 
 
 def test_aprobar_no_guarda_motivo(reg: RegistroPermisos) -> None:
@@ -127,8 +218,11 @@ def test_vencida_se_rechaza_con_error_claro(reg: RegistroPermisos, reloj: Reloj)
     assert reg.obtener("solicitud-1").estado == "vencida"  # type: ignore[union-attr]
 
 
-def test_sin_espera_no_se_puede_decidir_desde_la_oficina(reg: RegistroPermisos) -> None:
-    crear(reg, en_la_pc=True)
+def test_sin_espera_no_se_puede_decidir_desde_la_oficina(
+    reg: RegistroPermisos, disp: Dispositivos
+) -> None:
+    disp.pc = True
+    crear(reg)
     with pytest.raises(PermisoError) as e:
         reg.decidir("solicitud-1", True, None, "pc")
     assert e.value.status == 409
@@ -182,7 +276,7 @@ def test_otra_sesion_no_la_toca(reg: RegistroPermisos) -> None:
 
 
 async def test_long_poll_despierta_al_decidir(tmp_path: Path) -> None:
-    reg = RegistroPermisos(tmp_path)
+    reg = RegistroPermisos(tmp_path, presencia=Dispositivos())
     crear(reg)
 
     async def decidir_luego() -> None:
@@ -198,7 +292,7 @@ async def test_long_poll_despierta_al_decidir(tmp_path: Path) -> None:
 
 
 async def test_long_poll_sin_decision_vuelve_pendiente(tmp_path: Path) -> None:
-    reg = RegistroPermisos(tmp_path)
+    reg = RegistroPermisos(tmp_path, presencia=Dispositivos())
     crear(reg)
     s = await reg.esperar("solicitud-1", 0.2)
     assert s is not None and s.estado == "pendiente"
@@ -232,20 +326,11 @@ def test_config_se_guarda_y_valida(tmp_path: Path) -> None:
 # -- routes ------------------------------------------------------------------------
 
 
-class MotorFalso:
-    def __init__(self) -> None:
-        self.pc = False
-
-    def en_la_pc(self) -> bool:
-        return self.pc
-
-
 @pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    reg = RegistroPermisos(tmp_path)
+def client(tmp_path: Path):
+    motor = Dispositivos()
+    reg = RegistroPermisos(tmp_path, presencia=motor)
     permisos.set_registro(reg)
-    motor = MotorFalso()
-    monkeypatch.setattr(rutas, "get_state_engine", lambda: motor)
     app = FastAPI()
     app.include_router(rutas.router, prefix="/api/v1")
     yield TestClient(app), motor, reg
@@ -291,7 +376,7 @@ def test_rutas_flujo_completo(client) -> None:  # type: ignore[no-untyped-def]
 
 def test_rutas_config_y_errores(client) -> None:  # type: ignore[no-untyped-def]
     c, _, _ = client
-    assert c.get("/api/v1/permisos/config").json()["politica"] == "solo_fuera_de_la_pc"
+    assert c.get("/api/v1/permisos/config").json()["politica"] == "solo_en_el_celular"
     r = c.put(
         "/api/v1/permisos/config",
         json={"politica": "siempre", "espera_seg": 60, "confirmar": ["rm"]},

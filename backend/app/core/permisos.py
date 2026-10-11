@@ -3,8 +3,10 @@
 The hook registers each PermissionRequest of Claude Code here and, depending
 on the policy and on where the user is, waits for a decision (long-poll):
 
-- ``solo_fuera_de_la_pc`` (default): wait only when no PC page is open (no
-  recent PC heartbeat; phone heartbeats only, or none).
+- ``solo_en_el_celular`` (default): wait only while the phone has the office
+  open (a phone heartbeat within the presence window) and no PC page is open.
+  No device at all, or a PC page open: no wait (VS Code answers). If the phone
+  heartbeat goes away while waiting, the wait ends without a decision.
 - ``siempre``: always wait, up to the configured time.
 - ``nunca``: only register (the request is shown, answered in VS Code).
 
@@ -25,6 +27,7 @@ import logging
 import math
 import sqlite3
 import threading
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -32,10 +35,17 @@ from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
-Politica = Literal["solo_fuera_de_la_pc", "siempre", "nunca"]
+Politica = Literal["solo_en_el_celular", "siempre", "nunca"]
 Estado = Literal["pendiente", "aprobada", "rechazada", "vencida", "resuelta_fuera"]
 
-POLITICAS: tuple[Politica, ...] = ("solo_fuera_de_la_pc", "siempre", "nunca")
+POLITICAS: tuple[Politica, ...] = ("solo_en_el_celular", "siempre", "nunca")
+# Policy of the first version (0579500): it also waited with no device at all.
+POLITICA_ANTIGUA = "solo_fuera_de_la_pc"
+# Seconds between checks of the phone presence during a long-poll.
+_REVISAR_PRESENCIA = 1.0
+
+# (PC page open, phone page open): heartbeats within the presence window.
+Presencia = Callable[[], tuple[bool, bool]]
 ESPERA_POR_DEFECTO = 90
 ESPERA_MINIMA = 10
 # Upper bound of the wait. The hook must be registered with a larger timeout
@@ -80,7 +90,7 @@ class PermisoError(Exception):
 
 @dataclass
 class Configuracion:
-    politica: Politica = "solo_fuera_de_la_pc"
+    politica: Politica = "solo_en_el_celular"
     espera_seg: int = ESPERA_POR_DEFECTO
     confirmar: list[str] = field(default_factory=lambda: list(CONFIRMAR_POR_DEFECTO))
 
@@ -101,6 +111,7 @@ class Solicitud:
     motivo: str | None = None
     dispositivo: str | None = None
     decidida: datetime | None = None
+    politica: str = "siempre"
 
     def vista(self, now: datetime) -> dict[str, Any]:
         """JSON for the office and the hook."""
@@ -147,10 +158,14 @@ def _iso(ts: datetime | None) -> str | None:
 class RegistroPermisos:
     """Requests in memory plus their SQLite log; the configuration in a JSON file."""
 
-    def __init__(self, carpeta: Path, clock: Any = None) -> None:
+    def __init__(
+        self, carpeta: Path, clock: Any = None, presencia: Presencia | None = None
+    ) -> None:
         self.ruta_db = carpeta / "permisos.db"
         self.ruta_config = carpeta / "permisos.json"
         self.clock = clock or (lambda: datetime.now(UTC))
+        # Where the user has the office open; no provider: nowhere.
+        self.presencia: Presencia = presencia or (lambda: (False, False))
         self._lock = threading.Lock()
         self._solicitudes: dict[str, Solicitud] = {}
         self._eventos: dict[str, asyncio.Event] = {}
@@ -170,7 +185,13 @@ class RegistroPermisos:
     def _leer_config(self) -> Configuracion:
         try:
             raw = json.loads(self.ruta_config.read_text(encoding="utf-8"))
-            return validar_config(raw)
+            cfg = validar_config(raw)
+            if isinstance(raw, dict) and raw.get("politica") == POLITICA_ANTIGUA:
+                # Saved by 0579500: converted to the new default and saved again.
+                logger.info("permisos.json: política %s -> %s", POLITICA_ANTIGUA, cfg.politica)
+                with contextlib.suppress(OSError):
+                    self._escribir_config(cfg)
+            return cfg
         except FileNotFoundError:
             return Configuracion()
         except Exception as exc:  # a broken file falls back to the defaults
@@ -181,11 +202,14 @@ class RegistroPermisos:
     def config(self) -> Configuracion:
         return self._config
 
-    def guardar_config(self, config: Configuracion) -> Configuracion:
+    def _escribir_config(self, config: Configuracion) -> None:
         self.ruta_config.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.ruta_config.with_suffix(".tmp")
         tmp.write_text(json.dumps(asdict(config), ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(self.ruta_config)
+
+    def guardar_config(self, config: Configuracion) -> Configuracion:
+        self._escribir_config(config)
         self._config = config
         return config
 
@@ -200,8 +224,8 @@ class RegistroPermisos:
                         dispositivo, decidida)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET estado=excluded.estado,
-                        motivo=excluded.motivo, dispositivo=excluded.dispositivo,
-                        decidida=excluded.decidida""",
+                        esperando=excluded.esperando, motivo=excluded.motivo,
+                        dispositivo=excluded.dispositivo, decidida=excluded.decidida""",
                     (
                         s.id,
                         s.session_id,
@@ -232,7 +256,30 @@ class RegistroPermisos:
 
     # -- requests ------------------------------------------------------------
 
+    def _soltar_sin_celular(self) -> None:
+        """solo_en_el_celular: the phone left (no heartbeat): stop waiting, VS Code answers."""
+        activas = [
+            s
+            for s in self._solicitudes.values()
+            if s.estado == "pendiente" and s.esperando and s.politica == "solo_en_el_celular"
+        ]
+        if not activas:
+            return
+        try:
+            _, celular = self.presencia()
+        except Exception:
+            celular = False
+        if celular:
+            return
+        for s in activas:
+            s.esperando = False
+            s.vence = None
+            self._guardar(s)
+            self._avisar(s.id)
+            logger.info("Permiso %s: el celular se desconectó, responde VS Code", s.id)
+
     def _vencer(self, now: datetime) -> None:
+        self._soltar_sin_celular()
         for s in list(self._solicitudes.values()):
             if s.estado == "pendiente" and s.esperando and s.vence and now >= s.vence:
                 s.estado = "vencida"
@@ -252,7 +299,6 @@ class RegistroPermisos:
         entrada: dict[str, Any],
         cuenta: str | None,
         proyecto: str | None,
-        en_la_pc: bool,
     ) -> Solicitud:
         """Register a request; idempotent by id. Decides whether the hook waits."""
         now = self.clock()
@@ -261,9 +307,16 @@ class RegistroPermisos:
             if id_ in self._solicitudes:
                 return self._solicitudes[id_]
             cfg = self._config
-            esperar = cfg.politica == "siempre" or (
-                cfg.politica == "solo_fuera_de_la_pc" and not en_la_pc
-            )
+            if cfg.politica == "siempre":
+                esperar = True
+            elif cfg.politica == "solo_en_el_celular":
+                try:
+                    pc, celular = self.presencia()
+                except Exception:
+                    pc, celular = False, False
+                esperar = celular and not pc
+            else:
+                esperar = False
             # An older pending request of the same session is over: Claude asks again.
             for otra in self._solicitudes.values():
                 if otra.session_id == session_id and otra.estado == "pendiente":
@@ -282,6 +335,7 @@ class RegistroPermisos:
                 creada=now,
                 esperando=esperar,
                 vence=now + timedelta(seconds=cfg.espera_seg) if esperar else None,
+                politica=cfg.politica,
             )
             self._solicitudes[id_] = s
             self._guardar(s, cfg.politica)
@@ -380,23 +434,35 @@ class RegistroPermisos:
             ev.set()
 
     async def esperar(self, id_: str, segundos: float) -> Solicitud | None:
-        """Wait up to *segundos* for a decision (or expiry) of a request."""
-        s = self.obtener(id_)
-        if s is None or s.estado != "pendiente" or not s.esperando:
-            return s
-        with self._lock:
-            ev = self._eventos.setdefault(id_, asyncio.Event())
-        restante = (s.vence - self.clock()).total_seconds() if s.vence else segundos
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(ev.wait(), timeout=max(0.0, min(segundos, restante)))
-        return self.obtener(id_)
+        """Wait up to *segundos* for a decision, expiry or the end of the wait.
+
+        Checks again every second: the phone may leave (no event for that).
+        """
+        loop = asyncio.get_running_loop()
+        fin = loop.time() + segundos
+        while True:
+            s = self.obtener(id_)
+            if s is None or s.estado != "pendiente" or not s.esperando:
+                return s
+            restante = min(
+                fin - loop.time(),
+                (s.vence - self.clock()).total_seconds() if s.vence else segundos,
+            )
+            if restante <= 0:
+                return s
+            with self._lock:
+                ev = self._eventos.setdefault(id_, asyncio.Event())
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(ev.wait(), timeout=min(_REVISAR_PRESENCIA, restante))
 
 
 def validar_config(raw: Any) -> Configuracion:
     """Validated configuration (raises ValueError with a readable message)."""
     if not isinstance(raw, dict):
         raise ValueError("La configuración debe ser un objeto.")
-    politica = raw.get("politica", "solo_fuera_de_la_pc")
+    politica = raw.get("politica", "solo_en_el_celular")
+    if politica == POLITICA_ANTIGUA:
+        politica = "solo_en_el_celular"
     if politica not in POLITICAS:
         raise ValueError(f"Política desconocida: {politica}")
     espera = raw.get("espera_seg", ESPERA_POR_DEFECTO)
@@ -426,8 +492,12 @@ def get_registro() -> RegistroPermisos:
     global _registro
     if _registro is None:
         from app.config import get_settings
+        from app.core.agent_state_engine import get_state_engine
 
-        _registro = RegistroPermisos(Path(get_settings().STATE_EVENT_LOG_PATH).parent)
+        _registro = RegistroPermisos(
+            Path(get_settings().STATE_EVENT_LOG_PATH).parent,
+            presencia=lambda: get_state_engine().dispositivos_vigentes(),
+        )
     return _registro
 
 

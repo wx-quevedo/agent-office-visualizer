@@ -1169,17 +1169,19 @@ class AgentStateEngine:
             del self._heartbeats[oldest]
         self._snapshot = None
 
-    def en_la_pc(self, now: datetime | None = None) -> bool:
-        """The user is at the PC: a PC page (/oficina) sent a recent heartbeat,
-        or a browser is connected to the WebSocket (the classic view, on the PC).
-        Phone heartbeats only, or none: not at the PC."""
+    def dispositivos_vigentes(self, now: datetime | None = None) -> tuple[bool, bool]:
+        """(PC, phone): an /oficina page sent a heartbeat within the presence
+        window (75 s) from that device. A browser on the WebSocket (the classic
+        view, on the PC) counts as the PC."""
         now = now or self.clock()
-        if "pc" in self._live_heartbeats(now).values():
-            return True
-        try:
-            return int(self.browsers_provider()) > 0
-        except Exception:
-            return False
+        devices = set(self._live_heartbeats(now).values())
+        pc = "pc" in devices
+        if not pc:
+            try:
+                pc = int(self.browsers_provider()) > 0
+            except Exception:
+                pc = False
+        return pc, "celular" in devices
 
     def _live_heartbeats(self, now: datetime) -> dict[str, str]:
         return {

@@ -20,7 +20,6 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.core.agent_state_engine import get_state_engine
 from app.core.permisos import (
     ESPERA_MAXIMA,
     ESPERA_MINIMA,
@@ -63,7 +62,6 @@ async def crear_solicitud(body: NuevaSolicitud) -> dict[str, Any]:
         body.entrada,
         body.cuenta,
         body.proyecto,
-        en_la_pc=get_state_engine().en_la_pc(),
     )
     vista = s.vista(registro.clock())
     vista["esperar"] = vista["esperando"]
