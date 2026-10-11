@@ -1,0 +1,57 @@
+name: VisualizadorAgentes
+options:
+  bundleIdPrefix: com.inmersoft
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    # El equipo se elige en Xcode (Personal Team): no se fija aquí.
+    DEVELOPMENT_TEAM: ""
+targets:
+  VisualizadorAgentes:
+    type: application
+    platform: iOS
+    sources:
+      - path: VisualizadorAgentes
+    info:
+      path: VisualizadorAgentes/Info.plist
+      properties:
+        CFBundleDisplayName: Agentes
+        CFBundleDevelopmentRegion: es-419
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Light
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSFaceIDUsageDescription: Face ID abre la app y confirma los permisos peligrosos.
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inmersoft.visualizadoragentes
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+  VisualizadorAgentesTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: VisualizadorAgentesTests
+    dependencies:
+      - target: VisualizadorAgentes
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.inmersoft.visualizadoragentes.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+schemes:
+  VisualizadorAgentes:
+    build:
+      targets:
+        VisualizadorAgentes: all
+        VisualizadorAgentesTests: [test]
+    test:
+      targets:
+        - VisualizadorAgentesTests

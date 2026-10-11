@@ -1,0 +1,6 @@
+# Se regenera con `xcodegen generate` desde project.yml.
+*.xcodeproj/
+VisualizadorAgentes/Info.plist
+build/
+DerivedData/
+xcuserdata/
