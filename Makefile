@@ -1,10 +1,8 @@
-.PHONY: install install-all dev dev-local backend frontend simulate checkall lint fmt test typecheck gen-types \
+.PHONY: install install-all dev dev-local backend frontend simulate checkall lint fmt test typecheck \
 	hooks-install hooks-uninstall hooks-reinstall hooks-status hooks-logs hooks-logs-follow hooks-logs-clear \
-	hooks-debug-on hooks-debug-off clean clean-db clean-all \
+	hooks-debug-on hooks-debug-off clean clean-all \
 	opencode-install opencode-uninstall opencode-reinstall opencode-build \
 	dev-tmux dev-tmux-kill dev-tmux-backend dev-tmux-frontend \
-	build-static frontend-build-static \
-	docker-build docker-up docker-down docker-logs docker-shell \
 	pre-commit pre-commit-update depsupdate depsshow uv-lock uv-sync setup resetup remove-venv \
 	bump-version version-check help
 
@@ -37,12 +35,6 @@ backend:			# Start backend dev server
 frontend:			# Start frontend dev server
 	make -C frontend dev
 
-# Build static frontend and copy to backend for serving
-build-static frontend-build-static:
-	make -C frontend build-static
-	@echo "Frontend built and copied to backend/static"
-	@echo "Start backend with 'make backend' to serve at http://localhost:8000"
-
 simulate:			# Run event simulation
 	uv run python scripts/simulate_events.py
 
@@ -74,9 +66,6 @@ typecheck:			# Run static type checks
 	make -C opencode-plugin typecheck
 
 checkall: fmt lint typecheck test		# Run all checks including tests
-
-gen-types:			# Regenerate TypeScript types from Pydantic models
-	cd backend && uv run python ../scripts/gen_types.py
 
 # Hook management targets
 hooks-install:
@@ -158,34 +147,14 @@ dev-tmux-frontend:
 	@tmux send-keys -t $(TMUX_SESSION):frontend "make dev" Enter 2>/dev/null || echo "Session not found"
 
 # Cleanup targets
-clean-db:			# Remove SQLite database
-	rm -f backend/visualizer.db
-	@echo "Database removed"
-
 clean:			# Remove build artifacts
 	rm -rf frontend/.next
 	rm -rf opencode-plugin/dist
 
-clean-all: clean clean-db hooks-logs-clear		# Remove everything
+clean-all: clean hooks-logs-clear		# Remove everything
 	@echo "All build artifacts and data cleaned"
 
 # Docker targets
-docker-build:
-	docker compose build
-
-docker-up:
-	docker compose up -d
-	@echo "Claude Office running at http://localhost:8000"
-
-docker-down:
-	docker compose down
-
-docker-logs:
-	docker compose logs -f
-
-docker-shell:
-	docker compose exec claude-office /bin/bash
-
 # Dependency management
 uv-lock:			# Lock dependencies
 	cd backend && uv lock

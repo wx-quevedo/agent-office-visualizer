@@ -1,13 +1,11 @@
 """Tests for security hardening (issue #37 + #41)."""
 
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 from urllib.parse import urlparse
 
 from fastapi.testclient import TestClient
 
-from app.api.websocket import validate_websocket_origin
 from app.config import get_settings
 from app.core.path_utils import is_safe_transcript_path
 
@@ -190,105 +188,6 @@ class TestApiKeyMiddleware:
 # ---------------------------------------------------------------------------
 
 
-class TestWebSocketOriginValidation:
-    """Verify WebSocket validates both origin and API key."""
-
-    def _make_ws(self, origin: str | None = None, api_key: str | None = None) -> Any:
-        """Create a mock WebSocket with specified headers."""
-
-        class MockWebSocket:
-            def __init__(self, headers: dict[str, str]) -> None:
-                self.headers = headers
-
-        headers: dict[str, str] = {}
-        if origin is not None:
-            headers["origin"] = origin
-        if api_key is not None:
-            headers["x-api-key"] = api_key
-        return MockWebSocket(headers)
-
-    def test_localhost_origin_accepted(self) -> None:
-        ws = self._make_ws(origin="http://localhost:3000")
-        assert validate_websocket_origin(ws) is True
-
-    def test_cors_origin_non_loopback_rejected(self) -> None:
-        """A non-loopback origin present in BACKEND_CORS_ORIGINS must still be
-        rejected for WebSocket — the WS trust boundary stays localhost-only
-        even when CORS is widened (QA-014).
-
-        ``http://0.0.0.0:3000`` is in the default ``BACKEND_CORS_ORIGINS`` but
-        ``0.0.0.0`` is not a loopback hostname, so it must be excluded from the
-        derived WS allowlist.
-        """
-        settings = get_settings()
-        assert "http://0.0.0.0:3000" in settings.BACKEND_CORS_ORIGINS
-        ws = self._make_ws(origin="http://0.0.0.0:3000")
-        assert validate_websocket_origin(ws) is False
-
-    def test_external_origin_rejected(self) -> None:
-        ws = self._make_ws(origin="https://evil.com")
-        assert validate_websocket_origin(ws) is False
-
-    def test_no_origin_no_key_configured_rejected(self) -> None:
-        """No origin + no key = rejected even without explicit CLAUDE_OFFICE_API_KEY.
-
-        The auto-generated per-launch token is always required for non-browser
-        WebSocket clients (issue #41 item 3).
-        """
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            ws = self._make_ws()
-            assert validate_websocket_origin(ws) is False
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-    def test_no_origin_auto_key_accepted(self) -> None:
-        """No origin + valid auto-generated key = accepted."""
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            ws = self._make_ws(api_key=settings.effective_api_key)
-            assert validate_websocket_origin(ws) is True
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-    def test_no_origin_valid_key_accepted(self) -> None:
-        """No origin + valid API key = accepted."""
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = "my-secret"
-        try:
-            ws = self._make_ws(api_key="my-secret")
-            assert validate_websocket_origin(ws) is True
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-    def test_no_origin_wrong_key_rejected(self) -> None:
-        """No origin + wrong API key = rejected."""
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = "my-secret"
-        try:
-            ws = self._make_ws(api_key="wrong")
-            assert validate_websocket_origin(ws) is False
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-    def test_no_origin_no_key_rejected(self) -> None:
-        """No origin + no API key when configured = rejected."""
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = "my-secret"
-        try:
-            ws = self._make_ws()
-            assert validate_websocket_origin(ws) is False
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-
 # ---------------------------------------------------------------------------
 # Follow-up (issue #39): token_tracker must honor is_safe_transcript_path,
 # and the OpenAPI schema URL must stay reachable when an API key is set.
@@ -419,94 +318,9 @@ class TestTimingSafeKeyComparison:
         assert "provided != key" not in source
         assert "provided == key" not in source
 
-    def test_websocket_uses_hmac(self) -> None:
-        """WebSocket validation should use hmac.compare_digest."""
-        import inspect
-
-        source = inspect.getsource(validate_websocket_origin)
-        assert "hmac.compare_digest" in source
-        assert "provided == key" not in source
-
-
-class TestStateChangingEndpointAuth:
-    """State-changing endpoints always require the effective API key (issue #41 item 2)."""
-
-    def test_clear_db_requires_key(self) -> None:
-        """DELETE /sessions should require the effective API key."""
-        from app.main import app
-
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            client = TestClient(app)
-            # No X-API-Key header — should be rejected
-            resp = client.delete(f"{settings.API_V1_STR}/sessions")
-            assert resp.status_code == 401
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-    def test_clear_db_with_effective_key(self) -> None:
-        """DELETE /sessions with the effective key should pass auth."""
-        from app.main import app
-
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            client = TestClient(app)
-            resp = client.delete(
-                f"{settings.API_V1_STR}/sessions",
-                headers={"X-API-Key": settings.effective_api_key},
-            )
-            # Auth passes — may be 200 or 500 depending on DB state, but not 401
-            assert resp.status_code != 401
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-    def test_simulate_requires_key(self) -> None:
-        """POST /sessions/simulate should require the effective API key."""
-        from app.main import app
-
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            client = TestClient(app)
-            resp = client.post(f"{settings.API_V1_STR}/sessions/simulate")
-            assert resp.status_code == 401
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-    def test_read_only_endpoints_open_without_key(self) -> None:
-        """GET endpoints should still work without a key."""
-        from app.main import app
-
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            client = TestClient(app)
-            resp = client.get(f"{settings.API_V1_STR}/sessions")
-            assert resp.status_code == 200
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
 
 class TestEffectiveApiKey:
     """Verify config.effective_api_key behavior."""
-
-    def test_auto_key_generated(self) -> None:
-        """An auto-generated key should exist when no explicit key is set."""
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            assert settings.effective_api_key
-            assert len(settings.effective_api_key) == 64  # secrets.token_hex(32)
-            assert not settings.has_explicit_key
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
 
     def test_explicit_key_takes_precedence(self) -> None:
         """When CLAUDE_OFFICE_API_KEY is set, it is the effective key."""
@@ -516,64 +330,6 @@ class TestEffectiveApiKey:
         try:
             assert settings.effective_api_key == "my-explicit-key"
             assert settings.has_explicit_key is True
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-
-# ---------------------------------------------------------------------------
-# SEC-001 — /api/v1/status must not disclose the effective API key
-# ---------------------------------------------------------------------------
-
-
-class TestStatusEndpointKeyDisclosure:
-    """GET /api/v1/status must not return the effective API key (SEC-001)."""
-
-    def test_status_does_not_disclose_api_key(self) -> None:
-        from app.main import app
-
-        client = TestClient(app)
-        resp = client.get("/api/v1/status")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "apiKey" not in body
-        assert get_settings().effective_api_key not in resp.text
-
-
-# ---------------------------------------------------------------------------
-# SEC-002 — focus/clipboard endpoint must require the effective API key
-# ---------------------------------------------------------------------------
-
-
-class TestFocusEndpointAuth:
-    """POST /sessions/{id}/focus must require the effective API key (SEC-002)."""
-
-    def test_focus_requires_key(self) -> None:
-        from app.main import app
-
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            client = TestClient(app)
-            resp = client.post(f"{settings.API_V1_STR}/sessions/some-session/focus")
-            assert resp.status_code == 401
-        finally:
-            settings.CLAUDE_OFFICE_API_KEY = original
-
-    def test_focus_with_effective_key_passes_auth(self) -> None:
-        from app.main import app
-
-        settings = get_settings()
-        original = settings.CLAUDE_OFFICE_API_KEY
-        settings.CLAUDE_OFFICE_API_KEY = ""
-        try:
-            client = TestClient(app)
-            resp = client.post(
-                f"{settings.API_V1_STR}/sessions/does-not-exist/focus",
-                headers={"X-API-Key": settings.effective_api_key},
-            )
-            # Past auth; session lookup fails → 404 (or 500 if DB unavailable).
-            assert resp.status_code in (404, 500)
         finally:
             settings.CLAUDE_OFFICE_API_KEY = original
 

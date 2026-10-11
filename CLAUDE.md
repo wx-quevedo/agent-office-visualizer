@@ -70,7 +70,6 @@ See `.claude/skills/*/SKILL.md` for details.
 | Hooks | `hooks/pyproject.toml` |
 | Hooks CLI | `hooks/src/claude_office_hooks/main.py` (`__version__` — derived via `importlib.metadata`, no manual bump needed) |
 | Frontend package | `frontend/package.json` |
-| Frontend display | `frontend/src/app/page.tsx` (header badge) |
 | OpenCode plugin | `opencode-plugin/package.json` |
 
 To bump all manual locations at once: `make bump-version VERSION=x.y.z` (rewrites the

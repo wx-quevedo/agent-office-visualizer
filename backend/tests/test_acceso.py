@@ -9,12 +9,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from app.api import acceso_middleware as mw
-from app.api.acceso_middleware import COOKIE_SESION, AccesoMiddleware, ws_autorizado
+from app.api.acceso_middleware import COOKIE_SESION, AccesoMiddleware
 from app.api.middleware import LocalhostOnlyMiddleware
 from app.api.routes import acceso as rutas_acceso
 from app.api.routes import agents_state, events
@@ -251,11 +250,6 @@ class MotorFalso:
         return True
 
 
-class ProcesadorFalso:
-    async def process_event(self, event: Any) -> None:
-        return None
-
-
 @pytest.fixture
 def entorno(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reloj: Reloj):
     acc = Acceso(tmp_path / "acceso.db", secreto="s", clock=reloj)
@@ -279,7 +273,6 @@ def entorno(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reloj: Reloj):
     app.include_router(agents_state.router, prefix=api)
     app.include_router(rutas_permisos.router, prefix=api)
     app.include_router(events.router, prefix=api)
-    app.dependency_overrides[events.get_event_processor] = lambda: ProcesadorFalso()
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -293,15 +286,6 @@ def entorno(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reloj: Reloj):
     @app.get("/_next/static/app.js")
     async def estatico() -> dict[str, str]:
         return {"js": "x"}
-
-    @app.websocket("/ws/prueba")
-    async def ws_prueba(websocket: WebSocket) -> None:
-        if not ws_autorizado(websocket):
-            await websocket.close(code=4401)
-            return
-        await websocket.accept()
-        await websocket.send_text("hola")
-        await websocket.close()
 
     events.reset_rate_limiter()
     yield app, acc, motor, reg
@@ -563,41 +547,6 @@ def test_un_token_de_app_no_sirve_como_cookie(entorno, activado) -> None:  # typ
     assert c.get(f"{API}/agents/state").status_code == 401
 
 
-def test_websocket_con_y_sin_sesion(entorno, activado) -> None:  # type: ignore[no-untyped-def]
-    app, acc, *_ = entorno
-    c = TestClient(app)
-    with pytest.raises(WebSocketDisconnect) as e, c.websocket_connect("/ws/prueba") as ws:
-        ws.receive_text()
-    assert e.value.code == 4401
-    entrar(c)
-    with c.websocket_connect("/ws/prueba") as ws:
-        assert ws.receive_text() == "hola"
-    app_token, _ = acc.crear_sesion("app", None, None)
-    h = {"Authorization": f"Bearer {app_token}"}
-    with TestClient(app).websocket_connect("/ws/prueba", headers=h) as ws:
-        assert ws.receive_text() == "hola"
-    # never in the URL (it would end up in access logs)
-    with (
-        pytest.raises(WebSocketDisconnect),
-        TestClient(app).websocket_connect(f"/ws/prueba?token={app_token}") as ws,
-    ):
-        ws.receive_text()
-    maquina, _ = acc.crear_token_maquina("tower")
-    with (
-        pytest.raises(WebSocketDisconnect),
-        TestClient(app).websocket_connect(
-            "/ws/prueba", headers={"Authorization": f"Bearer {maquina}"}
-        ) as ws,
-    ):
-        ws.receive_text()
-
-
-def test_websocket_desactivado_abierto(entorno, desactivado) -> None:  # type: ignore[no-untyped-def]
-    app, *_ = entorno
-    with TestClient(app).websocket_connect("/ws/prueba") as ws:
-        assert ws.receive_text() == "hola"
-
-
 def test_rutas_publicas_e_ingesta_son_las_esperadas() -> None:
     assert mw.es_ingesta("POST", "/api/v1/events")
     assert mw.es_ingesta("POST", "/api/v1/maquinas/observaciones")
@@ -841,18 +790,3 @@ def test_id_de_evento_por_maquina(entorno, activado) -> None:  # type: ignore[no
     assert c.post(f"{API}/events", json=ev_tower, headers=h_t).json()["status"] == "accepted"
     assert c.post(f"{API}/events", json=ev_alien, headers=h_a).json()["status"] == "accepted"
     assert len(motor.eventos) == 2
-
-
-def test_websocket_real_sin_sesion_acepta_y_cierra_con_4401(activado) -> None:  # type: ignore[no-untyped-def]
-    """Behind nginx a close before accept is an HTTP 403 without a code: the real
-    routes accept first so the browser gets 4401 (and goes to /entrar)."""
-    from app.api.routes import websockets as rutas_ws
-
-    app = FastAPI()
-    app.include_router(rutas_ws.router)
-    c = TestClient(app)
-    for ruta in ("/ws/overview", "/ws/sesion-prueba", "/ws/room/sala-prueba"):
-        # accepted first (a 403 would fail in websocket_connect, outside the raises)
-        with c.websocket_connect(ruta) as ws, pytest.raises(WebSocketDisconnect) as e:
-            ws.receive_text()
-        assert e.value.code == 4401

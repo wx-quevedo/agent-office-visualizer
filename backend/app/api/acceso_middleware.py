@@ -6,7 +6,7 @@ or the local one (MAQUINA_LOCAL_ID).
 
 With VISUALIZADOR_AUTH=activado:
 
-- Only the API (/api/...), the API docs and the WebSockets are guarded. Pages
+- Only the API (/api/...) and the API docs are guarded. Pages
   and static files of the frontend carry no data and stay public, so /entrar
   loads when the backend itself serves the frontend.
 - Public: health, sign-in state, sign-in (web and app token), sign-out.
@@ -18,9 +18,6 @@ With VISUALIZADOR_AUTH=activado:
   token (``Authorization: Bearer vap_...``). With the cookie, requests that
   change something must also send ``X-Visualizador: 1`` (CSRF: a page of
   another site cannot add that header without CORS approval).
-
-WebSockets are checked in their routes (``ws_autorizado``): this middleware
-only sees HTTP.
 """
 
 from __future__ import annotations
@@ -28,7 +25,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-from fastapi import Request, WebSocket
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -56,7 +53,7 @@ _INGESTA: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("POST", re.compile(rf"{_API}/maquinas/latido")),
     ("POST", re.compile(rf"{_API}/maquinas/observaciones")),
 )
-# Guarded with access on: the API, its docs, and the WebSockets (checked in their routes).
+# Guarded with access on: the API and its docs.
 _PROTEGIDAS = (f"{_API}/", "/docs", "/redoc", "/openapi.json")
 
 
@@ -172,17 +169,3 @@ class AccesoMiddleware(BaseHTTPMiddleware):
             return _no(403, "Falta el encabezado X-Visualizador (protección contra CSRF).")
         request.state.sesion = sesion
         return await call_next(request)
-
-
-def ws_autorizado(websocket: WebSocket) -> bool:
-    """A WebSocket needs a user session when access is on: the cookie of the web,
-    or an app token in the Authorization header (never in the URL: it would end
-    up in access logs)."""
-    if not get_settings().auth_activa:
-        return True
-    acceso = get_acceso()
-    cookie = cookie_de(websocket.cookies)
-    if cookie and acceso.validar_sesion(cookie, tipo="web"):
-        return True
-    token = bearer(websocket.headers)
-    return bool(token and acceso.validar_sesion(token, tipo="app"))

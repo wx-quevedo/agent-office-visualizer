@@ -1598,9 +1598,7 @@ async def bootstrap(engine: AgentStateEngine) -> dict[str, int]:
     """Rebuild the engine on start-up from its own event log.
 
     1. Retention: drop log entries older than STATE_EVENT_LOG_RETENTION_DAYS.
-    2. Empty log (first start): one-time import of the sessions active in the
-       last STATE_EVENT_LOG_LOAD_HOURS from the classic database.
-    3. Otherwise: load the sessions active in that window from the log.
+    2. Load the sessions active in the last STATE_EVENT_LOG_LOAD_HOURS.
     """
     from app.config import get_settings
     from app.core.agent_event_store import retention_cutoff
@@ -1609,27 +1607,13 @@ async def bootstrap(engine: AgentStateEngine) -> dict[str, int]:
     settings = get_settings()
     now = engine.clock()
     since = now - timedelta(hours=settings.STATE_EVENT_LOG_LOAD_HOURS)
-    result = {"borrados": 0, "importados": 0, "cargados": 0}
+    result = {"borrados": 0, "cargados": 0}
     store = engine.store
     if store is None:
         return result
     result["borrados"] = store.delete_older_than(
         retention_cutoff(now, settings.STATE_EVENT_LOG_RETENTION_DAYS)
     )
-    if store.count() == 0:
-        imported = 0
-        async for event in _legacy_events(since):
-            engine.accept(event, origin="importacion")
-            imported += 1
-        store.flush()
-        result["importados"] = imported
-        logger.info(
-            "Agent event log was empty: imported %d events (sessions active in the last %s h) "
-            "from the classic database",
-            imported,
-            settings.STATE_EVENT_LOG_LOAD_HOURS,
-        )
-        return result
     loaded = 0
     for payload, origin in store.iter_recent(since):
         try:
@@ -1644,46 +1628,6 @@ async def bootstrap(engine: AgentStateEngine) -> dict[str, int]:
     return result
 
 
-async def _legacy_events(since: datetime):  # noqa: ANN202 - async generator
-    """Events of the classic database for sessions active since ``since``."""
-    from pydantic import ValidationError
-    from sqlalchemy import func, select
-
-    from app.db.database import AsyncSessionLocal
-    from app.db.models import EventRecord
-    from app.models.events import EventAdapter
-
-    async with AsyncSessionLocal() as db:
-        active = (
-            select(EventRecord.session_id)
-            .group_by(EventRecord.session_id)
-            .having(func.max(EventRecord.timestamp) >= since)
-        )
-        rows = (
-            (
-                await db.execute(
-                    select(EventRecord)
-                    .where(EventRecord.session_id.in_(active))
-                    .order_by(EventRecord.timestamp, EventRecord.id)
-                )
-            )
-            .scalars()
-            .all()
-        )
-    for rec in rows:
-        try:
-            yield EventAdapter.validate_python(
-                {
-                    "event_type": EventType(rec.event_type),
-                    "session_id": rec.session_id,
-                    "timestamp": rec.timestamp,
-                    "data": rec.data or {},
-                }
-            )
-        except (ValidationError, ValueError):
-            continue
-
-
 async def run_tick_loop(engine: AgentStateEngine, interval: float = 1.0) -> None:
     """Recompute time-based states every ``interval`` seconds until cancelled."""
     import asyncio
@@ -1694,18 +1638,6 @@ async def run_tick_loop(engine: AgentStateEngine, interval: float = 1.0) -> None
         except Exception:
             logger.exception("Agent state engine tick failed")
         await asyncio.sleep(interval)
-
-
-def count_browser_connections() -> int:
-    """Browsers connected to any WebSocket feed (session, room or overview)."""
-    from app.core.connection_manager import get_manager
-
-    m = get_manager()
-    return (
-        sum(len(c) for c in m.active_connections.values())
-        + sum(len(c) for c in m.room_connections.values())
-        + len(m.overview_connections)
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1738,7 +1670,6 @@ def get_state_engine() -> AgentStateEngine:
         s = get_settings()
         _engine = AgentStateEngine(
             Thresholds.from_settings(),
-            browsers_provider=count_browser_connections,
             store=store,
             lectura_local=s.LECTURA_LOCAL,
             maquina_local=s.MAQUINA_LOCAL_ID,

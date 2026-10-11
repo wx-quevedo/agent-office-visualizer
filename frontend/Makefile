@@ -1,6 +1,4 @@
-.PHONY: dev build build-static start lint typecheck test format checkall gen-types
-
-BACKEND_STATIC_DIR := ../backend/static
+.PHONY: dev build start lint typecheck test format checkall
 
 # Port for the Next.js server (override: make dev FRONTEND_PORT=3100)
 FRONTEND_PORT ?= 3000
@@ -13,13 +11,6 @@ dev:
 
 build:
 	$(PKG_MGR) run build
-
-# Build static export and copy to backend for serving
-build-static:
-	$(PKG_MGR) run build
-	rm -rf $(BACKEND_STATIC_DIR)
-	cp -r out $(BACKEND_STATIC_DIR)
-	@echo "Static build copied to $(BACKEND_STATIC_DIR)"
 
 start:
 	$(PKG_MGR) run start -- --port $(FRONTEND_PORT)
@@ -39,6 +30,3 @@ fmt:
 checkall: fmt lint typecheck build
 	# Run tests after linting and formatting to ensure coverage
 	$(PKG_MGR) run test
-
-gen-types:
-	cd .. && make gen-types

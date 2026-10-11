@@ -5,14 +5,13 @@ Usage:
     bump_version.py [--dry-run] <x.y.z>   # rewrite or preview changes
     bump_version.py --check [<x.y.z>]     # verify (CI-friendly)
 
-The six hand-maintained version locations are rewritten atomically:
+The five hand-maintained version locations are rewritten atomically:
 
     pyproject.toml                       (root)
     backend/pyproject.toml
     hooks/pyproject.toml
     frontend/package.json
     opencode-plugin/package.json
-    frontend/src/app/page.tsx            (header badge)
 
 Excluded because they are derived at runtime via importlib.metadata
 (see ARC-021 / DOC-007) and must not be hand-edited:
@@ -20,7 +19,7 @@ Excluded because they are derived at runtime via importlib.metadata
     backend/app/config.py                (Settings.VERSION)
     hooks/src/claude_office_hooks/main.py (__version__)
 
-Security scope: touches only the six allowlisted files above. Performs no
+Security scope: touches only the five allowlisted files above. Performs no
 git or network operations and reads no env/secret files.
 """
 
@@ -53,7 +52,6 @@ LOCATIONS: tuple[Location, ...] = (
     Location("hooks/pyproject.toml", re.compile(rf'(?m)^version = "({_VERSION})"$')),
     Location("frontend/package.json", re.compile(rf'(?m)^  "version": "({_VERSION})",$')),
     Location("opencode-plugin/package.json", re.compile(rf'(?m)^  "version": "({_VERSION})",$')),
-    Location("frontend/src/app/page.tsx", re.compile(rf"(?m)^[^\S\n]+v({_VERSION})[^\S\n]*$")),
 )
 
 

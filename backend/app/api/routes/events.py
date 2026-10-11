@@ -1,13 +1,11 @@
 import logging
 import time
 from collections import deque
-from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from app.config import get_settings
 from app.core.agent_state_engine import get_state_engine
-from app.core.event_processor import EventProcessor, get_event_processor
 from app.core.permisos import get_registro
 from app.models.events import AnyEvent
 
@@ -107,13 +105,11 @@ def _check_rate_limit(session_id: str) -> None:
 async def receive_event(
     request: Request,
     event: AnyEvent,
-    background_tasks: BackgroundTasks,
-    ep: Annotated[EventProcessor, Depends(get_event_processor)],
 ) -> dict[str, str]:
-    """Receive a Claude Code hook event and queue it for background processing.
+    """Receive a Claude Code hook event (from a hook or a machine monitor).
 
-    Events are processed asynchronously via FastAPI BackgroundTasks.
-    The response is returned immediately so hooks never block.
+    The state engine takes it in arrival order (its own append-only log) and
+    the response is immediate, so hooks never block.
     Subject to a per-session rate limit (default 1000 events per 60 seconds
     per session_id, configurable via the EVENT_RATE_LIMIT setting/env var).
 
@@ -122,8 +118,6 @@ async def receive_event(
         event: The event payload from Claude Code hooks. ``event.session_id``
             keys the rate-limit bucket so concurrent sessions don't starve
             each other.
-        background_tasks: FastAPI background task runner.
-        ep: EventProcessor dependency.
 
     Returns:
         A status payload with event_id and processing state.
@@ -142,8 +136,7 @@ async def receive_event(
     duena = get_state_engine().maquina_de(event.session_id)
     if duena is not None and duena != event.machine_id:
         raise HTTPException(status_code=409, detail="Esa sesión es de otra máquina.")
-    # Catalog state engine first, in arrival order: its own append-only log and
-    # memory do not depend on the classic pipeline (which runs in background).
+    # Catalog state engine, in arrival order (its own append-only log).
     get_state_engine().accept(event, origin="hook")
     # Recorded only once accepted (no await in between: no other request runs here).
     get_state_engine().marcar_recibido(evento_id)
@@ -154,7 +147,6 @@ async def receive_event(
         getattr(event.data, "tool_name", None),
         getattr(event.data, "tool_input", None),
     )
-    background_tasks.add_task(ep.process_event, event)
     return {
         "status": "accepted",
         "event_id": str(event.timestamp),

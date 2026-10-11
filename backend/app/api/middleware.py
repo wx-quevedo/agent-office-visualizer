@@ -2,10 +2,8 @@
 
 Moved out of ``app.main`` in ARC-023. The trust boundary and auth behavior
 live here: ``LocalhostOnlyMiddleware`` restricts access to the loopback
-interface, and ``ApiKeyMiddleware`` gates state-changing endpoints behind
-either an explicit user-configured key or the per-launch auto-generated
-token (SEC-001 / SEC-002 / SEC-006). Logic is unchanged from the prior
-inline version in ``main.py``.
+interface, and ``ApiKeyMiddleware`` requires the explicit user-configured key
+(``CLAUDE_OFFICE_API_KEY``) when there is one.
 """
 
 import hmac
@@ -60,42 +58,23 @@ class LocalhostOnlyMiddleware(BaseHTTPMiddleware):
 _NO_AUTH_PATHS = frozenset({"/health", "/docs", "/redoc"})
 
 
-def _is_state_changing(path: str, method: str) -> bool:
-    """Return True if the request targets a destructive or side-effecting endpoint.
-
-    Covers global destructive operations (clearing all sessions, running a
-    simulation) and per-session OS side effects (terminal activation + clipboard
-    write via ``/focus``). Other per-session mutations remain open in the default
-    configuration and are fully gated when an explicit key is set (handled by
-    ``settings.has_explicit_key`` in the middleware).
-    """
-    prefix = settings.API_V1_STR + "/sessions"
-    return (
-        (path == prefix and method == "DELETE")
-        or (path == f"{prefix}/simulate" and method == "POST")
-        or (path.startswith(f"{prefix}/") and path.endswith("/focus") and method == "POST")
-    )
-
-
 class ApiKeyMiddleware(BaseHTTPMiddleware):
     """Validate X-API-Key header for protected endpoints.
 
     * When ``CLAUDE_OFFICE_API_KEY`` is explicitly set, ALL non-public paths
       require the key (existing behaviour).
-    * When the key is empty (default), state-changing endpoints still require
-      the per-launch auto-generated token (``settings.effective_api_key``).
-      Read-only paths remain open for backwards compatibility.
+    * When the key is empty (default, local), every path stays open: the
+      access middleware (VISUALIZADOR_AUTH) is what guards the published copy.
     """
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         if request.method == "OPTIONS":
             return await call_next(request)
 
-        # Skip auth for public paths and WebSocket handshakes
+        # Skip auth for public paths
         if (
             request.url.path in _NO_AUTH_PATHS
             or request.url.path == f"{settings.API_V1_STR}/openapi.json"
-            or request.url.path.startswith("/ws/")
         ):
             return await call_next(request)
 
@@ -105,11 +84,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Determine whether auth is required for this request
-        requires_auth = settings.has_explicit_key or _is_state_changing(
-            request.url.path, request.method
-        )
-
-        if not requires_auth:
+        if not settings.has_explicit_key:
             return await call_next(request)
 
         provided = request.headers.get("X-API-Key", "")

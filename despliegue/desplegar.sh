@@ -53,7 +53,7 @@ if [ -z "$SIN_FRONT" ]; then
   echo "== Frontend (export estático para https://$DOMINIO)"
   (
     cd frontend
-    NEXT_PUBLIC_API_URL="https://$DOMINIO" NEXT_PUBLIC_WS_URL="wss://$DOMINIO" npm run build
+    NEXT_PUBLIC_API_URL="https://$DOMINIO" npm run build
   )
 fi
 [ -f frontend/out/index.html ] || { echo "Falta frontend/out (construir el frontend)."; exit 1; }

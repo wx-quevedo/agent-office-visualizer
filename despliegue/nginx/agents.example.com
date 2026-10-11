@@ -4,22 +4,9 @@
 # la redirección de HTTP a HTTPS.
 #
 # - Frontend: export estático de Next.js (construido en la PC), servido por nginx.
-# - /api y /ws: al backend en 127.0.0.1:8320 (systemd visualizador-agentes).
+# - /api: al backend en 127.0.0.1:8320 (systemd visualizador-agentes).
 
-# Nombres propios para no chocar con los map o upstream de otros sitios.
-map $http_upgrade $visualizador_connection_upgrade {
-    default upgrade;
-    ''      close;
-}
-
-# WebSocket: solo desde la propia página o sin Origin (monitor, app). La cookie
-# también viajaría desde los otros subdominios de example.com (mismo sitio).
-map $http_origin $visualizador_ws_origen {
-    ""                              1;
-    "https://agents.example.com"  1;
-    default                         0;
-}
-
+# Nombre propio para no chocar con los upstream de otros sitios.
 upstream visualizador_backend {
     server 127.0.0.1:8320;
     keepalive 16;
@@ -63,23 +50,6 @@ server {
         proxy_send_timeout 660s;
         proxy_buffering off;
         proxy_redirect off;
-    }
-
-    # WebSocket de la oficina (con sesión: si no, el backend cierra con 4401).
-    location /ws/ {
-        if ($visualizador_ws_origen = 0) {
-            return 403;
-        }
-        proxy_pass http://visualizador_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $visualizador_connection_upgrade;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
     }
 
     # Documentación de la API: no se publica.

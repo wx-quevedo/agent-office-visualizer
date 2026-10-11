@@ -1,4 +1,4 @@
-"""Engine-owned event log: order, no loss, retention, first-start import, 1 h no-PID close."""
+"""Engine-owned event log: order, no loss, retention, 1 h no-PID close."""
 
 import sqlite3
 import threading
@@ -9,9 +9,7 @@ from typing import Any
 import pytest
 
 from app.core.agent_event_store import AgentEventStore
-from app.core.agent_state_engine import AgentStateEngine, Thresholds, bootstrap
-from app.db.database import AsyncSessionLocal
-from app.db.models import EventRecord, SessionRecord
+from app.core.agent_state_engine import AgentStateEngine, Thresholds
 from app.models.events import AnyEvent, EventAdapter
 
 NOW = datetime.now(UTC)
@@ -112,46 +110,6 @@ def test_failed_save_is_logged_and_engine_keeps_working(
     engine.accept(ev("s1", "session_start", 0))
     assert "s1" in engine.sessions
     assert "could not queue" in caplog.text
-
-
-async def test_first_start_imports_last_24h_from_classic_db(tmp_path: Path) -> None:
-    async with AsyncSessionLocal() as db:
-        for sid in ("imp-live", "imp-old"):
-            db.add(SessionRecord(id=sid, status="active"))
-        rows_to_add = [
-            ("imp-live", "session_start", 2 * 3600),
-            ("imp-live", "stop", 3600),
-            ("imp-old", "session_start", 50 * 3600),
-        ]
-        for sid, et, ago in rows_to_add:
-            db.add(
-                EventRecord(
-                    session_id=sid,
-                    timestamp=NOW - timedelta(seconds=ago),
-                    event_type=et,
-                    data={"last_assistant_message": "Listo."} if et == "stop" else {},
-                )
-            )
-        await db.commit()
-
-    store = AgentEventStore(tmp_path / "first.db")
-    store.start()
-    engine = AgentStateEngine(Thresholds(), store=store)
-    result = await bootstrap(engine)
-    assert result["importados"] == 2
-    assert "imp-live" in engine.sessions and "imp-old" not in engine.sessions
-    assert store.count() == 2
-
-    # Second start: the log is not empty, so it loads from the log only.
-    engine2 = AgentStateEngine(Thresholds(), store=store)
-    result2 = await bootstrap(engine2)
-    assert result2["importados"] == 0
-    assert result2["cargados"] == 2
-    assert [r.event_type for r in engine2.sessions["imp-live"].records] == [
-        "session_start",
-        "stop",
-    ]
-    store.close()
 
 
 def test_no_pid_sessions_close_after_one_hour() -> None:

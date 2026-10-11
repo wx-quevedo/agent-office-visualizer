@@ -14,9 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Claude Office Visualizer",
-  description:
-    "Real-time pixel art visualization of Claude Code operations in a virtual office",
+  title: "Oficina de agentes",
+  description: "Los agentes de Claude Code de Washington, en una oficina en vivo",
 };
 
 export default function RootLayout({
@@ -25,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="es">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning

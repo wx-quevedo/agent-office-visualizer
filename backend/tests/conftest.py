@@ -3,75 +3,22 @@
 import os
 import tempfile
 
-# Disable AI summary service in tests to avoid network timeouts
-# when CLAUDE_CODE_OAUTH_TOKEN is present in .env but expired.
-os.environ["SUMMARY_ENABLED"] = "False"
-
 # The agent state engine writes its own event log; keep tests away from the
 # real backend/agent_events.db.
 os.environ["STATE_EVENT_LOG_PATH"] = os.path.join(
     tempfile.mkdtemp(prefix="agent-events-"), "agent_events.db"
 )
 
-import asyncio
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.config import get_settings
-from app.db.database import Base, get_db, override_engine
 
-# Ensure settings are cached with SUMMARY_ENABLED=False
 get_settings.cache_clear()
 _ = get_settings()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_database() -> Iterator[None]:
-    """Set up an in-memory SQLite database for all tests.
-
-    This fixture runs automatically for all tests and ensures that
-    test sessions don't pollute the production database.
-    """
-    # Create in-memory SQLite engine for tests
-    test_engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        echo=False,
-    )
-
-    # Override the global engine
-    override_engine(test_engine)
-
-    # Create all tables using a new event loop
-    async def create_tables() -> None:
-        # Import models to register them with Base
-        import app.db.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
-
-        async with test_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-    asyncio.run(create_tables())
-
-    yield
-
-    # Cleanup
-    async def drop_tables() -> None:
-        async with test_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-        await test_engine.dispose()
-
-    asyncio.run(drop_tables())
-
-
-@pytest_asyncio.fixture
-async def db_session() -> AsyncIterator[AsyncSession]:
-    """Provide a database session for tests that need direct DB access."""
-    async for session in get_db():
-        yield session
 
 
 @pytest.fixture
@@ -100,12 +47,7 @@ def _allow_test_transcript_paths() -> Iterator[None]:  # pyright: ignore[reportU
     from contextlib import ExitStack
 
     with ExitStack() as stack:
-        for target in (
-            "app.core.path_utils.is_safe_transcript_path",
-            "app.core.jsonl_parser.is_safe_transcript_path",
-            "app.core.transcript_poller.is_safe_transcript_path",
-            "app.core.handlers.conversation_handler.is_safe_transcript_path",
-        ):
+        for target in ("app.core.path_utils.is_safe_transcript_path",):
             stack.enter_context(patch(target, return_value=True))
         yield
 
