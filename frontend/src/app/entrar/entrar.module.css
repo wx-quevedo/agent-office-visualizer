@@ -1,0 +1,118 @@
+/* /entrar: same boxes as /oficina (white, greys, black, IBM Plex). */
+
+.pagina {
+  --negro: #111111;
+  --gris-oscuro: #555555;
+  --gris: #8a8a8a;
+  --gris-borde: #b5b5b5;
+  --gris-fondo: #f4f4f4;
+  --blanco: #ffffff;
+  min-height: 100vh;
+  background: var(--blanco);
+  color: var(--negro);
+  font-family: var(--font-plex-sans), Arial, sans-serif;
+  font-size: 15px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 120px 32px 40px;
+}
+
+.mono {
+  font-family: var(--font-plex-mono), "Courier New", monospace;
+}
+
+.caja {
+  width: min(420px, 100%);
+  border: 3px solid var(--negro);
+  padding: 28px 28px 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.linea {
+  margin: -8px 0 0;
+  color: var(--gris-oscuro);
+}
+
+.campo {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.campo input {
+  font: inherit;
+  font-weight: 400;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 2px solid var(--negro);
+  background: var(--blanco);
+  color: var(--negro);
+}
+
+.campo input:focus-visible,
+.boton:focus-visible {
+  outline: 3px solid var(--negro);
+  outline-offset: 2px;
+}
+
+.boton {
+  min-height: 48px;
+  border: 2px solid var(--negro);
+  background: var(--negro);
+  color: var(--blanco);
+  font: inherit;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.boton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.error {
+  border: 2px solid var(--negro);
+  padding: 10px 12px;
+  font-weight: 600;
+}
+
+.aviso {
+  margin: 0;
+  border: 1px dashed var(--gris);
+  padding: 10px 12px;
+  color: var(--gris-oscuro);
+}
+
+.aviso a {
+  color: var(--negro);
+  font-weight: 600;
+}
+
+.nota {
+  margin: 0;
+  color: var(--gris-oscuro);
+  font-size: 13px;
+}
+
+@media (max-width: 699px) {
+  .pagina {
+    padding: 48px 16px 32px;
+  }
+
+  .caja {
+    padding: 22px 18px 20px;
+  }
+
+  .titulo {
+    font-size: 24px;
+  }
+}

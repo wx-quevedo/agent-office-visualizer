@@ -134,3 +134,8 @@ docs/superpowers
 /backend/permisos.db
 /backend/permisos.json
 /backend/permisos.tmp
+# Acceso y respaldos de la copia de desarrollo (etapa 1.1)
+/backend/acceso.db
+/backend/acceso.db-wal
+/backend/acceso.db-shm
+/backend/respaldos/

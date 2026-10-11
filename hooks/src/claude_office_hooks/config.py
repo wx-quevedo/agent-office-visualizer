@@ -157,6 +157,26 @@ def get_api_key() -> str:
     return _api_key_holder[0]
 
 
+# Machine token of the visualizer (stage 1.1): sent as "Authorization: Bearer".
+# Needed only when the backend runs with VISUALIZADOR_AUTH=activado.
+_token_holder: list[str] = [""]
+
+
+def get_token_maquina() -> str:
+    return _token_holder[0]
+
+
+def auth_headers(con_token: bool = True) -> dict[str, str]:
+    """Headers of a request: API key, and the machine token only for the main
+    backend (``con_token``); extra destinations never receive it."""
+    headers: dict[str, str] = {}
+    if _api_key_holder[0]:
+        headers["X-API-Key"] = _api_key_holder[0]
+    if con_token and _token_holder[0]:
+        headers["Authorization"] = f"Bearer {_token_holder[0]}"
+    return headers
+
+
 def _set_api_key(key: str) -> None:
     _api_key_holder[0] = key
 
@@ -202,4 +222,7 @@ def load_config() -> dict[str, str]:
             pass
     # Set API key from config or env var (env var takes precedence)
     _set_api_key(os.environ.get("CLAUDE_OFFICE_API_KEY", config.get("CLAUDE_OFFICE_API_KEY", "")))
+    _token_holder[0] = os.environ.get(
+        "CLAUDE_OFFICE_TOKEN_MAQUINA", config.get("CLAUDE_OFFICE_TOKEN_MAQUINA", "")
+    ).strip()
     return config

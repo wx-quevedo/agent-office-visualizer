@@ -17,6 +17,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import BotonSalir from "@/components/acceso/BotonSalir";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
 import PanelConfigPermisos from "@/components/permisos/PanelConfigPermisos";
 import PanelPermiso from "@/components/permisos/PanelPermiso";
@@ -617,6 +618,7 @@ export default function Oficina() {
           >
             Permisos
           </button>
+          <BotonSalir className={s.botonAvisos} />
           {!agenteId && (
             <div
               className={s.selector}

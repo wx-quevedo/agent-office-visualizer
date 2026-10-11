@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS events (
     event_ts TEXT NOT NULL,
     received_ts TEXT NOT NULL,
     origin TEXT NOT NULL,
-    payload TEXT NOT NULL
+    payload TEXT NOT NULL,
+    machine_id TEXT
 );
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, id);
 CREATE INDEX IF NOT EXISTS events_event_ts ON events (event_ts);
@@ -61,6 +62,11 @@ class AgentEventStore:
         self.write_errors = 0
         with closing(self._connect()) as conn:
             conn.executescript(_SCHEMA)
+            # Logs created before stage 1.1: the migration fills it for old rows.
+            columnas = {r[1] for r in conn.execute("PRAGMA table_info(events)")}
+            if "machine_id" not in columnas:
+                with conn:
+                    conn.execute("ALTER TABLE events ADD COLUMN machine_id TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=30)
@@ -84,6 +90,7 @@ class AgentEventStore:
             datetime.now(UTC).isoformat(),
             origin,
             event.model_dump_json(),
+            event.machine_id,
         )
         self._queue.put(row)
         if self._writer is None:
@@ -106,7 +113,7 @@ class AgentEventStore:
         try:
             while True:
                 item = self._queue.get()
-                batch: list[tuple[str, ...]] = []
+                batch: list[tuple[str | None, ...]] = []
                 markers: list[threading.Event] = []
                 stop = False
                 while True:
@@ -131,12 +138,12 @@ class AgentEventStore:
         finally:
             conn.close()
 
-    def _write(self, conn: sqlite3.Connection, batch: list[tuple[str, ...]]) -> None:
+    def _write(self, conn: sqlite3.Connection, batch: list[tuple[str | None, ...]]) -> None:
         try:
             with conn:
                 conn.executemany(
                     "INSERT INTO events (session_id, event_type, event_ts, received_ts, "
-                    "origin, payload) VALUES (?, ?, ?, ?, ?, ?)",
+                    "origin, payload, machine_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     batch,
                 )
         except sqlite3.Error:
@@ -146,7 +153,8 @@ class AgentEventStore:
                     with conn:
                         conn.execute(
                             "INSERT INTO events (session_id, event_type, event_ts, "
-                            "received_ts, origin, payload) VALUES (?, ?, ?, ?, ?, ?)",
+                            "received_ts, origin, payload, machine_id) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
                             row,
                         )
                 except sqlite3.Error:
@@ -170,13 +178,17 @@ class AgentEventStore:
         """
         with closing(self._connect()) as conn:
             rows = conn.execute(
-                "SELECT payload, origin FROM events WHERE session_id IN ("
+                "SELECT payload, origin, machine_id FROM events WHERE session_id IN ("
                 " SELECT session_id FROM events GROUP BY session_id"
                 " HAVING MAX(event_ts) >= ?) ORDER BY id",
                 (_iso(since),),
             )
-            for payload, origin in rows:
-                yield json.loads(payload), origin
+            for payload, origin, machine_id in rows:
+                datos = json.loads(payload)
+                # Events saved before stage 1.1 have it only in the column.
+                if machine_id and not datos.get("machine_id"):
+                    datos["machine_id"] = machine_id
+                yield datos, origin
 
     def delete_sessions(self, prefixes: list[str]) -> dict[str, int]:
         """Delete every event of the sessions whose id starts with a prefix.

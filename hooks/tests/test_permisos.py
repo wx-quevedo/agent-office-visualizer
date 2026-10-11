@@ -220,6 +220,7 @@ class Backend(BaseHTTPRequestHandler):
     decision: dict[str, Any] = {"estado": "aprobada"}
     esperar = True
     recibidos: list[str] = []
+    autorizaciones: list[str | None] = []
 
     def log_message(self, *a: Any) -> None:
         pass
@@ -236,6 +237,7 @@ class Backend(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         self.rfile.read(n)
         Backend.recibidos.append(self.path)
+        Backend.autorizaciones.append(self.headers.get("Authorization"))
         if self.path.endswith("/permisos/solicitudes"):
             self._json({"esperar": Backend.esperar, "segundos_restantes": 30})
         else:
@@ -251,13 +253,15 @@ def backend():
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     Backend.recibidos = []
+    Backend.autorizaciones = []
     yield srv.server_address[1]
     srv.shutdown()
 
 
-def correr_hook(port: int, home: Path) -> subprocess.CompletedProcess[str]:
+def correr_hook(port: int, home: Path, token: str = "") -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
+        "CLAUDE_OFFICE_TOKEN_MAQUINA": token,
         "CLAUDE_OFFICE_API_URL": f"http://127.0.0.1:{port}/api/v1/events",
         "CLAUDE_OFFICE_EXTRA_API_URLS": "",
         "CLAUDE_OFFICE_PRINCIPAL": "visualizador",
@@ -312,3 +316,53 @@ def test_proceso_con_backend_apagado_no_escribe_nada(tmp_path: Path) -> None:
     r = correr_hook(port, tmp_path)
     assert r.returncode == 0 and r.stdout == "" and r.stderr == ""
     assert time.monotonic() - inicio < 10
+
+
+def test_proceso_envia_el_token_de_maquina(backend: int, tmp_path: Path) -> None:
+    """With CLAUDE_OFFICE_TOKEN_MAQUINA every request carries Authorization: Bearer."""
+    Backend.decision = {"estado": "aprobada"}
+    Backend.esperar = False
+    r = correr_hook(backend, tmp_path, token="vam_token-de-prueba")
+    assert r.returncode == 0
+    assert Backend.autorizaciones
+    assert set(Backend.autorizaciones) == {"Bearer vam_token-de-prueba"}
+
+
+def test_proceso_sin_token_no_envia_autorizacion(backend: int, tmp_path: Path) -> None:
+    Backend.esperar = False
+    correr_hook(backend, tmp_path)
+    assert set(Backend.autorizaciones) == {None}
+
+
+def test_el_token_no_va_a_los_destinos_extra(tmp_path: Path) -> None:
+    """Extra destinations (CLAUDE_OFFICE_EXTRA_API_URLS) never get the machine token."""
+    principal = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+    extra_srv = ThreadingHTTPServer(("127.0.0.1", 0), Backend)
+    for srv in (principal, extra_srv):
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+    Backend.recibidos = []
+    Backend.autorizaciones = []
+    Backend.esperar = False
+    try:
+        env = {
+            **os.environ,
+            "CLAUDE_OFFICE_TOKEN_MAQUINA": "vam_secreto",
+            "CLAUDE_OFFICE_API_URL": f"http://127.0.0.1:{principal.server_address[1]}/api/v1/events",
+            "CLAUDE_OFFICE_EXTRA_API_URLS": f"http://127.0.0.1:{extra_srv.server_address[1]}/api/v1/events",
+            "CLAUDE_OFFICE_PRINCIPAL": "visualizador",
+            "USERPROFILE": str(tmp_path),
+            "HOME": str(tmp_path),
+        }
+        subprocess.run(
+            [sys.executable, "-m", "claude_office_hooks.main", "stop"],
+            input=json.dumps({"session_id": "prueba-hook"}),
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
+        )
+        time.sleep(0.3)
+        assert sorted(Backend.autorizaciones, key=str) == ["Bearer vam_secreto", None]
+    finally:
+        principal.shutdown()
+        extra_srv.shutdown()

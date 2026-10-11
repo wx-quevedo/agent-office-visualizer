@@ -152,6 +152,7 @@ class Event(BaseModel):
     session_id: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     data: EventData
+    machine_id: str | None = None
 
     @field_validator("session_id")
     @classmethod
@@ -324,6 +325,9 @@ class _EventBase(BaseModel):
 
     session_id: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    # Machine that sent the event. Set by the backend from the machine token (or
+    # the local machine); a value sent by the client is always replaced.
+    machine_id: str | None = None
 
     @field_validator("session_id")
     @classmethod

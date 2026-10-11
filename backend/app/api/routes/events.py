@@ -129,6 +129,13 @@ async def receive_event(
         A status payload with event_id and processing state.
     """
     _check_rate_limit(event.session_id)
+    # The machine comes from its token (or the local one): never from the client.
+    event.machine_id = getattr(request.state, "maquina", None) or get_settings().MAQUINA_LOCAL_ID
+    # A session belongs to the machine that started it: another machine cannot
+    # add events to it or take it over.
+    duena = get_state_engine().maquina_de(event.session_id)
+    if duena is not None and duena != event.machine_id:
+        raise HTTPException(status_code=409, detail="Esa sesión es de otra máquina.")
     # Catalog state engine first, in arrival order: its own append-only log and
     # memory do not depend on the classic pipeline (which runs in background).
     get_state_engine().accept(event, origin="hook")

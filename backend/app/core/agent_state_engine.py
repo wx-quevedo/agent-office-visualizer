@@ -613,6 +613,8 @@ class SessionLog:
     session_id: str
     records: list[Record] = field(default_factory=_records)
     project: str | None = None
+    # Machine that sends the events of this session (stage 1.1).
+    machine_id: str | None = None
     transcript_path: str | None = None
     token_samples: list[tuple[datetime, int]] = field(default_factory=_samples)
     token_problem: str | None = None
@@ -928,6 +930,8 @@ class AgentStateEngine:
         log = self.sessions.get(event.session_id)
         if log is None:
             log = self.sessions[event.session_id] = SessionLog(event.session_id)
+        if event.machine_id:
+            log.machine_id = event.machine_id
         d = event.data
         log.project = d.project_dir or d.working_dir or log.project or d.project_name
         if d.transcript_path:
@@ -1169,6 +1173,11 @@ class AgentStateEngine:
             del self._heartbeats[oldest]
         self._snapshot = None
 
+    def maquina_de(self, session_id: str) -> str | None:
+        """Machine of a known session (None: new session, or before stage 1.1)."""
+        log = self.sessions.get(session_id)
+        return log.machine_id if log is not None else None
+
     def dispositivos_vigentes(self, now: datetime | None = None) -> tuple[bool, bool]:
         """(PC, phone): an /oficina page sent a heartbeat within the presence
         window (75 s) from that device. A browser on the WebSocket (the classic
@@ -1366,6 +1375,7 @@ class AgentStateEngine:
                 "session_id": log.session_id,
                 "proyecto": log.project,
                 "cuenta": account_for_transcript(log.transcript_path),
+                "maquina": log.machine_id,
             },
             "estado": {
                 "numero": st.number,

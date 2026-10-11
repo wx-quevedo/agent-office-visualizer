@@ -15,8 +15,10 @@ from fastapi.staticfiles import StaticFiles
 from rich.logging import RichHandler
 from sqlalchemy import delete, select, update
 
+from app.api.acceso_middleware import AccesoMiddleware
 from app.api.middleware import ApiKeyMiddleware, LocalhostOnlyMiddleware
 from app.api.routes import (
+    acceso,
     agents_state,
     events,
     floors,
@@ -27,8 +29,10 @@ from app.api.routes import (
     websockets,
 )
 from app.config import get_settings
+from app.core.acceso import exigir_secreto
 from app.core.agent_state_engine import bootstrap, get_state_engine, run_tick_loop
 from app.core.event_processor import EventProcessor, get_event_processor
+from app.core.migracion_maquinas import migrar_esta_copia
 from app.core.summary_service import get_summary_service
 from app.db.database import Base, get_engine
 from app.db.migrate import migrate_schema
@@ -53,6 +57,16 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Manage application startup and shutdown lifecycle."""
     importlib.import_module("app.db.models")
+    # Sign-in on needs a real secret for the token hashes.
+    exigir_secreto(settings)
+    # Stage 1.1: existing data gets the local machine (backup first, once).
+    try:
+        resultado = await asyncio.to_thread(migrar_esta_copia)
+        if resultado.get("aplicada"):
+            logger.info("Datos asignados a la máquina local: %s", resultado)
+    except Exception:
+        logger.exception("No se pudo aplicar la migración de máquinas")
+        raise
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -200,17 +214,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+app.add_middleware(AccesoMiddleware)
+app.add_middleware(LocalhostOnlyMiddleware)
+app.add_middleware(ApiKeyMiddleware)
+# Added last = outermost: every answer (also a 401/403 of the access checks)
+# carries the CORS headers, so the browser can read it and go to /entrar.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_credentials=False,
+    # Credentials: the session cookie (VISUALIZADOR_AUTH=activado). The origins
+    # are an explicit list, never "*".
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.add_middleware(LocalhostOnlyMiddleware)
-app.add_middleware(ApiKeyMiddleware)
-
+app.include_router(acceso.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(agents_state.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(oficina3d.router, prefix=f"{settings.API_V1_STR}/oficina3d")
 app.include_router(permisos.router, prefix=f"{settings.API_V1_STR}")

@@ -3,7 +3,7 @@
  * calls to the backend (/api/v1/permisos), tested in tests/permisos.test.ts.
  */
 
-import { API_BASE } from "@/utils/api";
+import { apiFetch } from "@/utils/api";
 
 export type EstadoPermiso =
   "pendiente" | "aprobada" | "rechazada" | "vencida" | "resuelta_fuera";
@@ -148,8 +148,8 @@ export async function decidirPermiso(
   dispositivo: "pc" | "celular",
 ): Promise<ResultadoDecision> {
   try {
-    const r = await fetch(
-      `${API_BASE}/api/v1/permisos/solicitudes/${encodeURIComponent(id)}/decision`,
+    const r = await apiFetch(
+      `/api/v1/permisos/solicitudes/${encodeURIComponent(id)}/decision`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,7 +177,7 @@ export async function decidirPermiso(
 
 export async function leerConfigPermisos(): Promise<ConfigPermisos | null> {
   try {
-    const r = await fetch(`${API_BASE}/api/v1/permisos/config`, {
+    const r = await apiFetch("/api/v1/permisos/config", {
       cache: "no-store",
     });
     if (!r.ok) return null;
@@ -191,7 +191,7 @@ export async function guardarConfigPermisos(
   c: ConfigPermisos,
 ): Promise<{ ok: boolean; config?: ConfigPermisos; error?: string }> {
   try {
-    const r = await fetch(`${API_BASE}/api/v1/permisos/config`, {
+    const r = await apiFetch("/api/v1/permisos/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

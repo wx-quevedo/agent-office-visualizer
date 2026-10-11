@@ -13,6 +13,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.api.acceso_middleware import ws_autorizado
 from app.api.websocket import get_manager
 from app.core.event_processor import get_event_processor
 from app.services.git_service import git_service
@@ -34,6 +35,9 @@ async def websocket_overview(websocket: WebSocket) -> None:
     isn't captured by the session route (which would treat "overview" as a session
     id, accept, find no state, and silently idle).
     """
+    if not ws_autorizado(websocket):
+        await websocket.close(code=4401, reason="Inicia sesión")
+        return
     from app.api.websocket import validate_websocket_origin
 
     if not validate_websocket_origin(websocket):
@@ -77,6 +81,9 @@ async def websocket_overview(websocket: WebSocket) -> None:
 
 @router.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
+    if not ws_autorizado(websocket):
+        await websocket.close(code=4401, reason="Inicia sesión")
+        return
     from app.api.websocket import validate_session_id, validate_websocket_origin
 
     if not validate_session_id(session_id):
@@ -126,6 +133,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
 @router.websocket("/ws/room/{room_id}")
 async def websocket_room(websocket: WebSocket, room_id: str) -> None:
     """Room-level WebSocket: sends merged state for all sessions in a room."""
+    if not ws_autorizado(websocket):
+        await websocket.close(code=4401, reason="Inicia sesión")
+        return
     from app.api.websocket import validate_session_id, validate_websocket_origin
 
     if not validate_session_id(room_id):

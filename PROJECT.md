@@ -14,6 +14,10 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 - **Gestión:** ClickUp, espacio VR Things, carpeta "Visualizador de Agentes" (listas Roadmap, Problemas y errores, Investigación).
 - **Documentos de diseño:** `docs/proyecto/catalogo-estados.md` y `docs/proyecto/investigacion-herramientas.md`.
 
+## Visión
+
+No es otro chat. Es una organización viva, lista para recibir un proyecto, que trabaja de forma profesional y apoyada, con formas de visualización distintas (oficina 3D, cajas, detalle, celular), y que hace el trabajo pesado más fácil que un chat.
+
 ## Entorno
 
 - Windows, PowerShell y Git Bash. `make` instalado (ezwinports). Node 24, uv 0.11, Python 3.13 vía uv.
@@ -73,6 +77,8 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 | 2026-10-10 | La diaria corre con el bucle Selector de asyncio (`--loop asyncio:SelectorEventLoop`) y se arranca a través de su tarea programada | En Windows el bucle Proactor cierra el puerto que escucha cuando un `accept` falla con WinError 64; el Selector solo registra el error y sigue |
 | 2026-10-10 | Permisos desde la oficina con la política "solo_en_el_celular" por defecto (corrige la decisión anterior, "solo_fuera_de_la_pc"): la oficina espera tu decisión solo si hay un latido de celular vigente (75 s, como la presencia) y ninguno de la PC; sin ningún dispositivo conectado, o con la PC conectada, el hook devuelve de inmediato y responde VS Code (la solicitud se ve igual en la oficina); si el celular se desconecta mientras espera, deja de esperar. "siempre" y "nunca" se eligen en el panel Permisos; espera por defecto 90 s (10 a 540) | Con "solo_fuera_de_la_pc", si estabas en la PC con la pestaña cerrada, cada permiso esperaba hasta el límite sin que nadie pudiera responder. Claude Code espera al hook antes de seguir: solo vale la pena esperar cuando alguien puede responder desde el celular |
 | 2026-10-10 | Plan por etapas (sección "Plan por etapas"): sin Tailscale; un monitor por máquina envía todo al VPS de the VPS provider y la web y la app iOS lo consumen en https://agents.example.com | Decisión de Washington: ver y manejar los agentes desde cualquier lugar sin depender de la red privada |
+| 2026-10-10 | Inicio de sesión de un solo usuario con contraseña fijada por consola (hash argon2) y tokens guardados como HMAC-SHA256; desactivado por defecto en local y activado en el VPS | La diaria y el iPhone por Tailscale siguen igual hasta la etapa 1.4; en internet nada queda abierto |
+| 2026-10-10 | Un token de máquina solo puede enviar datos (eventos, registro y espera de permisos, latido) y una máquina solo ve sus propias solicitudes de permiso | Si un monitor se ve comprometido, no lee el estado ni decide permisos de otras máquinas |
 | 2026-10-10 | Voces: Washington usará las voces de Google en Chrome (no Edge) | En Edge y en Playwright solo aparecen voces de Microsoft de España; pendiente buscar mejores voces o un sistema de lectura |
 
 ## Ajustes heredados de la instalación diaria
@@ -113,7 +119,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Aprobar o rechazar permisos (13) desde la oficina, el celular y la vista 3D: el hook registra cada PermissionRequest en el backend y espera la decisión según la política (por defecto, solo cuando no estás en la PC); rechazar admite un motivo que recibe Claude. Panel Permisos (política, espera, comandos que piden confirmación). Prueba real con dos sesiones de prueba de Claude Code (aprobada desde la PC, rechazada con motivo desde el celular). Capturas en `docs/capturas/permisos-v1/`. Commit `0579500` |
 | 2026-10-10 | Corrección de la política de permisos: "solo_fuera_de_la_pc" se reemplaza por "solo_en_el_celular" (nueva por defecto): la oficina espera solo con el celular conectado y sin la PC; sin ningún dispositivo responde VS Code de inmediato; si el celular se desconecta durante la espera, se suelta. La política antigua guardada se convierte al cargar. Commit `8e9bba2` |
 | 2026-10-10 | Prueba real de permisos con el hook instalado: Washington aprobó desde el iPhone el permiso de un comando de una sesión nueva y se ejecutó. VS Code muestra su diálogo al mismo tiempo y gana la primera respuesta (la de la oficina o la de VS Code). En modo Auto de Claude Code no se generan solicitudes de permiso. Todo hasta `8e9bba2` está en GitHub |
-| 2026-10-10 | Etapa 0 (cierre): en `/oficina/3d` el clic en un agente abre su panel sobre la escena, sin salir de ella (el mismo panel que abre `?agente=<id>`); al volver de `/oficina` ya no se abre el panel de otro agente. Los scripts de la diaria muestran los acentos de git en Windows PowerShell 5.1. Plan por etapas registrado. Capturas en `docs/capturas/oficina-3d-clic/` (hash en el registro del commit siguiente) |
+| 2026-10-10 | Etapa 0 (cierre): en `/oficina/3d` el clic en un agente abre su panel sobre la escena, sin salir de ella (el mismo panel que abre `?agente=<id>`); al volver de `/oficina` ya no se abre el panel de otro agente. Los scripts de la diaria muestran los acentos de git en Windows PowerShell 5.1. Plan por etapas registrado. Capturas en `docs/capturas/oficina-3d-clic/`. Commit `768cf83` |
+| 2026-10-10 | Etapa 1.1: máquinas (registro, `machine_id` en eventos, sesiones, agentes y permisos; migración con respaldo de los datos existentes a "Alienware"), tokens por máquina solo para la ingesta, inicio de sesión de un usuario (argon2, cookie httpOnly de 30 días, token de app de un año, límite de intentos, CSRF, WebSocket con sesión) y pantalla `/entrar`. Desactivado en local (`VISUALIZADOR_AUTH=desactivado`): la diaria funciona igual. Capturas en `docs/capturas/entrar-v1/` (hash en el registro del commit siguiente) |
 
 ## Cómo levantar
 
@@ -278,6 +285,51 @@ Cuando un agente pide permiso, el hook `claude-office-hook permission_request` (
 - Documentación de Claude Code: https://code.claude.com/docs/en/hooks#permissionrequest (entrada, `decision`, timeout por defecto de 600 s y, si se agota, sigue el flujo normal). No está documentado si el diálogo de VS Code se muestra mientras el hook espera; con `claude -p` Claude Code esperó al hook antes de seguir.
 - Para que funcione en la diaria hace falta reinstalar el hook y subir su `timeout` de 2 a 600 s en las dos cuentas (comandos en "Hook compartido").
 
+## Inicio de sesión y máquinas (etapa 1.1)
+
+Preparado para el VPS; en local queda desactivado y todo funciona como antes.
+
+- **Modo** (`VISUALIZADOR_AUTH`): `desactivado` (por defecto, local): sin sesión ni tokens; los hooks sin token y el iPhone por Tailscale siguen igual; cada evento queda en la máquina local (`MAQUINA_LOCAL_ID`, `alienware`) o en la del token de máquina si lo trae. `activado`: la API, su documentación y los WebSockets exigen sesión (la ingesta, token de máquina); las páginas y archivos estáticos del frontend quedan públicos porque no traen datos (así `/entrar` carga aunque el backend sirva el frontend). Con el modo activado el backend no arranca sin `VISUALIZADOR_SECRETO` de al menos 32 caracteres.
+- **Base** `acceso.db` (junto al registro del motor, o `ACCESO_DB_PATH`): usuario (hash argon2 de la contraseña), sesiones (web y app), máquinas, tokens de máquina y migraciones aplicadas. Los tokens se guardan como HMAC-SHA256 con `VISUALIZADOR_SECRETO` (SHA-256 si está vacío, solo en local); se ven una sola vez. Prefijos: `vas_` sesión web, `vap_` token de app, `vam_` token de máquina.
+- **Sesión web**: cookie httpOnly, SameSite=Lax, `__Host-visualizador_sesion` con https (Secure, sin dominio) y `visualizador_sesion` sin https (`COOKIE_SEGURA=auto|si|no`; detrás de nginx con `CONFIAR_PROXY=true` mira `X-Forwarded-Proto`), 30 días por dispositivo. Con la cookie, todo lo que cambia algo exige el encabezado `X-Visualizador: 1` (CSRF). Cambiar la contraseña cierra todas las sesiones y tokens de app.
+- **Token de app** (futura app iOS): `POST /api/v1/auth/app/token` con la contraseña entrega un token de un año para un dispositivo, revocable desde la lista de sesiones; se usa como `Authorization: Bearer vap_...` (sin CSRF: no es una credencial automática) y también en el WebSocket (en el encabezado, nunca en la URL: quedaría en los registros de acceso).
+- **Límite de intentos** por IP: 4 fallos libres; desde el 5.º, espera de 5 s que se duplica en cada fallo, hasta 15 min (429 con `Retry-After`); un acierto limpia la IP. Además, más de 30 fallos en un minuto entre todas las IP cierran la entrada un minuto. Detrás de nginx la IP es `X-Real-IP` (que nginx pone con `$remote_addr`) o el último valor de `X-Forwarded-For`: los primeros los manda el cliente y se pueden falsificar. La contraseña se verifica fuera del bucle de eventos (argon2 es lento a propósito).
+- **Máquinas**: id, nombre, sistema (windows/mac/linux), hostname, versión del monitor y última conexión (latido). Los eventos, las sesiones de la vista clásica, los agentes del motor (`agente.maquina` en `/agents/state`) y los permisos llevan `machine_id`, que siempre pone el backend (el del token, o el local): nunca el cliente. Una máquina solo ve sus propias solicitudes de permiso.
+- **Migración** (`app/core/migracion_maquinas.py`, al arrancar el backend, una sola vez): registra "Alienware" (Windows, hostname de la PC), copia `agent_events.db`, `visualizer.db` y `permisos.db` a `respaldos/AAAAMMDD-HHMMSS-antes-maquinas/` con la API de respaldo de SQLite, agrega la columna `machine_id` y asigna `alienware` a lo que no tenga máquina. Queda marcada en `acceso.db`: volver a correrla no hace nada.
+- **Hook**: con `CLAUDE_OFFICE_TOKEN_MAQUINA` (variable o `claude-office-config.env`) manda `Authorization: Bearer vam_...` solo al destino principal (nunca a los extra); sin él, igual que antes. Una sesión es de la máquina que la empezó: otra máquina no puede agregarle eventos (409). El monitor de la etapa 1.2 usará el mismo token.
+- **Frontend**: `/entrar` (contraseña, Entrar, mensajes de contraseña incorrecta y de demasiados intentos con la cuenta regresiva); con el modo activado, cualquier página sin sesión va a `/entrar?volver=<ruta>` y vuelve (solo rutas del mismo sitio); botón Salir junto a Avisos y Permisos en `/oficina` y `/oficina/3d`. `apiFetch` manda la cookie y `X-Visualizador` y lleva a `/entrar` ante un 401.
+
+| Endpoint | Quién puede usarlo (modo activado) |
+|---|---|
+| `GET /health`, `GET /api/v1/auth/estado`, `POST /api/v1/auth/entrar`, `POST /api/v1/auth/app/token`, `POST /api/v1/auth/salir`; páginas y estáticos del frontend | Cualquiera (entrar y token de app con límite de intentos; salir cierra la sesión de la cookie si sigue válida y siempre la borra) |
+| `POST /api/v1/events`, `POST /api/v1/permisos/solicitudes`, `GET /api/v1/permisos/solicitudes/{id}`, `POST /api/v1/maquinas/latido` | Solo token de máquina (cada máquina ve solo sus solicitudes) |
+| `GET /api/v1/auth/sesiones`, `DELETE /api/v1/auth/sesiones/{id}`, `GET /api/v1/maquinas` | Usuario (cookie + `X-Visualizador` en los cambios, o token de app) |
+| Todo lo demás de la API (estado, permisos: decidir, configuración, historial; distribución 3D; vista clásica, que ya no pide la clave por arranque; documentación) | Usuario; un token de máquina recibe 403 |
+| WebSockets (`/ws/...`) | Usuario (cookie, o token de app en `Authorization`); si no, se cierra con 4401. Con el modo activado acepta los orígenes de `BACKEND_CORS_ORIGINS` (por ejemplo el dominio público) |
+
+Con el modo desactivado todos los endpoints quedan como antes (solo localhost y Tailscale) y `entrar` y `app/token` responden 409.
+
+Nota de despliegue (etapa 1.3): nginx en el mismo servidor, con `proxy_set_header X-Real-IP $remote_addr;` y `X-Forwarded-Proto $scheme`, y `CONFIAR_PROXY=true`; sin eso todos los clientes se verían como 127.0.0.1 y cualquiera podría bloquear la entrada al dueño.
+
+**Configuración de producción** (documentada en `backend/.env.produccion.example`, sin desplegar): `VISUALIZADOR_AUTH=activado`, `VISUALIZADOR_SECRETO` (generado una vez con `python -c "import secrets; print(secrets.token_urlsafe(48))"`), `CONFIAR_PROXY=true`, `COOKIE_SEGURA=si`, `BACKEND_CORS_ORIGINS=["https://agents.example.com"]`, rutas de datos (`STATE_EVENT_LOG_PATH`, `DATABASE_URL`, opcionales `ACCESO_DB_PATH` y `RESPALDOS_PATH`) y la máquina de los datos existentes (`MAQUINA_LOCAL_ID`, `MAQUINA_LOCAL_NOMBRE`, `MAQUINA_LOCAL_SISTEMA`).
+
+**Comandos para Washington** (etapa 1.4; desde la carpeta `backend` de la copia donde corre el backend, que usa su `.env`). En la diaria actual, en PowerShell:
+
+```powershell
+cd E:\visualizador-agentes-diario\backend
+uv run python -m app.acceso_cli contrasena                 # fija o cambia la contraseña (la pide dos veces, sin mostrarla)
+uv run python -m app.acceso_cli maquinas                   # lista las máquinas
+uv run python -m app.acceso_cli maquina-crear --id tower --nombre Tower --sistema windows --hostname TOWER
+uv run python -m app.acceso_cli token-crear --maquina alienware   # muestra el token una sola vez
+uv run python -m app.acceso_cli tokens                     # lista los tokens de máquina
+uv run python -m app.acceso_cli token-revocar <id>
+uv run python -m app.acceso_cli sesiones                   # sesiones web y tokens de app activos
+uv run python -m app.acceso_cli sesion-revocar <id>
+uv run python -m app.acceso_cli migrar                     # vuelve a correr la migración (no hace nada si ya está)
+```
+
+En el VPS (etapa 1.3) serán los mismos comandos desde la carpeta `backend` del despliegue.
+
 ## Hook compartido (oficina diaria y desarrollo)
 
 El comando `claude-office-hook` se instala una sola vez desde `E:\visualizador-agentes\hooks` (`uv tool install --force -p 3.14 E:\visualizador-agentes\hooks`) y lo usan las dos cuentas (`~/.claude` y `~/.claude-demo`).
@@ -374,6 +426,7 @@ Decisión de Washington (2026-10-10).
 
 - **Arquitectura**: sin Tailscale. Un monitor instalado en cada máquina (Windows y luego Mac) envía todo al VPS de the VPS provider (<VPS_IP>); la web y la app iOS consumen el VPS en https://agents.example.com, con inicio de sesión de un solo usuario y sesión de 30 días por dispositivo.
 - **Etapa 0, cierre**: clic en un agente sin pantalla gris, acentos de los scripts, plan registrado (hecha el 2026-10-10).
+- **Etapa 1.1** (hecha el 2026-10-10): backend para varias máquinas con inicio de sesión (sección "Inicio de sesión y máquinas").
 - **Etapa 1, publicar**: backend para varias máquinas con inicio de sesión y token por monitor; monitor e instalador de Windows (recibe los hooks, lee transcripts, cola sin conexión, arranque automático, recuperación tras reinicio, comandos peligrosos siempre con aprobación); despliegue en el VPS con nginx, https y respaldos diarios; pasar el uso diario al VPS. El monitor debe diseñarse para que más adelante pueda lanzar sesiones de Claude Code (`claude -p` con stream-json y `--resume`) en carpetas que se le indiquen.
 - **Etapa 2, ver bien**: ficha útil del agente (no chat): tarea actual, pasos, estimado contra real, tokens, commits, archivos, permisos y acciones; esperas específicas (por ejemplo "Unity: compilando scripts, 2 min"); historial preciso; tokens, tiempo de trabajo y límites de 5 h y semanal; detector de atascos.
 - **Etapa 3, app iOS**: bocetos para aprobación, base que consume el VPS, push de tres alertas (permiso pendiente, pregunta del orquestador, tarea terminada), bandeja de decisiones, bandeja de ideas, widget, Live Activity y Apple Watch.
@@ -384,6 +437,18 @@ Decisión de Washington (2026-10-10).
 - **Etapa 8, extras**: modo fiesta con logros (modelos locales de la Tower para no gastar cuota), resúmenes diario y semanal, modo foco, informe para clientes, modo presentación, vista de invitados, ClickUp, calendario, canales de alerta extra, búsqueda global, vista previa en vivo, builds al teléfono, roles extra, ramas por bloque, diagrama de arquitectura, biblioteca de prompts y skills, documentación final, time-lapse, lecciones entre proyectos, vista previa de tareas grandes, mejores voces, personajes GLB/Mixamo, mejora continua con análisis de uso, Android.
 - **Regla**: no duplicar lo que Claude Code ya trae (`/usage`, compactación, push oficial, Remote Control, tareas programadas, hook PreCompact); usarlo por debajo. Las ideas nuevas se anotan en la etapa donde encajen, sin desviar el plan.
 
+## Competencia y seguimiento
+
+Investigado el 2026-10-10.
+
+- **AgentsRoom**: escritorio multiagente con roles, app móvil con push y delegación.
+- **Agent Orchestrator**: orquestador y workers, tablero Kanban con columnas Trabajando, Te necesita, En revisión y Listo para integrar (Apache 2.0).
+- **De Anthropic**: Projects (beta en Pro y Max; hilos en paralelo en la nube o en la PC vía Remote Control), Agent teams (experimental) y mensajes entre sesiones (SendMessage y ListAgents, también con `claude -p` y entre máquinas por Remote Control).
+- **Visualizadores**: Pixel Agents, Pixel Office y Agent Virtual Office (2D, solo miran).
+- **Apps móviles**: Happy (código abierto, cifrado de extremo a extremo), Forge Remote y Melta.
+- **Seguimiento**: etapa 3, cifrado de extremo a extremo en la app; etapa 4, usar los mensajes entre sesiones oficiales como canal orquestador-agente y vigilar la evolución de Projects; etapa 5, columnas "Te necesita" y "En revisión" en el pipeline.
+
 ## Próximos pasos
 
-1. Etapa 1, publicar: empezar por el backend para varias máquinas (inicio de sesión de un usuario y token por monitor) y el diseño del monitor de Windows.
+1. Etapa 1.2: monitor e instalador de Windows (recibe los hooks, lee transcripts, cola sin conexión, arranque automático, recuperación tras reinicio), con el token de máquina de la etapa 1.1.
+2. Después: 1.3 despliegue en el VPS (nginx, https, respaldos diarios) y 1.4 pasar el uso diario al VPS (ahí Washington fija la contraseña y crea los tokens).

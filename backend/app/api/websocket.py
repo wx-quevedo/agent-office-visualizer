@@ -30,13 +30,14 @@ _VALID_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 # beyond the local machine (QA-014).
 _LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
+
 def _is_tailnet(host):
     import ipaddress
+
     try:
         return ipaddress.ip_address(host) in ipaddress.ip_network("100.64.0.0/10")
     except Exception:
         return False
-
 
 
 def _allowed_ws_origins() -> frozenset[str]:
@@ -64,7 +65,16 @@ def validate_websocket_origin(websocket: WebSocket) -> bool:
     local processes from subscribing to the session-state stream when
     no explicit key is configured.
     """
+    from app.config import get_settings as _settings
+
     origin = websocket.headers.get("origin")
+    if _settings().auth_activa:
+        # Sign-in on: the session was already checked (ws_autorizado). Browsers
+        # must come from one of the configured origins (e.g. the public domain);
+        # native clients (no Origin) use their app token.
+        if origin is None:
+            return True
+        return origin.rstrip("/") in {o.rstrip("/") for o in _settings().BACKEND_CORS_ORIGINS}
     if origin is not None:
         return origin.rstrip("/") in _allowed_ws_origins()
 

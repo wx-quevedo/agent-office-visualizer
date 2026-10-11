@@ -112,6 +112,8 @@ class Solicitud:
     dispositivo: str | None = None
     decidida: datetime | None = None
     politica: str = "siempre"
+    # Machine whose hook registered it (stage 1.1).
+    machine_id: str | None = None
 
     def vista(self, now: datetime) -> dict[str, Any]:
         """JSON for the office and the hook."""
@@ -136,6 +138,7 @@ class Solicitud:
             "motivo": self.motivo,
             "dispositivo": self.dispositivo,
             "decidida": self.decidida.isoformat() if self.decidida else None,
+            "maquina": self.machine_id,
         }
 
 
@@ -177,8 +180,12 @@ class RegistroPermisos:
                     id TEXT PRIMARY KEY, session_id TEXT, herramienta TEXT,
                     detalle TEXT, cuenta TEXT, proyecto TEXT, creada TEXT,
                     esperando INTEGER, vence TEXT, politica TEXT, estado TEXT,
-                    motivo TEXT, dispositivo TEXT, decidida TEXT)"""
+                    motivo TEXT, dispositivo TEXT, decidida TEXT, machine_id TEXT)"""
             )
+            # Logs created before stage 1.1: the migration fills it for old rows.
+            columnas = {r[1] for r in db.execute("PRAGMA table_info(permisos)")}
+            if "machine_id" not in columnas:
+                db.execute("ALTER TABLE permisos ADD COLUMN machine_id TEXT")
 
     # -- configuration -------------------------------------------------------
 
@@ -221,8 +228,8 @@ class RegistroPermisos:
                 db.execute(
                     """INSERT INTO permisos (id, session_id, herramienta, detalle, cuenta,
                         proyecto, creada, esperando, vence, politica, estado, motivo,
-                        dispositivo, decidida)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        dispositivo, decidida, machine_id)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(id) DO UPDATE SET estado=excluded.estado,
                         esperando=excluded.esperando, motivo=excluded.motivo,
                         dispositivo=excluded.dispositivo, decidida=excluded.decidida""",
@@ -241,6 +248,7 @@ class RegistroPermisos:
                         s.motivo,
                         s.dispositivo,
                         _iso(s.decidida),
+                        s.machine_id,
                     ),
                 )
         except Exception as exc:
@@ -299,6 +307,7 @@ class RegistroPermisos:
         entrada: dict[str, Any],
         cuenta: str | None,
         proyecto: str | None,
+        machine_id: str | None = None,
     ) -> Solicitud:
         """Register a request; idempotent by id. Decides whether the hook waits."""
         now = self.clock()
@@ -336,6 +345,7 @@ class RegistroPermisos:
                 esperando=esperar,
                 vence=now + timedelta(seconds=cfg.espera_seg) if esperar else None,
                 politica=cfg.politica,
+                machine_id=machine_id,
             )
             self._solicitudes[id_] = s
             self._guardar(s, cfg.politica)

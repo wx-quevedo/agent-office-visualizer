@@ -23,13 +23,14 @@ settings = get_settings()
 
 _LOCALHOST_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
 
+
 def _is_tailnet(host):
     import ipaddress
+
     try:
         return ipaddress.ip_address(host) in ipaddress.ip_network("100.64.0.0/10")
     except Exception:
         return False
-
 
 
 class LocalhostOnlyMiddleware(BaseHTTPMiddleware):
@@ -96,6 +97,11 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             or request.url.path == f"{settings.API_V1_STR}/openapi.json"
             or request.url.path.startswith("/ws/")
         ):
+            return await call_next(request)
+
+        # With sign-in on (VISUALIZADOR_AUTH=activado) the user session gates
+        # everything (AccesoMiddleware): the per-launch key is not needed.
+        if settings.auth_activa:
             return await call_next(request)
 
         # Determine whether auth is required for this request

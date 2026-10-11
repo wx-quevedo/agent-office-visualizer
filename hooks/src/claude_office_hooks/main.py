@@ -41,8 +41,8 @@ try:
         SEND_BUDGET,
         TIMEOUT,
         _log_clamp,  # pyright: ignore[reportPrivateUsage]
+        auth_headers,
         event_targets,
-        get_api_key,
         load_config,
         principal_es_visualizador,
         resolve_extra_urls,
@@ -135,10 +135,7 @@ try:
     ) -> dict[str, Any] | None:
         """GET (body None) or POST JSON to the main backend; None on any error."""
         try:
-            headers: dict[str, str] = {"Content-Type": "application/json"}
-            api_key = get_api_key()
-            if api_key:
-                headers["X-API-Key"] = api_key
+            headers: dict[str, str] = {"Content-Type": "application/json", **auth_headers()}
             data = json.dumps(body).encode("utf-8") if body is not None else None
             req = urllib.request.Request(url, data=data, headers=headers)
             with _open_request(req, url, timeout) as response:
@@ -169,10 +166,12 @@ try:
         """
         try:
             body = json.dumps(payload).encode("utf-8")
-            headers: dict[str, str] = {"Content-Type": "application/json"}
-            api_key = get_api_key()
-            if api_key:
-                headers["X-API-Key"] = api_key
+            # The machine token goes only to the main backend, never to extras.
+            principal: dict[str, str] = {"Content-Type": "application/json", **auth_headers()}
+            extra: dict[str, str] = {
+                "Content-Type": "application/json",
+                **auth_headers(con_token=False),
+            }
             # (url, request timeout, quiet errors, wait budget)
             targets: list[tuple[str, float, bool, float]] = [
                 (url, TIMEOUT, False, SEND_BUDGET)
@@ -189,7 +188,11 @@ try:
             started = time.monotonic()
             threads = [
                 (
-                    threading.Thread(target=_post, args=(url, body, headers, t, q), daemon=True),
+                    threading.Thread(
+                        target=_post,
+                        args=(url, body, extra if q else principal, t, q),
+                        daemon=True,
+                    ),
                     budget,
                 )
                 for url, t, q, budget in targets

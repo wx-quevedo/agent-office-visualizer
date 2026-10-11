@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import BotonSalir from "@/components/acceso/BotonSalir";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
 import PanelConfigPermisos from "@/components/permisos/PanelConfigPermisos";
 import { useAvisos } from "@/components/avisos/useAvisos";
@@ -236,6 +237,7 @@ export default function Oficina3D() {
           >
             {t("barra.permisos")}
           </button>
+          <BotonSalir className={s.boton} />
         </div>
       </header>
 

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { API_BASE } from "@/utils/api";
+import { apiFetch } from "@/utils/api";
 import { dispositivo, type Estado } from "./logica";
 
 const REFRESCO_MS = 2000;
@@ -33,7 +33,7 @@ export function useEstadoOficina(): EstadoOficina {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const cargar = async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/v1/agents/state`, {
+        const r = await apiFetch("/api/v1/agents/state", {
           cache: "no-store",
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -78,7 +78,7 @@ export function useLatidoPresencia(): void {
         cliente,
         dispositivo: dispositivo(window.innerWidth, navigator.userAgent),
       });
-      void fetch(`${API_BASE}/api/v1/agents/presence`, {
+      void apiFetch("/api/v1/agents/presence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: cuerpo,

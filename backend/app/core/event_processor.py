@@ -965,6 +965,9 @@ class EventProcessor:
                 session_rec.project_root = project_root
                 logger.info(f"Cached project_root for session {event.session_id}: {project_root}")
 
+            if event.machine_id and not session_rec.machine_id:
+                session_rec.machine_id = event.machine_id
+
             # Derive and store display_name on first encounter.
             if display and not session_rec.display_name:
                 session_rec.display_name = display
@@ -1009,6 +1012,7 @@ class EventProcessor:
                 timestamp=event.timestamp,
                 event_type=event.event_type,
                 data=event.data.model_dump(),
+                machine_id=event.machine_id,
             )
             db.add(event_rec)
             await db.commit()

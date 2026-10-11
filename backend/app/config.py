@@ -133,6 +133,29 @@ class Settings(BaseSettings):
     # must include this value in the X-API-Key header. When empty, a
     # per-launch random token is generated for state-changing endpoints
     # and WebSocket non-browser connections.
+    # -- Access (stage 1.1, see PROJECT.md "Inicio de sesión y máquinas") --------
+    # "desactivado" (default, local): everything works as before, hooks without
+    # token and the iPhone through Tailscale. "activado": every page and API needs
+    # a session (cookie or app token); the ingest endpoints need a machine token.
+    VISUALIZADOR_AUTH: str = "desactivado"
+    # Key of the token hashes (HMAC-SHA256). Required in production; changing it
+    # invalidates every session and machine token.
+    VISUALIZADOR_SECRETO: str = ""
+    # Access database (user, sessions, machines, tokens); default next to the event log.
+    ACCESO_DB_PATH: str = ""
+    # Secure cookie: "auto" (when the request comes over https), "si" or "no".
+    COOKIE_SEGURA: str = "auto"
+    # Behind nginx: trust X-Forwarded-For / X-Forwarded-Proto for the client IP
+    # (sign-in limit) and https (secure cookie).
+    CONFIAR_PROXY: bool = False
+    # Machine of the events that come without a machine token (local mode), and
+    # the one the existing data is assigned to by the migration.
+    MAQUINA_LOCAL_ID: str = "alienware"
+    MAQUINA_LOCAL_NOMBRE: str = "Alienware"
+    MAQUINA_LOCAL_SISTEMA: str = "windows"
+    # Backups taken before a data migration; default: "respaldos" next to the event log.
+    RESPALDOS_PATH: str = ""
+
     CLAUDE_OFFICE_API_KEY: str = ""
 
     # Auto-generated per-launch token. Used as the effective API key when
@@ -143,6 +166,11 @@ class Settings(BaseSettings):
     # Rich tracebacks render local variables and full filesystem paths into logs.
     # Useful in development; disable for shared/production deployments (SEC-006).
     LOG_RICH_TRACEBACKS: bool = True
+
+    @property
+    def auth_activa(self) -> bool:
+        """VISUALIZADOR_AUTH=activado: sessions and machine tokens are required."""
+        return self.VISUALIZADOR_AUTH.strip().lower() == "activado"
 
     @property
     def effective_api_key(self) -> str:

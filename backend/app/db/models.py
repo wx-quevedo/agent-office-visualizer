@@ -33,6 +33,8 @@ class SessionRecord(Base):
     team_name: Mapped[str | None] = mapped_column(String, nullable=True)
     teammate_name: Mapped[str | None] = mapped_column(String, nullable=True)
     is_lead: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Machine of the session (stage 1.1).
+    machine_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
 
     events: Mapped[list[EventRecord]] = relationship(
         "EventRecord", back_populates="session", cascade="all, delete-orphan"
@@ -49,6 +51,8 @@ class EventRecord(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     event_type: Mapped[str] = mapped_column(String)
     data: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # Machine that sent the event (stage 1.1).
+    machine_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
 
     session: Mapped[SessionRecord] = relationship("SessionRecord", back_populates="events")
 

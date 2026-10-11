@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { API_BASE } from "@/utils/api";
+import { apiFetch } from "@/utils/api";
 import { defMueble, LIMITE_X, LIMITE_Z } from "./muebles";
 import {
   ENTORNO_POR_DEFECTO,
@@ -45,7 +45,7 @@ export interface Distribucion extends Disposicion {
 }
 
 export const RUTA_DISTRIBUCION = "/oficina3d/distribucion.json";
-export const URL_DISTRIBUCION = `${API_BASE}/api/v1/oficina3d/distribucion`;
+export const URL_DISTRIBUCION = "/api/v1/oficina3d/distribucion";
 
 export const DISPOSICION_VACIA: Disposicion = {
   items: [],
@@ -207,7 +207,7 @@ export function leerDistribucion(raw: unknown): Distribucion {
 /** Layout of this copy from the backend; the repo base if it does not answer. */
 export async function cargarDistribucion(): Promise<void> {
   try {
-    const r = await fetch(URL_DISTRIBUCION, { cache: "no-store" });
+    const r = await apiFetch(URL_DISTRIBUCION, { cache: "no-store" });
     if (r.ok) {
       const body = (await r.json()) as {
         origen?: string;
@@ -238,7 +238,7 @@ export async function guardarDistribucion(
   d: Distribucion,
 ): Promise<string | null> {
   try {
-    const r = await fetch(URL_DISTRIBUCION, {
+    const r = await apiFetch(URL_DISTRIBUCION, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(d),

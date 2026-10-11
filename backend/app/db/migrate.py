@@ -36,6 +36,12 @@ async def migrate_schema(conn: AsyncConnection) -> None:
     result = await conn.execute(text("PRAGMA table_info(sessions)"))
     existing = {row[1] for row in result.fetchall()}
 
+    new_columns["machine_id"] = "TEXT DEFAULT NULL"  # stage 1.1
     for col_name, col_def in new_columns.items():
         if col_name not in existing:
             await conn.execute(text(f"ALTER TABLE sessions ADD COLUMN {col_name} {col_def}"))
+
+    # Machine of each event (stage 1.1; app.core.migracion_maquinas fills old rows).
+    result = await conn.execute(text("PRAGMA table_info(events)"))
+    if "machine_id" not in {row[1] for row in result.fetchall()}:
+        await conn.execute(text("ALTER TABLE events ADD COLUMN machine_id TEXT DEFAULT NULL"))

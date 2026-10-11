@@ -504,7 +504,12 @@ def test_agent_view_fields(engine: AgentStateEngine, clock: FakeClock) -> None:
     )
     clock.at(60)
     agent = engine.tick()["agentes"][0]
-    assert agent["agente"] == {"session_id": SID, "proyecto": "E:/proyecto", "cuenta": "demo"}
+    assert agent["agente"] == {
+        "session_id": SID,
+        "proyecto": "E:/proyecto",
+        "cuenta": "demo",
+        "maquina": None,  # set by the events route (machine token or local machine)
+    }
     assert agent["ultimo_evento"]["tipo"] == "post_tool_use"
     ind = agent["indicadores"]
     assert ind["herramientas_por_minuto"] == 0.2  # 1 tool in a 5-min window

@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.core.permisos import (
@@ -51,10 +51,18 @@ class Decision(BaseModel):
     dispositivo: Literal["pc", "celular"] = "pc"
 
 
+def _maquina(request: Request) -> str | None:
+    """Machine of the request (machine token, or the local one with access off)."""
+    return getattr(request.state, "maquina", None)
+
+
 @router.post("/solicitudes")
-async def crear_solicitud(body: NuevaSolicitud) -> dict[str, Any]:
+async def crear_solicitud(request: Request, body: NuevaSolicitud) -> dict[str, Any]:
     """Register a PermissionRequest. ``esperar``: the hook waits for a decision."""
     registro = get_registro()
+    existente = registro.obtener(body.id)
+    if existente is not None and existente.machine_id != _maquina(request):
+        raise HTTPException(status_code=409, detail="Ese id ya lo usa otra máquina.")
     s = registro.crear(
         body.id,
         body.session_id,
@@ -62,6 +70,7 @@ async def crear_solicitud(body: NuevaSolicitud) -> dict[str, Any]:
         body.entrada,
         body.cuenta,
         body.proyecto,
+        machine_id=_maquina(request),
     )
     vista = s.vista(registro.clock())
     vista["esperar"] = vista["esperando"]
@@ -70,9 +79,17 @@ async def crear_solicitud(body: NuevaSolicitud) -> dict[str, Any]:
 
 
 @router.get("/solicitudes/{id_}")
-async def leer_solicitud(id_: str, espera: float = Query(default=0, ge=0, le=60)) -> dict[str, Any]:
-    """State of a request; with ``espera`` > 0 waits for a decision (long-poll)."""
+async def leer_solicitud(
+    request: Request, id_: str, espera: float = Query(default=0, ge=0, le=60)
+) -> dict[str, Any]:
+    """State of a request; with ``espera`` > 0 waits for a decision (long-poll).
+
+    A machine only sees its own requests.
+    """
     registro = get_registro()
+    previa = registro.obtener(id_)
+    if previa is not None and previa.machine_id != _maquina(request):
+        raise HTTPException(status_code=404, detail="La solicitud no existe.")
     s = (
         await registro.esperar(id_, min(espera, _ESPERA_LARGA))
         if espera > 0

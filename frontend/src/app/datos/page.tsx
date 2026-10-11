@@ -13,7 +13,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { API_BASE } from "@/utils/api";
+import { API_BASE, apiFetch } from "@/utils/api";
 
 const REFRESH_MS = 2000;
 
@@ -216,7 +216,7 @@ export default function DatosPage() {
     let activo = true;
     const cargar = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/v1/agents/state`);
+        const res = await apiFetch("/api/v1/agents/state");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = (await res.json()) as Respuesta;
         if (activo) {
