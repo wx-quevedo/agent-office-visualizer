@@ -36,6 +36,12 @@ final class OficinaWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         vista = WKWebView(frame: .zero, configuration: conf)
         super.init()
         conf.userContentController.add(Debil(self), name: "oficina")
+        // La app tiene su propia pestaña "Dónde quedamos": se marca la visita
+        // para que la web no salte allí (regla de las 8 horas), también con una
+        // web que todavía no conoce ?app=ios.
+        conf.userContentController.addUserScript(WKUserScript(
+            source: "try { localStorage.setItem('oficina-ultima-visita', String(Date.now())) } catch (e) {}",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         vista.navigationDelegate = self
         vista.isOpaque = false
         vista.backgroundColor = UIColor(Color.fondo3D)
