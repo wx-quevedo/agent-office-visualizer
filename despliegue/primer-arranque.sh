@@ -2,6 +2,8 @@
 # Segundo paso con sudo, después del primer despliegue. Lo ejecuta Washington:
 #
 #   ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/primer-arranque.sh"
+#   ... primer-arranque.sh --sin-contrasena   # pasos 2 a 4
+#   ... primer-arranque.sh --solo-caida       # pasos 3 y 4 (sin repetir el respaldo)
 #
 # 1. Pide la contraseña de la oficina (dos veces, sin eco; solo se guarda su hash
 #    argon2), salvo que ya exista o se pase --sin-contrasena.
@@ -17,8 +19,16 @@ source "$DIR/comun.sh"
 # (por ejemplo /home/<VPS_USER>): todo corre desde la raíz.
 cd /
 
+# --sin-contrasena: omite el paso 1. --solo-caida: solo los pasos 3 y 4.
 SIN_CONTRASENA=""
-[ "${1:-}" = "--sin-contrasena" ] && SIN_CONTRASENA=1
+SOLO_CAIDA=""
+for a in "$@"; do
+  case "$a" in
+    --sin-contrasena) SIN_CONTRASENA=1 ;;
+    --solo-caida) SOLO_CAIDA=1 ;;
+    *) echo "Opción desconocida: $a"; exit 1 ;;
+  esac
+done
 
 hay_contrasena() {
   [ -f "$DATOS/acceso.db" ] || return 1
@@ -32,6 +42,7 @@ finally:
 ' "$DATOS/acceso.db"
 }
 
+if [ -z "$SOLO_CAIDA" ]; then
 echo "== 1. Contraseña de la oficina"
 if [ -n "$SIN_CONTRASENA" ]; then
   echo "Se omite (--sin-contrasena)."
@@ -47,12 +58,18 @@ salida="$(sudo -u "$USUARIO_SERVICIO" bash "$DIR/respaldar.sh")"
 echo "$salida"
 ultimo="$(printf '%s\n' "$salida" | sed -n 's/^Respaldo: //p')"
 sudo -u "$USUARIO_SERVICIO" bash "$DIR/restaurar.sh" --copia "$ultimo"
+fi
 
 echo
 echo "== 3. Caída del backend (kill -9): debe volver solo"
 antes="$(systemctl show "$SERVICIO" -p MainPID --value)"
 reinicios="$(systemctl show "$SERVICIO" -p NRestarts --value)"
-systemctl kill -s KILL "$SERVICIO"
+# Solo el proceso principal (systemctl kill también intenta los auxiliares y falla).
+if [ "$antes" = "0" ]; then
+  echo "El backend no está corriendo."
+  exit 1
+fi
+kill -9 "$antes"
 volvio=""
 for _ in $(seq 1 30); do
   sleep 1
@@ -66,6 +83,7 @@ if [ -n "$volvio" ]; then
   echo "Volvió solo: PID $antes -> $ahora; reinicios $reinicios -> $(systemctl show "$SERVICIO" -p NRestarts --value)"
 else
   echo "NO volvió en 30 s: revisar journalctl -u $SERVICIO"
+  exit 1
 fi
 
 echo
