@@ -83,6 +83,7 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-11 | App iOS: la sesión es la misma cookie de 30 días de `POST /auth/entrar` (por dispositivo), guardada en el Llavero; la API la manda como `Cookie` con `X-Visualizador: 1` y el WKWebView de la oficina 3D la recibe en su almacén de cookies | Sin cambios en el backend; con el token de app (`vap_`) el WKWebView no tendría sesión, porque la web solo acepta la cookie |
 | 2026-10-11 | App iOS: datos en vivo con `GET /agents/state` cada 2 s (como la web), reintentos cada vez más espaciados hasta 15 s si se corta | La web ya no usa WebSocket (se quitó en la etapa 1.4) |
 | 2026-10-11 | App iOS: proyecto con XcodeGen (`ios/VisualizadorAgentes/project.yml`, el `.xcodeproj` no se versiona), iOS 26, solo iPhone, tema claro, sin capacidades que un Personal Team no permita; se compila y prueba con Xcode 26.6 (`DEVELOPER_DIR=/Applications/Xcode-26.6.0.app/Contents/Developer`) en el simulador iPhone 17 Pro Max con iOS 26.5 | El simulador de Xcode 27 se quedó trabado al arrancar |
+| 2026-10-12 | Las preguntas del agente (AskUserQuestion) se muestran en la bandeja de Decisiones solo para leer, con su resumen y sus opciones, y se responden en la PC | Claude Code documenta que un hook PreToolUse puede contestarlas, pero en esta instalación no es confiable: el hook PreToolUse del visualizador tiene 2 s de límite y lo pone el instalador del monitor, hay otros hooks PreToolUse para AskUserQuestion, mientras el hook espera VS Code no muestra la pregunta, y en una prueba aislada con `claude -p` la herramienta ni siquiera se ofreció (ver la sección de la etapa 3, Prompt 33) |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -133,6 +134,7 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-11 | Etapa 2.3 (Prompt 28), ficha del agente y "Dónde quedamos" según los bocetos aprobados (`docs/bocetos/etapa-2/`): ficha en panel derecho de 460 px sobre la oficina 3D y en hoja inferior en celular, también desde `/oficina`; historial completo paginado en `/historial`; `/donde-quedamos` con plan por etapas, prompts de la etapa, lo último, lo siguiente, lo que espera decisión y el consumo de hoy; regla de las 8 horas al entrar a la oficina. Prompts de la etapa desde el PROJECT.md (monitor 0.2.1) y desde los pedidos "Prompt N" de los agentes. La vista de prompts se reemplazará por el sistema de prompts de Washington. Revisión independiente de accesibilidad y celular, con correcciones. Commit `830171e` |
 | 2026-10-11 | Etapa 2.4 (Prompt 29), avisos resumidos con agente auxiliar: el monitor 0.3.0 resume cada aviso (permiso, pregunta, tarea terminada y atasco) con `claude -p`, Haiku y la cuenta del agente, totalmente aislado; la voz, las notificaciones y la ficha usan la frase, con el detalle técnico debajo. Interruptor en Avisos (encendido), consumo del auxiliar aparte, aviso nuevo de atasco y "Dónde quedamos" también en la primera visita de cada dispositivo. Pruebas reales con las cuentas personal y Demo Org. Revisión independiente del aislamiento y del enmascarado, con correcciones. Cierra la etapa 2 |
 | 2026-10-11 | Etapa 3 (Prompt 31), app iOS base (`ios/VisualizadorAgentes`): Entrar (servidor y contraseña, sesión de 30 días en el Llavero, Face ID para abrir), TabView nativo con Liquid Glass (Oficina, Decisiones con insignia de pendientes reales, Dónde quedamos, Ideas; Decisiones e Ideas llegan en el Prompt 33), Oficina 3D en WKWebView (`/oficina/3d?app=ios`) con la tarjeta "Te esperan" nativa y el selector Lista o 3D, oficina en lista con filtro Todas, Personal o Demo Org, ficha nativa (ahora mismo, tiempo razonable, métricas, turnos de hoy, aprobar y rechazar con Face ID para comandos peligrosos) y Dónde quedamos con selector de proyectos. Web: modo `?app=ios` en la oficina 3D (sin barra ni ficha web; avisa a la app del agente tocado por el manejador de WebKit `oficina`). 27 pruebas unitarias del cliente, la decodificación y la lógica. Probada contra https://agents.example.com en el simulador. Capturas en `docs/capturas/etapa-3/`. Commits `797c025` (web, falta desplegar) y `156b707` (app) |
+| 2026-10-12 | Etapa 3 (Prompt 33), parte B, backend de las bandejas: `GET /decisiones` (permisos, preguntas y atascos por urgencia, con la frase del auxiliar, el detalle técnico, proyecto, cuenta, máquina y hace cuánto, más las resueltas de hoy con quién, cómo y cuándo), "Ya lo vi" para atascos, ideas (guardar, listar, cambiar el proyecto, archivar) en `bandejas.db` con versión de esquema, las opciones de cada pregunta en `/agents/state` (`pregunta_opciones`) y el conteo `decisiones_pendientes` para la insignia de la app; las decisiones de la app quedan como "app iOS". Parte A: las preguntas quedan de solo lectura (decisión de esta fecha) |
 
 ## Cómo levantar
 
@@ -497,6 +499,49 @@ Junto al motivo se guardan los últimos 3 intentos y el último error. Los umbra
 - rendimiento: el tiempo continuo no recorre los tokens, y las horas de las muestras se arman una vez.
 
 Con datos reales, después aparecieron dos defectos más que también se corrigieron: los mensajes de subagentes como pedido y los "commits" detectados dentro del código de un heredoc.
+
+## Bandejas de Decisiones e Ideas (etapa 3, Prompt 33)
+
+**Cómo llega cada cosa hoy (parte A):**
+- **Permisos:**
+  1. El hook PermissionRequest del monitor registra la solicitud (`POST /permisos/solicitudes`) y, según la política, espera la decisión con consultas largas (hasta 540 s; el hook tiene 600 s de límite).
+  2. La web o la app deciden con `POST /permisos/solicitudes/{id}/decision` (aprobar, o rechazar con motivo).
+  3. El hook imprime `allow` o `deny` para Claude Code.
+  4. Si se responde en VS Code, el siguiente evento de la sesión la marca como resuelta fuera.
+  - Todo queda en `permisos.db` (quién: PC, celular o, desde ahora, app; cómo y cuándo).
+- **Preguntas (AskUserQuestion):** llegan como el `PreToolUse` de la herramienta (el motor ahora guarda sus preguntas y opciones) y como una solicitud de permiso de esa herramienta. El motor las trata como estado 14, no como permiso.
+- **Atascos:** los calcula el motor (`atascos.py`) en cada lectura del estado.
+
+**Hallazgo sobre AskUserQuestion (documentación oficial, CLI 2.1.296):**
+- **Qué dice:** según https://code.claude.com/docs/en/hooks (secciones "PreToolUse decision control", "Tools that require user interaction" y "AskUserQuestion"), un hook `PreToolUse` puede contestar la pregunta. Lee la entrada, junta la respuesta en una interfaz propia y devuelve `permissionDecision: "allow"` con `updatedInput` que repite `questions` y agrega `answers` (texto de la pregunta a la etiqueta elegida; varias etiquetas separadas por comas). `"allow"` solo no alcanza. La documentación no habla de respuestas con texto libre, solo de etiquetas.
+- **Por qué no se usa aquí:**
+  1. El hook `PreToolUse` del visualizador está registrado con 2 s de límite y va dentro del monitor, que esta etapa no toca.
+  2. En `settings.json` hay otros hooks `PreToolUse` para AskUserQuestion, de otras herramientas.
+  3. Mientras el hook espera, VS Code no muestra la pregunta.
+  4. Una prueba aislada (carpeta temporal, solo la configuración del proyecto, Haiku) con `claude -p` respondió "No such tool available: AskUserQuestion": en modo `-p` la herramienta ni se ofreció.
+- **Resultado:** las preguntas son de solo lectura en la bandeja ("Respóndela en la PC" y la máquina). Contestarlas desde el iPhone queda para cuando se pueda cambiar el hook del monitor y probarlo en una sesión interactiva.
+
+**Backend (parte B):**
+- **`GET /api/v1/decisiones`:**
+  - `pendientes`: primero los permisos, luego las preguntas y luego los atascos; dentro de cada tipo, lo que espera hace más tiempo.
+  - Cada uno trae la frase del auxiliar (`resumen`) si existe, el detalle técnico, proyecto, carpeta, cuenta, máquina, `desde` y `hace_s`.
+  - Los permisos traen el `id` de la solicitud y si espera decisión (solo entonces se decide desde aquí).
+  - Las preguntas traen sus preguntas y opciones con `responder_en: "pc"`.
+  - Los atascos traen el motivo, el último intento y el último error.
+  - También trae `conteo` por tipo y `resueltas_hoy`:
+    - permisos aprobados, rechazados o respondidos en la PC (de `permisos.db`);
+    - preguntas respondidas en la PC o cerradas;
+    - atascos marcados "Ya lo vi";
+    - cada una con quién, cómo y cuándo, en el día de `ZONA_HORARIA`.
+- **`POST /api/v1/decisiones/atascos/visto`** (`id`, `dispositivo`): saca el atasco de la bandeja sin tocar al agente.
+- **Ideas:**
+  - `GET /api/v1/ideas` (con `?archivadas=true` también las archivadas), más los proyectos que conoce el backend: los del monitor, los de los agentes y los que ya usan las ideas.
+  - `POST /api/v1/ideas` (`texto`, `proyecto` o nada, `origen` dictada o escrita).
+  - `PATCH /api/v1/ideas/{id}` (`proyecto`, `null` para quitarlo, o `texto`).
+  - `POST /api/v1/ideas/{id}/archivar` (`archivar: false` la devuelve).
+  - Estados: nueva (sin proyecto), asignada y archivada.
+- **`/agents/state`:** trae `pregunta_opciones` en cada agente y `decisiones_pendientes` en la raíz, para la insignia de la pestaña con la misma consulta en vivo.
+- **Persistencia:** `bandejas.db` en la carpeta de datos (el respaldo copia cada `.db`), con versión de esquema (`PRAGMA user_version`, versión 1: `ideas`, `atascos_vistos`, `preguntas`).
 
 ## Avisos resumidos con agente auxiliar (etapa 2.4)
 
@@ -917,7 +962,7 @@ Investigado el 2026-10-10.
 1. Washington actualiza el monitor de la Alienware a la 0.3.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`): trae el auxiliar de los avisos resumidos.
 2. Washington despliega el frontend (commit `797c025`, modo `?app=ios` de la oficina 3D) e instala la app en su iPhone desde Xcode con su Personal Team.
 3. Etapa 3, Prompt 32: push de las tres alertas (permiso pendiente, pregunta, tarea terminada); los avisos resumidos ya sirven de texto. El push necesita la membresía de pago del programa de desarrolladores.
-4. Etapa 3, Prompt 33: bandejas de Decisiones e Ideas en la app (responder preguntas desde el iPhone).
+4. Etapa 3, Prompt 33, parte C: Washington despliega el backend de las bandejas (`bash despliegue/desplegar.sh`) y después se construyen las pestañas Decisiones e Ideas en la app.
 5. Washington usa la ficha, "Dónde quedamos" y los avisos resumidos, y anota lo que hay que refinar.
 6. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
 7. Vigilar el disco del VPS (85 % usado).

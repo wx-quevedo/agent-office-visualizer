@@ -279,6 +279,8 @@ class Record:
     # Stage 2.1: what the tool is for (Bash description, subagent task) and the
     # tool result error text (to detect the same error repeated).
     descripcion: str | None = None
+    # Stage 3 (Prompt 33): AskUserQuestion questions with their options.
+    preguntas: list[dict[str, Any]] | None = None
 
     @property
     def is_main(self) -> bool:
@@ -296,6 +298,7 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
         cast(dict[str, Any], raw_input) if isinstance(raw_input, dict) else {}
     )
     command = None
+    preguntas: list[dict[str, Any]] | None = None
     if tool_input:
         raw_cmd = tool_input.get("command")
         if raw_cmd:
@@ -312,6 +315,7 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
             first: object = questions[0] if questions else None
             if isinstance(first, dict):
                 command = str(cast(dict[str, Any], first).get("question") or "") or None
+            preguntas = preguntas_de(questions)
     raw_prompt: str | None = getattr(d, "prompt", None)
     prompt = clean_prompt(raw_prompt)
     text = (
@@ -343,6 +347,7 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
         claude_pid_created=d.claude_pid_created,
         prompt_pending=bool(raw_prompt) and prompt is None,
         descripcion=_descripcion(tool_input),
+        preguntas=preguntas,
     )
 
 
@@ -742,6 +747,49 @@ def closure_of(log: SessionLog, now: datetime, th: Thresholds) -> tuple[str, dat
         and (now - dv.last_ts).total_seconds() >= th.no_pid_close
     ):
         return "sin_pid_antiguo", dv.last_ts + timedelta(seconds=th.no_pid_close)
+    return None
+
+
+_MAX_PREGUNTAS = 4
+_MAX_OPCIONES = 8
+
+
+def preguntas_de(questions: list[Any]) -> list[dict[str, Any]] | None:
+    """AskUserQuestion input -> [{texto, encabezado, opciones: [{etiqueta, descripcion}],
+    multiple}], trimmed (only for reading: the office never answers them)."""
+    salida: list[dict[str, Any]] = []
+    for q in questions[:_MAX_PREGUNTAS]:
+        if not isinstance(q, dict):
+            continue
+        qd = cast(dict[str, Any], q)
+        opciones: list[dict[str, Any]] = []
+        for o in cast(list[Any], qd.get("options") or [])[:_MAX_OPCIONES]:
+            if isinstance(o, dict):
+                od = cast(dict[str, Any], o)
+                etiqueta = str(od.get("label") or "").strip()[:120]
+                if etiqueta:
+                    descripcion = str(od.get("description") or "").strip()[:300] or None
+                    opciones.append({"etiqueta": etiqueta, "descripcion": descripcion})
+        texto = str(qd.get("question") or "").strip()[:1000]
+        if texto:
+            salida.append(
+                {
+                    "texto": texto,
+                    "encabezado": str(qd.get("header") or "").strip()[:60] or None,
+                    "opciones": opciones,
+                    "multiple": bool(qd.get("multiSelect")),
+                }
+            )
+    return salida or None
+
+
+def pending_question_detail(dv: _Derived) -> list[dict[str, Any]] | None:
+    """Questions and options of the AskUserQuestion still waiting, if any."""
+    for rec in dv.pending_tools.values():
+        if rec.tool_name in ASK_USER_TOOLS and rec.preguntas:
+            return rec.preguntas
+    if dv.question is not None and dv.question.preguntas:
+        return dv.question.preguntas
     return None
 
 
@@ -1700,6 +1748,7 @@ class AgentStateEngine:
             },
             "subagentes_activos": len(subagents),
             "pregunta_pendiente": pending_question(dv),
+            "pregunta_opciones": pending_question_detail(dv) if closure is None else None,
             "cierre": {"motivo": closure[0], "desde": closure[1].isoformat()} if closure else None,
             "proceso": {"pid": dv.process[0], "creado": dv.process[1]} if dv.process else None,
             "conciliado": {"en": log.recon.at.isoformat(), "detalle": log.recon.summary()}

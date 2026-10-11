@@ -49,7 +49,8 @@ class NuevaSolicitud(BaseModel):
 class Decision(BaseModel):
     decision: Literal["aprobar", "rechazar"]
     motivo: str | None = Field(default=None, max_length=MAX_MOTIVO)
-    dispositivo: Literal["pc", "celular"] = "pc"
+    # "app": the iOS app (stage 3), shown as "app iOS" in the Decisions inbox.
+    dispositivo: Literal["pc", "celular", "app"] = "pc"
 
 
 def _maquina(request: Request) -> str | None:
