@@ -58,6 +58,10 @@ _INGESTA: tuple[tuple[str, re.Pattern[str]], ...] = (
     # datos": devuelve, enmascarado, lo que esa misma máquina mandó) y las frases.
     ("GET", re.compile(rf"{_API}/maquinas/avisos")),
     ("POST", re.compile(rf"{_API}/maquinas/resumenes")),
+    # Etapa 4: encargos de sus proyectos (crear, pausar, reanudar) y estado de sus equipos.
+    ("GET", re.compile(rf"{_API}/maquinas/encargos")),
+    ("POST", re.compile(rf"{_API}/maquinas/encargos/[A-Za-z0-9]+")),
+    ("POST", re.compile(rf"{_API}/maquinas/equipos")),
 )
 # Guarded with access on: the API and its docs.
 _PROTEGIDAS = (f"{_API}/", "/docs", "/redoc", "/openapi.json")

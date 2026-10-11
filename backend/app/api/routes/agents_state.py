@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from app.core.agent_state_engine import get_state_engine
 from app.core.bandejas import get_bandejas, pendientes
 from app.core.permisos import get_registro
+from app.core.proyectos_equipo import get_proyectos_equipo
 from app.core.resumenes import avisos_del_agente, get_resumenes
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -19,9 +20,24 @@ def agentes_con_extras(snap: dict[str, Any] | None = None) -> list[dict[str, Any
     snap = snap if snap is not None else get_state_engine().snapshot()
     permisos = get_registro().vistas_por_sesion()
     resumenes = get_resumenes()
+    # Etapa 4: en -p la oficina no recibe el modelo ni el esfuerzo; los pone el registro
+    # de proyectos con equipo para las sesiones que lanzó un monitor.
+    lanzadas = get_proyectos_equipo().sesiones_lanzadas()
     agentes: list[dict[str, Any]] = []
     for a in snap["agentes"]:
         permiso = permisos.get(a["agente"]["session_id"])
+        lanzada = lanzadas.get(a["agente"]["session_id"])
+        if lanzada is not None:
+            a = {
+                **a,
+                "agente": {
+                    **a["agente"],
+                    "modelo": a["agente"].get("modelo") or lanzada["modelo"],
+                    "esfuerzo": lanzada["esfuerzo"],
+                    "rol": lanzada["rol"],
+                    "proyecto_equipo": lanzada["proyecto_id"],
+                },
+            }
         agentes.append(
             {
                 **a,

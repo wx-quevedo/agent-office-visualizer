@@ -42,6 +42,8 @@ class Latido(BaseModel):
     version_monitor: str | None = Field(default=None, max_length=40)
     hostname: str | None = Field(default=None, max_length=120)
     sistema: str | None = Field(default=None, max_length=10)
+    # Etapa 4: carpeta donde el monitor crea los proyectos (E:\Agents en la Alienware).
+    ruta_proyectos: str | None = Field(default=None, max_length=300)
 
 
 class ObservacionSesion(BaseModel):
@@ -189,6 +191,10 @@ async def latido(request: Request, body: Latido) -> dict[str, Any]:
     m = get_acceso().latido_maquina(machine_id, body.version_monitor, body.hostname, body.sistema)
     if m is None:
         raise HTTPException(status_code=404, detail="La máquina no está registrada.")
+    if body.ruta_proyectos:
+        from app.core.proyectos_equipo import get_proyectos_equipo
+
+        get_proyectos_equipo().anotar_ruta_base(machine_id, body.ruta_proyectos)
     return m
 
 

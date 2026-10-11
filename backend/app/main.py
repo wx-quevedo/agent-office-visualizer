@@ -26,6 +26,7 @@ from app.api.routes import (
     events,
     oficina3d,
     permisos,
+    proyectos_equipo,
     ver_bien,
 )
 from app.config import get_settings
@@ -108,6 +109,7 @@ app.include_router(events.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(ver_bien.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(avisos.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(bandejas.router, prefix=f"{settings.API_V1_STR}")
+app.include_router(proyectos_equipo.router, prefix=f"{settings.API_V1_STR}")
 
 
 @app.exception_handler(Exception)
