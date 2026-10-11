@@ -1,0 +1,123 @@
+"""El monitor en marcha: API local, cola con reenvío, lecturas y latido."""
+
+from __future__ import annotations
+
+import os
+import socket
+import threading
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from visualizador_monitor import VERSION, config
+from visualizador_monitor.cliente import Servidor
+from visualizador_monitor.cola import Cola
+from visualizador_monitor.config import Configuracion
+from visualizador_monitor.lector import Lector
+from visualizador_monitor.reenvio import EstadoConexion, Reenviador
+from visualizador_monitor.registro import logger
+from visualizador_monitor.servidor_local import arrancar, esperar_permiso, reenviar_permiso
+from visualizador_monitor.sesiones import LanzadorNoDisponible
+
+
+class Monitor:
+    def __init__(self, cfg: Configuracion, base: Path) -> None:
+        self.cfg = cfg
+        self.base = base
+        self.servidor = Servidor(cfg.url_servidor, cfg.token)
+        self.clave = config.clave_local(base)
+        self.cola = Cola(base / "cola.db")
+        self.conexion = EstadoConexion()
+        self.lector = Lector(self.servidor, cfg.cuentas, self.cola)
+        self.reenviador = Reenviador(self.cola, self.servidor, self.conexion)
+        self.lanzador = LanzadorNoDisponible()  # etapa 4
+        self.inicio = datetime.now(UTC).isoformat()
+        self.parar = threading.Event()
+        self.http: Any = None
+
+    # -- API local (llamado desde servidor_local) ---------------------------------
+
+    def recibir_evento(self, payload: dict[str, Any], cuerpo: bytes) -> dict[str, Any]:
+        evento_id = self.cola.agregar("/api/v1/events", cuerpo)
+        try:
+            self.lector.vio_evento(payload)
+        except Exception:
+            logger.exception("No se pudo anotar la sesión del evento")
+        self.reenviador.hay_nuevo.set()
+        return {"status": "accepted", "event_id": evento_id, "visual_action": "queued"}
+
+    def registrar_permiso(self, cuerpo: bytes) -> dict[str, Any]:
+        # Los eventos anteriores de la sesión llegan primero: si no, el servidor
+        # cerraría la solicitud nueva con un evento viejo. Si la cola no se vacía
+        # en 1 s, el hook sigue sin decisión (el diálogo de VS Code).
+        fin = time.monotonic() + 1.0
+        while self.cola.pendientes() > 0:
+            if time.monotonic() >= fin:
+                return {"esperar": False, "segundos_restantes": 0, "estado": "cola_pendiente"}
+            self.reenviador.hay_nuevo.set()
+            time.sleep(0.05)
+        return reenviar_permiso(self.servidor, cuerpo)
+
+    def esperar_permiso(self, id_: str, espera: float) -> dict[str, Any]:
+        return esperar_permiso(self.servidor, id_, espera)
+
+    def estado(self) -> dict[str, Any]:
+        """Para el comando estado: nunca incluye el token."""
+        return {
+            "version": VERSION,
+            "pid": os.getpid(),
+            "maquina": socket.gethostname(),
+            "servidor": self.cfg.url_servidor,
+            "puerto": self.cfg.puerto,
+            "inicio": self.inicio,
+            "conexion": self.conexion.vista(),
+            "cola": self.cola.resumen(),
+            "ultimo_envio_observaciones": self.lector.ultimo_envio,
+            "sesiones_vistas": len(self.lector.sesiones),
+            "cuentas": self.cfg.cuentas,
+        }
+
+    # -- en marcha -------------------------------------------------------------
+
+    def iniciar(self) -> None:
+        """Abre el puerto local (falla si otro monitor ya lo usa) y arranca los hilos."""
+        self.http, _ = arrancar(self, self.cfg.puerto)
+        self.reenviador.start()
+        (self.base / "monitor.pid").write_text(str(os.getpid()), encoding="ascii")
+        logger.info(
+            "Monitor %s escuchando en 127.0.0.1:%s; servidor %s; cuentas %s",
+            VERSION,
+            self.cfg.puerto,
+            self.cfg.url_servidor,
+            ", ".join(self.cfg.cuentas) or "(ninguna)",
+        )
+
+    def bucle(self) -> None:
+        proximo_latido = 0.0
+        proxima_lectura = 0.0
+        while not self.parar.is_set():
+            ahora = time.monotonic()
+            if ahora >= proximo_latido:
+                proximo_latido = ahora + self.cfg.intervalo_latido
+                try:
+                    if self.lector.latido() and self.conexion.ok():
+                        self.cola.reintentar_ya()
+                        self.reenviador.hay_nuevo.set()
+                except Exception:
+                    logger.exception("Error en el latido")
+            if ahora >= proxima_lectura:
+                proxima_lectura = ahora + self.cfg.intervalo_lectura
+                try:
+                    self.lector.ciclo()
+                except Exception:
+                    logger.exception("Error leyendo transcripciones y procesos")
+            self.parar.wait(1.0)
+
+    def detener(self) -> None:
+        self.parar.set()
+        self.reenviador.parar.set()
+        self.reenviador.hay_nuevo.set()
+        if self.http is not None:
+            self.http.shutdown()
+            self.http.server_close()

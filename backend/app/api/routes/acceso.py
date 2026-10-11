@@ -41,6 +41,28 @@ class Entrada(BaseModel):
 class Latido(BaseModel):
     version_monitor: str | None = Field(default=None, max_length=40)
     hostname: str | None = Field(default=None, max_length=120)
+    sistema: str | None = Field(default=None, max_length=10)
+
+
+class ObservacionSesion(BaseModel):
+    """What a monitor reads on its machine about one session (stage 1.2)."""
+
+    session_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    proceso_vivo: bool | None = None
+    pid: int | None = None
+    tokens_salida_total: int | None = Field(default=None, ge=0)
+    contexto_tokens: int | None = Field(default=None, ge=0)
+    modelo: str | None = Field(default=None, max_length=80)
+    ultimo_texto_asistente: str | None = Field(default=None, max_length=4000)
+    ultimo_texto_usuario: str | None = Field(default=None, max_length=4000)
+    turno_terminado: bool | None = None
+    primer_ts: str | None = Field(default=None, max_length=40)
+    ultimo_ts: str | None = Field(default=None, max_length=40)
+    tamano_transcripcion: int | None = Field(default=None, ge=0)
+
+
+class Observaciones(BaseModel):
+    sesiones: list[ObservacionSesion] = Field(default_factory=lambda: [], max_length=200)
 
 
 def _comprobar_contrasena(request: Request, body: Entrada) -> None:
@@ -164,7 +186,20 @@ async def maquinas() -> list[dict[str, Any]]:
 async def latido(request: Request, body: Latido) -> dict[str, Any]:
     """Heartbeat of a machine monitor: last connection, monitor version, hostname."""
     machine_id = getattr(request.state, "maquina", None) or get_settings().MAQUINA_LOCAL_ID
-    m = get_acceso().latido_maquina(machine_id, body.version_monitor, body.hostname)
+    m = get_acceso().latido_maquina(machine_id, body.version_monitor, body.hostname, body.sistema)
     if m is None:
         raise HTTPException(status_code=404, detail="La máquina no está registrada.")
     return m
+
+
+@router.post("/maquinas/observaciones")
+async def observaciones(request: Request, body: Observaciones) -> dict[str, Any]:
+    """Transcript and process data read by a machine monitor (machine token)."""
+    from app.core.agent_state_engine import get_state_engine
+
+    machine_id = getattr(request.state, "maquina", None) or get_settings().MAQUINA_LOCAL_ID
+    motor = get_state_engine()
+    aplicadas = sum(
+        1 for o in body.sesiones if motor.observar(machine_id, o.model_dump(exclude_none=True))
+    )
+    return {"recibidas": len(body.sesiones), "aplicadas": aplicadas}

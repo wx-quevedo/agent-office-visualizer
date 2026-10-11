@@ -155,6 +155,10 @@ class Settings(BaseSettings):
     MAQUINA_LOCAL_SISTEMA: str = "windows"
     # Backups taken before a data migration; default: "respaldos" next to the event log.
     RESPALDOS_PATH: str = ""
+    # Stage 1.2: the backend may read transcripts and processes of the sessions
+    # of its own machine (MAQUINA_LOCAL_ID). False on the VPS: it never opens
+    # files or processes and uses only what each monitor sends.
+    LECTURA_LOCAL: bool = True
 
     CLAUDE_OFFICE_API_KEY: str = ""
 

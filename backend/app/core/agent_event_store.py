@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS events (
     machine_id TEXT
 );
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, id);
+CREATE TABLE IF NOT EXISTS ids_recibidos (
+    evento_id TEXT PRIMARY KEY,
+    recibido TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS events_event_ts ON events (event_ts);
 """
 
@@ -163,6 +167,25 @@ class AgentEventStore:
                         "Agent event log: could not save %s for session %s", row[1], row[0]
                     )
 
+    def registrar_id(self, evento_id: str) -> bool:
+        """Record an event id sent by a monitor; False if it was already received."""
+        try:
+            with closing(self._connect()) as conn, conn:
+                conn.execute(
+                    "INSERT INTO ids_recibidos (evento_id, recibido) VALUES (?, ?)",
+                    (evento_id, datetime.now(UTC).isoformat()),
+                )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def tiene_id(self, evento_id: str) -> bool:
+        with closing(self._connect()) as conn:
+            fila = conn.execute(
+                "SELECT 1 FROM ids_recibidos WHERE evento_id = ?", (evento_id,)
+            ).fetchone()
+        return fila is not None
+
     # -- reading / maintenance ----------------------------------------------
 
     def count(self) -> int:
@@ -213,6 +236,7 @@ class AgentEventStore:
         """Retention: drop events received before ``cutoff``."""
         with closing(self._connect()) as conn, conn:
             cur = conn.execute("DELETE FROM events WHERE received_ts < ?", (_iso(cutoff),))
+            conn.execute("DELETE FROM ids_recibidos WHERE recibido < ?", (_iso(cutoff),))
             return cur.rowcount
 
 

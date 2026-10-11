@@ -320,17 +320,23 @@ class Acceso:
             return [dict(f) for f in db.execute("SELECT * FROM maquinas ORDER BY id").fetchall()]
 
     def latido_maquina(
-        self, id_: str, version_monitor: str | None, hostname: str | None
+        self,
+        id_: str,
+        version_monitor: str | None,
+        hostname: str | None,
+        sistema: str | None = None,
     ) -> dict[str, Any] | None:
+        sistema = sistema if sistema in SISTEMAS else None
         with closing(self._conectar()) as db, db:
             db.execute(
                 "UPDATE maquinas SET ultima_conexion = ?, "
-                "version_monitor = COALESCE(?, version_monitor), hostname = COALESCE(?, hostname) "
-                "WHERE id = ?",
+                "version_monitor = COALESCE(?, version_monitor), hostname = COALESCE(?, hostname), "
+                "sistema = COALESCE(?, sistema) WHERE id = ?",
                 (
                     _iso(self.clock()),
                     (version_monitor or None) and version_monitor[:40],
                     (hostname or None) and hostname[:120],
+                    sistema,
                     id_,
                 ),
             )

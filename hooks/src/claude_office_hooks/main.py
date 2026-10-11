@@ -49,6 +49,7 @@ try:
     )
     from claude_office_hooks.debug_logger import debug_log
     from claude_office_hooks.event_mapper import NEW_EVENT_TYPES, map_event
+    from claude_office_hooks.peligrosos import decision_pre_tool_use
     from claude_office_hooks.permisos import pedir_decision
     from claude_office_hooks.process_info import find_claude_process
 
@@ -291,6 +292,12 @@ try:
 
         debug_log(args.event_type, raw_data, payload, enabled=DEBUG)
         send_event(payload)
+
+        # Dangerous commands always ask for approval, even in Auto mode.
+        if args.event_type == "pre_tool_use":
+            pregunta = decision_pre_tool_use(raw_data)
+            if pregunta is not None:
+                write_decision(pregunta)
 
         # Permission requests: the office may approve or reject them (the
         # backend decides whether to wait, by policy and presence).

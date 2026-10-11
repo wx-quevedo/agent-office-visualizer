@@ -615,6 +615,9 @@ class SessionLog:
     project: str | None = None
     # Machine that sends the events of this session (stage 1.1).
     machine_id: str | None = None
+    # Stage 1.2: last observation of its monitor (process, tokens, texts).
+    observacion: dict[str, Any] | None = None
+    proceso_observado: bool | None = None
     transcript_path: str | None = None
     token_samples: list[tuple[datetime, int]] = field(default_factory=_samples)
     token_problem: str | None = None
@@ -880,6 +883,8 @@ class AgentStateEngine:
         clock: Callable[[], datetime] | None = None,
         browsers_provider: Callable[[], int] | None = None,
         process_alive: Callable[[int, float | None], bool | None] | None = None,
+        lectura_local: bool = True,
+        maquina_local: str | None = None,
         store: AgentEventStore | None = None,
     ) -> None:
         self.th = thresholds or Thresholds()
@@ -888,6 +893,13 @@ class AgentStateEngine:
         self.clock = clock or (lambda: datetime.now(UTC))
         self.browsers_provider = browsers_provider or (lambda: 0)
         self.process_alive = process_alive or _default_process_alive
+        # Stage 1.2: transcripts and processes are read here only for sessions of
+        # this machine; the others (and every session on the VPS) use what their
+        # monitor sends (observar).
+        self.lectura_local = lectura_local
+        self.maquina_local = maquina_local
+        # Event ids already received (a monitor resends after a lost answer).
+        self._ids_recibidos: dict[str, None] = {}
         self._totals_busy: dict[str, bool] = {}
         # /oficina heartbeats: client id -> (last seen, device "pc"/"celular").
         self._heartbeats: dict[str, tuple[datetime, str]] = {}
@@ -956,8 +968,7 @@ class AgentStateEngine:
             log.closed_pid = None
         self._snapshot = None
 
-    @staticmethod
-    def _detect_question(rec: Record, event: AnyEvent, log: SessionLog) -> None:
+    def _detect_question(self, rec: Record, event: AnyEvent, log: SessionLog) -> None:
         """Stop: does Claude's last message end with '?' (explicit question)?
 
         Uses the Stop hook's ``last_assistant_message`` when the hook sends it;
@@ -968,7 +979,7 @@ class AgentStateEngine:
             # The Stop hook can fire before the final message is written: take
             # it only if the transcript already shows this turn's end;
             # otherwise leave it unknown and retry from tick().
-            path, _ = resolve_transcript(log.transcript_path)
+            path, _ = self._transcript(log, log.transcript_path)
             if path is not None:
                 try:
                     _, turn_end, _ = turn_progress(path)
@@ -989,7 +1000,7 @@ class AgentStateEngine:
         if d.input_tokens is not None or d.output_tokens is not None:
             total = (d.input_tokens or 0) + (d.output_tokens or 0)
         elif d.transcript_path:
-            path, problem = resolve_transcript(d.transcript_path)
+            path, problem = self._transcript(log, d.transcript_path)
             if path is None:
                 log.token_problem = problem
                 return
@@ -1073,7 +1084,7 @@ class AgentStateEngine:
             )
             if not (prompts or needs_stop):
                 continue
-            path, _ = resolve_transcript(log.transcript_path)
+            path, _ = self._transcript(log, log.transcript_path)
             if path is None:
                 continue
             changed = False
@@ -1123,7 +1134,7 @@ class AgentStateEngine:
             )
             if not working or dv.pending_permission is not None:
                 continue
-            path, _ = resolve_transcript(log.transcript_path)
+            path, _ = self._transcript(log, log.transcript_path)
             if path is None:
                 continue
             try:
@@ -1177,6 +1188,100 @@ class AgentStateEngine:
         """Machine of a known session (None: new session, or before stage 1.1)."""
         log = self.sessions.get(session_id)
         return log.machine_id if log is not None else None
+
+    # -- stage 1.2: local reads only for this machine; monitors for the rest --------
+
+    def lee_local(self, log: SessionLog) -> bool:
+        """Transcripts and processes of this session can be read here."""
+        if not self.lectura_local:
+            return False
+        return (
+            log.machine_id is None
+            or self.maquina_local is None
+            or (log.machine_id == self.maquina_local)
+        )
+
+    def _transcript(self, log: SessionLog, raw: str | None) -> tuple[Any, str | None]:
+        """Readable transcript of a session, or (None, reason). Never for remote sessions."""
+        if not raw or not self.lee_local(log):
+            return None, None
+        return resolve_transcript(raw)
+
+    def ya_recibido(self, evento_id: str | None) -> bool:
+        """True when this event id was already accepted (a monitor resending)."""
+        if not evento_id:
+            return False
+        if evento_id in self._ids_recibidos:
+            return True
+        return self.store is not None and self.store.tiene_id(evento_id)
+
+    def marcar_recibido(self, evento_id: str | None) -> None:
+        """Record an accepted event id (after accept: a failed event can come back)."""
+        if not evento_id:
+            return
+        # Memory first: a store error (locked, disk) must not let the resend in twice.
+        self._ids_recibidos[evento_id] = None
+        if self.store is not None:
+            try:
+                self.store.registrar_id(evento_id)
+            except Exception:
+                logger.exception("Could not persist a received event id")
+        while len(self._ids_recibidos) > 100_000:
+            self._ids_recibidos.pop(next(iter(self._ids_recibidos)))
+
+    def observar(self, machine_id: str, obs: dict[str, Any], now: datetime | None = None) -> bool:
+        """Observation of a session sent by its monitor (process, tokens, texts).
+
+        Ignored for unknown sessions and for sessions of another machine.
+        """
+        now = now or self.clock()
+        log = self.sessions.get(str(obs.get("session_id") or ""))
+        if log is None or log.machine_id != machine_id:
+            return False
+        log.observacion = {**obs, "recibida": now.isoformat()}
+        vivo = obs.get("proceso_vivo")
+        if isinstance(vivo, bool):
+            log.proceso_observado = vivo
+        total = obs.get("tokens_salida_total")
+        if isinstance(total, int) and total >= 0:
+            if not isinstance(log.totals, _TotalesRemotos):
+                log.totals = _TotalesRemotos(total)  # type: ignore[assignment]
+                log.totals_samples.clear()
+            log.totals.total = total  # type: ignore[union-attr]
+            log.totals_samples.append((now, total))
+            del log.totals_samples[:-500]
+            log.token_problem = None
+        contexto = obs.get("contexto_tokens")
+        if isinstance(contexto, int) and contexto >= 0:
+            if contexto != log.context_tokens or not log.token_samples:
+                log.token_samples.append((now, contexto))
+            log.context_tokens = contexto
+            log.token_problem = None
+        modelo = obs.get("modelo")
+        if isinstance(modelo, str) and modelo:
+            log.context_window = _token_tracker._context_window_for_model(modelo)  # pyright: ignore[reportPrivateUsage]
+        texto = obs.get("ultimo_texto_asistente")
+        if isinstance(texto, str) and texto:
+            stops = [r for r in log.records if r.event_type == EventType.STOP]
+            ultimo = stops[-1] if stops else None
+            # Only the text of this turn (as the local read: not older than the Stop).
+            try:
+                ts_texto = datetime.fromisoformat(str(obs.get("ultimo_ts")))
+            except ValueError:
+                ts_texto = None
+            if ts_texto is not None and ts_texto.tzinfo is None:
+                ts_texto = ts_texto.replace(tzinfo=UTC)
+            if (
+                ultimo is not None
+                and ultimo.question is None
+                and ts_texto is not None
+                and ts_texto >= ultimo.ts - timedelta(seconds=30)
+            ):
+                ultimo.question = asks_question(texto)
+                ultimo.question_text = texto[-200:]
+                log.invalidate()
+        self._snapshot = None
+        return True
 
     def dispositivos_vigentes(self, now: datetime | None = None) -> tuple[bool, bool]:
         """(PC, phone): an /oficina page sent a heartbeat within the presence
@@ -1300,10 +1405,13 @@ class AgentStateEngine:
             if dv.end_ts is not None or log.closed_process_at is not None or dv.process is None:
                 continue
             pid, created = dv.process
-            try:
-                alive = self.process_alive(pid, created)
-            except Exception:
-                alive = None
+            if not self.lee_local(log):
+                alive = log.proceso_observado  # from its monitor
+            else:
+                try:
+                    alive = self.process_alive(pid, created)
+                except Exception:
+                    alive = None
             if alive is True:
                 log.process_seen_alive = True
             elif alive is False:
@@ -1601,6 +1709,17 @@ def count_browser_connections() -> int:
 
 
 # ---------------------------------------------------------------------------
+class _TotalesRemotos:
+    """Token totals sent by a monitor (same interface as TranscriptTotals for the view)."""
+
+    path = None
+    since = None
+    ready = True
+
+    def __init__(self, total: int) -> None:
+        self.total = total
+
+
 # Singleton
 # ---------------------------------------------------------------------------
 
@@ -1614,10 +1733,15 @@ def get_state_engine() -> AgentStateEngine:
 
         store = AgentEventStore(default_store_path())
         store.start()
+        from app.config import get_settings
+
+        s = get_settings()
         _engine = AgentStateEngine(
             Thresholds.from_settings(),
             browsers_provider=count_browser_connections,
             store=store,
+            lectura_local=s.LECTURA_LOCAL,
+            maquina_local=s.MAQUINA_LOCAL_ID,
         )
     return _engine
 

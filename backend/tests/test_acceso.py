@@ -221,6 +221,8 @@ class MotorFalso:
     def __init__(self) -> None:
         self.eventos: list[Any] = []
         self.duenas: dict[str, str] = {}
+        self.ids: set[str] = set()
+        self.observaciones: list[tuple[str, dict[str, Any]]] = []
 
     def maquina_de(self, session_id: str) -> str | None:
         return self.duenas.get(session_id)
@@ -234,6 +236,19 @@ class MotorFalso:
 
     def dispositivos_vigentes(self) -> tuple[bool, bool]:
         return False, True
+
+    def ya_recibido(self, evento_id: str | None) -> bool:
+        return evento_id in self.ids
+
+    def marcar_recibido(self, evento_id: str | None) -> None:
+        if evento_id:
+            self.ids.add(evento_id)
+
+    def observar(self, machine_id: str, obs: dict[str, Any]) -> bool:
+        if self.duenas.get(obs["session_id"]) != machine_id:
+            return False
+        self.observaciones.append((machine_id, obs))
+        return True
 
 
 class ProcesadorFalso:
@@ -585,6 +600,8 @@ def test_websocket_desactivado_abierto(entorno, desactivado) -> None:  # type: i
 
 def test_rutas_publicas_e_ingesta_son_las_esperadas() -> None:
     assert mw.es_ingesta("POST", "/api/v1/events")
+    assert mw.es_ingesta("POST", "/api/v1/maquinas/observaciones")
+    assert not mw.es_ingesta("GET", "/api/v1/maquinas/observaciones")
     assert mw.es_ingesta("GET", "/api/v1/permisos/solicitudes/abc-123")
     assert not mw.es_ingesta("POST", "/api/v1/permisos/solicitudes/abc-123/decision")
     assert not mw.es_ingesta("GET", "/api/v1/permisos/historial")
@@ -749,3 +766,78 @@ def test_clave_de_la_vista_clasica_no_hace_falta_con_sesion(entorno, activado) -
     c = TestClient(app)
     entrar(c)
     assert c.delete(f"{API}/sessions", headers={"X-Visualizador": "1"}).status_code == 200
+
+
+def test_reenvio_del_monitor_no_duplica_eventos(entorno, activado) -> None:  # type: ignore[no-untyped-def]
+    app, acc, motor, _ = entorno
+    token, _ = acc.crear_token_maquina("tower")
+    h = {"Authorization": f"Bearer {token}", "X-Evento-Id": "evento-1"}
+    c = TestClient(app)
+    assert c.post(f"{API}/events", json=EVENTO, headers=h).json()["status"] == "accepted"
+    r = c.post(f"{API}/events", json=EVENTO, headers=h)
+    assert r.status_code == 200 and r.json()["status"] == "duplicado"
+    assert len(motor.eventos) == 1
+    # without an id (hooks of today) nothing changes
+    sin_id = {"Authorization": f"Bearer {token}"}
+    c.post(f"{API}/events", json=EVENTO, headers=sin_id)
+    c.post(f"{API}/events", json=EVENTO, headers=sin_id)
+    assert len(motor.eventos) == 3
+
+
+def test_evento_rechazado_no_gasta_su_id(entorno, activado) -> None:  # type: ignore[no-untyped-def]
+    app, acc, motor, _ = entorno
+    tower, _ = acc.crear_token_maquina("tower")
+    alien, _ = acc.crear_token_maquina("alienware")
+    c = TestClient(app)
+    c.post(f"{API}/events", json=EVENTO, headers={"Authorization": f"Bearer {tower}"})
+    h = {"Authorization": f"Bearer {alien}", "X-Evento-Id": "evento-2"}
+    assert c.post(f"{API}/events", json=EVENTO, headers=h).status_code == 409
+    assert "alienware:evento-2" not in motor.ids and not any("evento-2" in i for i in motor.ids)
+
+
+def test_observaciones_y_latido_del_monitor(entorno, activado, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from app.core import agent_state_engine
+
+    app, acc, motor, _ = entorno
+    monkeypatch.setattr(agent_state_engine, "get_state_engine", lambda: motor)
+    token, _ = acc.crear_token_maquina("tower")
+    h = {"Authorization": f"Bearer {token}"}
+    c = TestClient(app)
+    c.post(f"{API}/events", json=EVENTO, headers=h)
+    cuerpo = {
+        "sesiones": [
+            {"session_id": "prueba-maquinas", "proceso_vivo": True, "contexto_tokens": 10},
+            {"session_id": "prueba-ajena", "proceso_vivo": False},
+        ]
+    }
+    r = c.post(f"{API}/maquinas/observaciones", json=cuerpo, headers=h)
+    assert r.status_code == 200 and r.json() == {"recibidas": 2, "aplicadas": 1}
+    assert motor.observaciones == [
+        ("tower", {"session_id": "prueba-maquinas", "proceso_vivo": True, "contexto_tokens": 10})
+    ]
+    # invalid data is rejected, and a session cookie is not a machine
+    malo = {"sesiones": [{"session_id": "x\ny"}]}
+    assert c.post(f"{API}/maquinas/observaciones", json=malo, headers=h).status_code == 422
+    assert c.post(f"{API}/maquinas/observaciones", json=cuerpo).status_code == 401
+    r = c.post(
+        f"{API}/maquinas/latido",
+        json={"version_monitor": "0.1.0", "hostname": "TOWER", "sistema": "windows"},
+        headers=h,
+    )
+    assert r.status_code == 200
+    assert next(m for m in acc.maquinas() if m["id"] == "tower")["sistema"] == "windows"
+
+
+def test_id_de_evento_por_maquina(entorno, activado) -> None:  # type: ignore[no-untyped-def]
+    """The same id sent by another machine is not taken as a resend."""
+    app, acc, motor, _ = entorno
+    tower, _ = acc.crear_token_maquina("tower")
+    alien, _ = acc.crear_token_maquina("alienware")
+    c = TestClient(app)
+    ev_tower = {**EVENTO, "session_id": "prueba-maq-t"}
+    ev_alien = {**EVENTO, "session_id": "prueba-maq-a"}
+    h_t = {"Authorization": f"Bearer {tower}", "X-Evento-Id": "mismo-id"}
+    h_a = {"Authorization": f"Bearer {alien}", "X-Evento-Id": "mismo-id"}
+    assert c.post(f"{API}/events", json=ev_tower, headers=h_t).json()["status"] == "accepted"
+    assert c.post(f"{API}/events", json=ev_alien, headers=h_a).json()["status"] == "accepted"
+    assert len(motor.eventos) == 2

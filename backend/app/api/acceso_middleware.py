@@ -54,6 +54,7 @@ _INGESTA: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("POST", re.compile(rf"{_API}/permisos/solicitudes")),
     ("GET", re.compile(rf"{_API}/permisos/solicitudes/[A-Za-z0-9_-]+")),
     ("POST", re.compile(rf"{_API}/maquinas/latido")),
+    ("POST", re.compile(rf"{_API}/maquinas/observaciones")),
 )
 # Guarded with access on: the API, its docs, and the WebSockets (checked in their routes).
 _PROTEGIDAS = (f"{_API}/", "/docs", "/redoc", "/openapi.json")

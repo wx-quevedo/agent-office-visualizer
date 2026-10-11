@@ -131,6 +131,12 @@ async def receive_event(
     _check_rate_limit(event.session_id)
     # The machine comes from its token (or the local one): never from the client.
     event.machine_id = getattr(request.state, "maquina", None) or get_settings().MAQUINA_LOCAL_ID
+    # A monitor resends when an answer was lost: the event id makes it idempotent.
+    # Keyed by machine: one machine cannot suppress the events of another.
+    crudo = request.headers.get("x-evento-id", "")[:64]
+    evento_id = f"{event.machine_id}:{crudo}" if crudo else None
+    if evento_id and get_state_engine().ya_recibido(evento_id):
+        return {"status": "duplicado", "event_id": crudo, "visual_action": "none"}
     # A session belongs to the machine that started it: another machine cannot
     # add events to it or take it over.
     duena = get_state_engine().maquina_de(event.session_id)
@@ -139,6 +145,8 @@ async def receive_event(
     # Catalog state engine first, in arrival order: its own append-only log and
     # memory do not depend on the classic pipeline (which runs in background).
     get_state_engine().accept(event, origin="hook")
+    # Recorded only once accepted (no await in between: no other request runs here).
+    get_state_engine().marcar_recibido(evento_id)
     # A pending permission of the office ends when Claude Code goes on.
     get_registro().resolver_sesion(
         event.session_id,
