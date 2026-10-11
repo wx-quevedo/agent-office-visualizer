@@ -4,7 +4,8 @@
  * /oficina/3d — the office as a 3D scene (based on Agent Office 3D, MIT),
  * fed by our engine. Own simple top bar (light theme), the same alerts
  * (useAvisos) and presence heartbeat as /oficina. Loaded only in the browser.
- * Clicking an agent opens its card (FichaAgente) over the scene.
+ * Clicking an agent opens its card (FichaAgente) over the scene. With
+ * ?app=ios (iOS app) the bar and the card are the app's: see modoApp.ts.
  */
 
 import Link from "next/link";
@@ -36,6 +37,7 @@ import { activarEntorno, ENTORNOS } from "./entornos/activo";
 import type { ClaveEntorno } from "./entornos/tipos";
 import { useEditor } from "./editor";
 import EditorPanel from "./EditorPanel";
+import { avisarApp, esModoApp } from "./modoApp";
 import Escena3D from "./Escena3D";
 import { useSettings } from "./settings";
 import { useOffice } from "./store";
@@ -71,11 +73,19 @@ export default function Oficina3D() {
   const setPanel = useOffice((st) => st.setPanel);
   const params = useSearchParams();
   const agenteUrl = params.get("agente");
-  // More than 8 h since the last visit on this device: "Dónde quedamos" first.
-  useVisitaOficina(Boolean(agenteUrl));
+  const app = esModoApp(params);
+  // More than 8 h since the last visit on this device: "Dónde quedamos" first
+  // (not in the app: it has its own tab for that).
+  useVisitaOficina(Boolean(agenteUrl) || app);
   useEffect(() => {
     setPanel(agenteUrl);
   }, [agenteUrl, setPanel]);
+  // In the app the tapped agent opens the native card, not the web panel.
+  useEffect(() => {
+    if (!app || !panel) return;
+    avisarApp({ tipo: "agente", id: panel });
+    setPanel(null);
+  }, [app, panel, setPanel]);
   const editando = useEditor((st) => st.activo);
   const [angosta, setAngosta] = useState(false);
   const memoria = useRef<EstadoAdaptador>(estadoInicial());
@@ -84,11 +94,16 @@ export default function Oficina3D() {
   const setAgents = useOffice((st) => st.setAgents);
 
   const abrirAgente = useCallback(
-    (id: string) =>
+    (id: string) => {
+      if (app) {
+        if (id) avisarApp({ tipo: "agente", id });
+        return;
+      }
       router.push(
         id ? `/oficina/3d?agente=${encodeURIComponent(id)}` : "/oficina/3d",
-      ),
-    [router],
+      );
+    },
+    [app, router],
   );
   const avisos = useAvisos(datos?.agentes ?? null, { abrirAgente });
 
@@ -171,90 +186,92 @@ export default function Oficina3D() {
 
   return (
     <div className={s.pagina}>
-      <header className={s.barra}>
-        <h1 className={s.titulo}>{t("barra.titulo")}</h1>
-        <div className={s.contadores}>
-          <span
-            className={
-              n && n.espera > 0 ? `${s.contador} ${s.urgente}` : s.contador
-            }
-          >
-            <b>{n ? n.espera : "–"}</b> {t("barra.teEsperan")}
-          </span>
-          <span className={s.contador}>
-            <b>{n ? n.trabajando : "–"}</b> {t("barra.trabajando")}
-          </span>
-          <span className={s.contador}>
-            <b>{n ? n.libres : "–"}</b> {t("barra.libres")}
-          </span>
-        </div>
-        <label className={s.entorno}>
-          <span>{t("barra.entorno")}</span>
-          <select
-            aria-label={t("barra.entorno")}
-            value={clave}
-            disabled={editando}
-            onChange={(e) =>
-              void cambiarEntorno(e.target.value as ClaveEntorno)
-            }
-          >
-            {ENTORNOS.map((e) => (
-              <option key={e.clave} value={e.clave}>
-                {e.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className={s.acciones}>
-          <button
-            type="button"
-            className={s.boton}
-            aria-pressed={editando}
-            disabled={editando}
-            onClick={() => {
-              setPanelAvisos(false);
-              cerrarPanel();
-              useEditor.getState().entrar();
-            }}
-          >
-            {t("barra.editar")}
-          </button>
-          <Link href="/donde-quedamos" className={s.boton}>
-            {t("barra.dondeQuedamos")}
-          </Link>
-          <Link href="/oficina" className={s.boton}>
-            {t("barra.vistaCajas")}
-          </Link>
-          <button
-            type="button"
-            className={s.boton}
-            aria-expanded={panelAvisos}
-            onClick={() => {
-              cerrarPanel();
-              setPanelAvisos((v) => !v);
-            }}
-          >
-            {t("barra.avisos")}
-            <span className={s.mono}>
-              {avisos.config.activos
-                ? t("barra.avisosActivos")
-                : t("barra.avisosApagados")}
+      {!app && (
+        <header className={s.barra}>
+          <h1 className={s.titulo}>{t("barra.titulo")}</h1>
+          <div className={s.contadores}>
+            <span
+              className={
+                n && n.espera > 0 ? `${s.contador} ${s.urgente}` : s.contador
+              }
+            >
+              <b>{n ? n.espera : "–"}</b> {t("barra.teEsperan")}
             </span>
-          </button>
-          <button
-            type="button"
-            className={s.boton}
-            aria-expanded={panelPermisos}
-            onClick={() => {
-              cerrarPanel();
-              setPanelPermisos((v) => !v);
-            }}
-          >
-            {t("barra.permisos")}
-          </button>
-          <BotonSalir className={s.boton} />
-        </div>
-      </header>
+            <span className={s.contador}>
+              <b>{n ? n.trabajando : "–"}</b> {t("barra.trabajando")}
+            </span>
+            <span className={s.contador}>
+              <b>{n ? n.libres : "–"}</b> {t("barra.libres")}
+            </span>
+          </div>
+          <label className={s.entorno}>
+            <span>{t("barra.entorno")}</span>
+            <select
+              aria-label={t("barra.entorno")}
+              value={clave}
+              disabled={editando}
+              onChange={(e) =>
+                void cambiarEntorno(e.target.value as ClaveEntorno)
+              }
+            >
+              {ENTORNOS.map((e) => (
+                <option key={e.clave} value={e.clave}>
+                  {e.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className={s.acciones}>
+            <button
+              type="button"
+              className={s.boton}
+              aria-pressed={editando}
+              disabled={editando}
+              onClick={() => {
+                setPanelAvisos(false);
+                cerrarPanel();
+                useEditor.getState().entrar();
+              }}
+            >
+              {t("barra.editar")}
+            </button>
+            <Link href="/donde-quedamos" className={s.boton}>
+              {t("barra.dondeQuedamos")}
+            </Link>
+            <Link href="/oficina" className={s.boton}>
+              {t("barra.vistaCajas")}
+            </Link>
+            <button
+              type="button"
+              className={s.boton}
+              aria-expanded={panelAvisos}
+              onClick={() => {
+                cerrarPanel();
+                setPanelAvisos((v) => !v);
+              }}
+            >
+              {t("barra.avisos")}
+              <span className={s.mono}>
+                {avisos.config.activos
+                  ? t("barra.avisosActivos")
+                  : t("barra.avisosApagados")}
+              </span>
+            </button>
+            <button
+              type="button"
+              className={s.boton}
+              aria-expanded={panelPermisos}
+              onClick={() => {
+                cerrarPanel();
+                setPanelPermisos((v) => !v);
+              }}
+            >
+              {t("barra.permisos")}
+            </button>
+            <BotonSalir className={s.boton} />
+          </div>
+        </header>
+      )}
 
       <main className={s.lienzo}>
         {panelAvisos && (
@@ -283,8 +300,8 @@ export default function Oficina3D() {
         {datos && n && n.espera + n.trabajando + n.libres === 0 && (
           <div className={s.aviso}>{t("barra.sinAgentes")}</div>
         )}
-        {!editando && <div className={s.ayuda}>{t("barra.ayuda")}</div>}
-        {panel && (
+        {!editando && !app && <div className={s.ayuda}>{t("barra.ayuda")}</div>}
+        {panel && !app && (
           <FichaAgente
             agente={agentePanel}
             id={panel}
