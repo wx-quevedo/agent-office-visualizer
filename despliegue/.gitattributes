@@ -1,0 +1,2 @@
+# Scripts y configuración del VPS: siempre con fin de línea LF (bash, systemd, nginx).
+* text eol=lf

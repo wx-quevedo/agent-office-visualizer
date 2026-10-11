@@ -27,6 +27,13 @@ _MAX_OVERVIEW_CONNECTIONS = 16
 router = APIRouter()
 
 
+async def cerrar_sin_sesion(websocket: WebSocket) -> None:
+    """Without a session: accept and close with 4401 so the browser sees the code
+    (a close before accept is an HTTP 403 handshake rejection, without a code)."""
+    await websocket.accept()
+    await websocket.close(code=4401, reason="Inicia sesión")
+
+
 @router.websocket("/ws/overview")
 async def websocket_overview(websocket: WebSocket) -> None:
     """Overview WebSocket: boss status of every live session (Command Center).
@@ -36,7 +43,7 @@ async def websocket_overview(websocket: WebSocket) -> None:
     id, accept, find no state, and silently idle).
     """
     if not ws_autorizado(websocket):
-        await websocket.close(code=4401, reason="Inicia sesión")
+        await cerrar_sin_sesion(websocket)
         return
     from app.api.websocket import validate_websocket_origin
 
@@ -82,7 +89,7 @@ async def websocket_overview(websocket: WebSocket) -> None:
 @router.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
     if not ws_autorizado(websocket):
-        await websocket.close(code=4401, reason="Inicia sesión")
+        await cerrar_sin_sesion(websocket)
         return
     from app.api.websocket import validate_session_id, validate_websocket_origin
 
@@ -134,7 +141,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
 async def websocket_room(websocket: WebSocket, room_id: str) -> None:
     """Room-level WebSocket: sends merged state for all sessions in a room."""
     if not ws_autorizado(websocket):
-        await websocket.close(code=4401, reason="Inicia sesión")
+        await cerrar_sin_sesion(websocket)
         return
     from app.api.websocket import validate_session_id, validate_websocket_origin
 

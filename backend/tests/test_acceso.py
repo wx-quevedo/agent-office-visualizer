@@ -841,3 +841,18 @@ def test_id_de_evento_por_maquina(entorno, activado) -> None:  # type: ignore[no
     assert c.post(f"{API}/events", json=ev_tower, headers=h_t).json()["status"] == "accepted"
     assert c.post(f"{API}/events", json=ev_alien, headers=h_a).json()["status"] == "accepted"
     assert len(motor.eventos) == 2
+
+
+def test_websocket_real_sin_sesion_acepta_y_cierra_con_4401(activado) -> None:  # type: ignore[no-untyped-def]
+    """Behind nginx a close before accept is an HTTP 403 without a code: the real
+    routes accept first so the browser gets 4401 (and goes to /entrar)."""
+    from app.api.routes import websockets as rutas_ws
+
+    app = FastAPI()
+    app.include_router(rutas_ws.router)
+    c = TestClient(app)
+    for ruta in ("/ws/overview", "/ws/sesion-prueba", "/ws/room/sala-prueba"):
+        # accepted first (a 403 would fail in websocket_connect, outside the raises)
+        with c.websocket_connect(ruta) as ws, pytest.raises(WebSocketDisconnect) as e:
+            ws.receive_text()
+        assert e.value.code == 4401

@@ -121,7 +121,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Prueba real de permisos con el hook instalado: Washington aprobó desde el iPhone el permiso de un comando de una sesión nueva y se ejecutó. VS Code muestra su diálogo al mismo tiempo y gana la primera respuesta (la de la oficina o la de VS Code). En modo Auto de Claude Code no se generan solicitudes de permiso. Todo hasta `8e9bba2` está en GitHub |
 | 2026-10-10 | Etapa 0 (cierre): en `/oficina/3d` el clic en un agente abre su panel sobre la escena, sin salir de ella (el mismo panel que abre `?agente=<id>`); al volver de `/oficina` ya no se abre el panel de otro agente. Los scripts de la diaria muestran los acentos de git en Windows PowerShell 5.1. Plan por etapas registrado. Capturas en `docs/capturas/oficina-3d-clic/`. Commit `768cf83` |
 | 2026-10-10 | Etapa 1.1: máquinas (registro, `machine_id` en eventos, sesiones, agentes y permisos; migración con respaldo de los datos existentes a "Alienware"), tokens por máquina solo para la ingesta, inicio de sesión de un usuario (argon2, cookie httpOnly de 30 días, token de app de un año, límite de intentos, CSRF, WebSocket con sesión) y pantalla `/entrar`. Desactivado en local (`VISUALIZADOR_AUTH=desactivado`): la diaria funciona igual. Capturas en `docs/capturas/entrar-v1/`. Commit `66de73f` |
-| 2026-10-10 | Etapa 1.2: monitor de máquina (`monitor/`) con API local en 127.0.0.1:8765, cola SQLite sin conexión (orden, reintentos progresivos, id de evento sin duplicados), permisos reenviados (sin servidor: sin decisión al instante), lecturas de transcripciones y procesos, latido, comandos `estado`, `registro` y `reiniciar`, e instalador `.exe` de Windows (respaldo y cambio solo de las entradas de `claude-office-hook`, arranque oculto con tarea programada, desinstalación que deja todo como estaba). Comandos peligrosos siempre con aprobación, también en modo Auto. El backend recibe las observaciones de cada monitor y, con `LECTURA_LOCAL=false`, no lee nada de la máquina. Probado de punta a punta contra el backend de desarrollo con acceso activado y una carpeta de usuario simulada |
+| 2026-10-10 | Etapa 1.2: monitor de máquina (`monitor/`) con API local en 127.0.0.1:8765, cola SQLite sin conexión (orden, reintentos progresivos, id de evento sin duplicados), permisos reenviados (sin servidor: sin decisión al instante), lecturas de transcripciones y procesos, latido, comandos `estado`, `registro` y `reiniciar`, e instalador `.exe` de Windows (respaldo y cambio solo de las entradas de `claude-office-hook`, arranque oculto con tarea programada, desinstalación que deja todo como estaba). Comandos peligrosos siempre con aprobación, también en modo Auto. El backend recibe las observaciones de cada monitor y, con `LECTURA_LOCAL=false`, no lee nada de la máquina. Probado de punta a punta contra el backend de desarrollo con acceso activado y una carpeta de usuario simulada. Commit `ac72de4` |
+| 2026-10-11 | Etapa 1.3: la oficina publicada en https://agents.example.com (VPS de the VPS provider): backend como servicio systemd con usuario sin privilegios en 127.0.0.1:8320 (acceso activado, `LECTURA_LOCAL=false`, secreto generado en el servidor), frontend estático servido por nginx, `/api` y `/ws` al backend, certificado de Let's Encrypt con renovación automática, respaldos diarios con 14 días y restauración probada, despliegue repetible desde la PC y script de estado. Los otros 12 sitios del VPS responden igual que antes. El WebSocket sin sesión ahora cierra con 4401 detrás de nginx (antes rechazaba con 403). Nuevos comandos peligrosos: `git checkout -- .`, `git restore .`, `git branch -D` y `TRUNCATE TABLE`. Instalador del monitor: dos instalaciones en el mismo segundo ya no pisan el respaldo original de `settings.json` |
 
 ## Cómo levantar
 
@@ -374,13 +375,13 @@ Claude Code ──hook──> "<monitor>.exe" hook <evento> ──HTTP──> mo
 
 ### Comandos peligrosos (siempre con aprobación)
 
-En PreToolUse de Bash o PowerShell, si el comando coincide con la lista, el hook responde la decisión `ask` y Claude Code muestra su diálogo de permiso aunque la sesión esté en modo Auto (en `claude -p`, sin diálogo, el comando queda rechazado). Lista inicial: `rm -rf` (recursivo y forzado, en cualquier orden), `Remove-Item -Recurse -Force`, `del /s`, `rd /s`, `git push --force` (también `-f` y `--force-with-lease`), `git reset --hard`, `git clean -fd`, formateo de discos (`format X:`, `Format-Volume`, `Clear-Disk`, `Initialize-Disk`, `diskpart`, `mkfs`, `dd of=/dev/...`) y `DROP DATABASE` / `DROP SCHEMA` / `DROP TABLE`. Los despliegues a producción van comentados como ejemplo (Vercel `--prod`, `firebase deploy`, `npm run deploy:prod`) para marcar los que se usen.
+En PreToolUse de Bash o PowerShell, si el comando coincide con la lista, el hook responde la decisión `ask` y Claude Code muestra su diálogo de permiso aunque la sesión esté en modo Auto (en `claude -p`, sin diálogo, el comando queda rechazado). Lista inicial: `rm -rf` (recursivo y forzado, en cualquier orden), `Remove-Item -Recurse -Force`, `del /s`, `rd /s`, `git push --force` (también `-f` y `--force-with-lease`), `git reset --hard`, `git clean -fd`, formateo de discos (`format X:`, `Format-Volume`, `Clear-Disk`, `Initialize-Disk`, `diskpart`, `mkfs`, `dd of=/dev/...`) `DROP DATABASE` / `DROP SCHEMA` / `DROP TABLE`, `TRUNCATE TABLE`, descartar los cambios de todo el árbol (`git checkout -- .`, `git checkout .`, `git restore .` y rutas amplias como `./`, `*`, `:/`; `git restore --staged .` no, porque solo quita del índice) y `git branch -D` (o `--delete --force`; `-d` no, porque solo borra ramas integradas). Los despliegues a producción van comentados como ejemplo (Vercel `--prod`, `firebase deploy`, `npm run deploy:prod`) para marcar los que se usen.
 
 **Cómo editarla**: `%USERPROFILE%\.visualizador-monitor\comandos-peligrosos.txt` (la crea el instalador, o `visualizador-monitor.exe peligrosos`). Una expresión regular por línea, sin distinguir mayúsculas; `#` al inicio es comentario; ` ## descripción` al final es el motivo que ve Claude. El archivo reemplaza la lista de fábrica (sin archivo o vacío, se usa la de fábrica); una línea inválida se ignora sin romper el hook. Se lee en cada comando: no hace falta reiniciar nada. Antes de comparar se unen las líneas cortadas (`\` en bash, acento grave en PowerShell); también se reconocen `/bin/rm`, `\rm`, `"rm"`, los alias de PowerShell con `-Recurse` (`del`, `rd`, `rmdir`, `erase`), `git push -uf` y `git push origin +rama`, y `git clean --force -d`. Un comando de más de 100 000 caracteres pide aprobación sin revisarlo. Límite: un script escrito en un archivo y ejecutado después (`bash x.sh`, `python -c ...`) no se ve. Código y pruebas: `hooks/src/claude_office_hooks/peligrosos.py`, `hooks/tests/test_peligrosos.py` (coincidencias y falsos positivos comunes como `docker run --rm`, `grep -rf`, `git clean -n`, `Format-Table`).
 
 ### Instalación en la Alienware (etapa 1.4, cuando el VPS esté listo)
 
-1. En el VPS, desde la carpeta `backend` de su copia: `uv run python -m app.acceso_cli token-crear --maquina alienware` (el token se muestra una sola vez; cópialo).
+1. En PowerShell: `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/acceso.sh token-crear --maquina alienware"` (el token se muestra una sola vez; cópialo).
 2. Cierra las sesiones de Claude Code abiertas (los hooks nuevos valen para las sesiones que se abran después).
 3. En la Alienware, en el Explorador, doble clic en `E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe` (ventana normal, sin administrador). Escribe `https://agents.example.com`, pega el token (no se muestra) y confirma con `s`. Respalda y cambia los hooks de `.claude` y `.claude-demo`, registra el arranque y arranca el monitor.
 4. Comprobar, en una ventana de PowerShell normal: `& (Get-ChildItem "$env:LOCALAPPDATA\VisualizadorMonitor\v*\visualizador-monitor.exe" | Select-Object -Last 1).FullName estado` (debe decir "corriendo" y "conectado"; el instalador muestra la ruta exacta al terminar).
@@ -395,6 +396,97 @@ Un subagente revisó el monitor, el instalador, el hook y el backend (seguridad 
 ### Pruebas de la etapa 1.2 (2026-10-10)
 
 Contra el backend de desarrollo (8100) con `VISUALIZADOR_AUTH=activado`, una base de acceso temporal y un token de prueba de la máquina `prueba-pc`, con el instalador empaquetado en una carpeta de usuario simulada (copias de los `settings.json`, tarea "Visualizador monitor (prueba)", puerto 8766): los eventos llegan con la máquina `prueba-pc`; con el servidor cortado la cola guardó 5 eventos y al volver los mandó en orden, una vez cada uno (un reenvío con el mismo id respondió "duplicado"); un permiso aprobado desde la oficina llegó al hook en 0,4 s; con el servidor caído el hook terminó sin decisión en 1,2 s; la API local respondió 403 sin la clave o desde un navegador; tras matar el monitor, la tarea lo volvió a arrancar con los 4 pendientes y los entregó; tokens y contexto leídos por el monitor aparecen en el panel; en modo Auto un `claude -p` real con `rm -rf` quedó rechazado por el hook y la carpeta siguió intacta. La desinstalación dejó los `settings.json` simulados idénticos byte a byte. La configuración real de Washington no se tocó.
+
+## VPS y despliegue (etapa 1.3)
+
+### Reconocimiento del VPS (2026-10-11, solo lectura)
+
+- **Servidor**: the VPS provider, `<VPS_HOST>`, IP <VPS_IP>, Ubuntu 24.04.4 LTS (kernel 6.8), 8 GB de RAM y 2 GB de swap. Disco de 96 GB con 15 GB libres (85 % usado: vigilarlo).
+- **nginx 1.24**: un archivo por sitio en `sites-available`, enlazado en `sites-enabled`; cada sitio escucha en el 80 y certbot `--nginx` le agrega el bloque 443 y la redirección. El `nginx.conf` es el de Ubuntu (gzip solo de HTML, sin `server_tokens off`). Sitios: Localia, Buscapez (y design.), Projection, brainstorming.example.net, productividad, skynest y vivedemo (landing, admin y API).
+- **Puertos ocupados**: públicos 22, 80, 443, 3001 (node) y 8080 (php); locales 1521, 3306, 6379, 8000, 8081, 8090, 8182, 8183, 8211, 33060 y 65529. La oficina usa 127.0.0.1:8320.
+- **Otros servicios**: docker, mysql, redis, php8.3-fpm, supervisor, buscapez-inference, projection-api y projection-realtime, monarx-agent.
+- **Herramientas**: Python 3.12 del sistema (con venv), sin uv. node, npm y pnpm. curl, wget, rsync y certbot 2.9 (cuenta ya registrada) con `certbot.timer` activo. Sin el cliente `sqlite3`.
+- **Firewall**: ufw activo (no se tocó; 80 y 443 ya estaban abiertos).
+- **Usuarios**: <VPS_USER> (sudo con contraseña, grupo www-data), deploy-vive y skynest-deploy. Los proyectos viven en `/var/www/<proyecto>`.
+
+### Arquitectura en el VPS
+
+```
+navegador / monitor ──https──> nginx (agents.example.com, certificado de Let's Encrypt)
+                                 ├─ /            frontend estático (/var/www/visualizador-agentes/actual/frontend-out)
+                                 ├─ /api/        ──> 127.0.0.1:8320 (consultas largas, 660 s)
+                                 └─ /ws/         ──> 127.0.0.1:8320 (WebSocket, 3600 s; solo Origin propio o sin Origin)
+                               backend: systemd visualizador-agentes (usuario visualizador)
+                               datos:   /var/lib/visualizador-agentes/datos (700)
+```
+
+| Qué | Dónde |
+|---|---|
+| Código (una carpeta por versión, enlace atómico `actual`; las 3 últimas) | `/var/www/visualizador-agentes/versiones/<fecha>-<commit>`, `actual` (de <VPS_USER>) |
+| uv 0.11.32 y Python 3.13 propios | `/var/www/visualizador-agentes/herramientas` |
+| Datos (agent_events.db, visualizer.db, acceso.db, permisos.db, JSON) | `/var/lib/visualizador-agentes/datos` (700, visualizador) |
+| Respaldos diarios (`respaldo-AAAAMMDD-HHMMSS.tar.gz`, 14 días) | `/var/lib/visualizador-agentes/respaldos` (700) |
+| Configuración con secretos (generados en el servidor, nunca mostrados) | `/etc/visualizador-agentes/backend.env` (640 root:visualizador) |
+| Sitio de nginx y encabezados de seguridad | `/etc/nginx/sites-available/agents.example.com`, `/etc/nginx/snippets/visualizador-agentes-seguridad.conf` |
+| Registros de nginx | `/var/log/nginx/visualizador-agentes.{access,error}.log` |
+| Unidades de systemd | `visualizador-agentes.service`, `-reinicio.path`, `-reinicio.service`, `-respaldo.service`, `-respaldo.timer` |
+
+- **Servicio**: uvicorn en 127.0.0.1:8320 con `--no-proxy-headers`: la IP del cliente sigue siendo la de nginx (el middleware de localhost la deja pasar), el acceso lo controla `VISUALIZADOR_AUTH=activado` y el backend lee `X-Real-IP` para el límite de intentos (`CONFIAR_PROXY=true`). `Restart=always` cada 3 s. Endurecido: `ProtectSystem=strict` (solo escribe en `/var/lib/visualizador-agentes`), `ProtectHome`, `PrivateTmp`, `NoNewPrivileges` y sin capacidades; `systemd-analyze security` da 3.0 (OK). `CLAUDE_OFFICE_API_KEY` explícita para que la clave nunca aparezca en el registro.
+- **Configuración**: `VISUALIZADOR_AUTH=activado`, `LECTURA_LOCAL=false`, `CONFIAR_PROXY=true`, `COOKIE_SEGURA=si`, origen `https://agents.example.com`, rutas de datos y máquina local "alienware".
+- **nginx**: el sitio solo agrega nombres propios (`visualizador_connection_upgrade`, `visualizador_ws_origen`, `visualizador_backend`); no hay `default_server` ni cambios globales. Encabezados: HSTS de un año (sin subdominios), nosniff, `X-Frame-Options DENY`, Referrer-Policy, Permissions-Policy, COOP y una CSP sin `unsafe-eval` (Pixi usa `pixi.js/unsafe-eval`). Cuerpo de hasta 4 MB, sin listado de carpetas, sin archivos ocultos, `/docs` y `/health` no se publican, gzip de JS y CSS solo en este sitio.
+- **https**: certbot `--nginx` con redirección de http a https; se renueva con el `certbot.timer` del VPS (vence el 2027-01-09).
+- **Respaldos**: `visualizador-agentes-respaldo.timer` todos los días a las 03:30 UTC. `respaldar.sh` copia cada base con la API de respaldo de SQLite (consistente aunque el backend esté en marcha), comprueba su integridad, agrega los JSON y conserva 14 días. Restaurar en una copia (prueba): `sudo -u visualizador bash restaurar.sh --copia <archivo>`. Restauración real (detiene el backend, guarda los datos actuales en `datos.antes-<fecha>` y, si no arranca, vuelve solo a los anteriores): `sudo bash /var/www/visualizador-agentes/actual/despliegue/restaurar.sh <archivo>`.
+
+### Scripts (`despliegue/`)
+
+| Script | Dónde y cómo |
+|---|---|
+| `desplegar.sh` | PC, Git Bash: `bash despliegue/desplegar.sh`. Construye el frontend con la API en el mismo dominio, empaqueta el commit con `git archive` y lo sube por ssh, sin credenciales de GitHub en el servidor; activa la versión sin sudo (reinicio por la unidad `.path`, espera un proceso nuevo y `/health`, y si falla vuelve a la anterior). `--arbol` despliega el árbol de trabajo para pruebas; `--sin-front` reutiliza `frontend/out`. |
+| `estado.sh` | PC: `bash despliegue/estado.sh` (versión, servicio, reinicios, `/health`, último y próximo respaldo, disco, `/entrar`, `/api` sin sesión, redirección y vencimiento del certificado). |
+| `sitios-vps.sh` | PC: huella de los otros 12 sitios para comparar antes y después de tocar nginx. |
+| `instalar-sistema.sh` | VPS, una vez y con sudo (usuario, carpetas, secreto, systemd, nginx, certbot). Se puede repetir sin daño. |
+| `primer-arranque.sh` | VPS, con sudo: contraseña si falta, respaldo y restauración en una copia, prueba de caída con `kill -9` y estado. |
+| `acceso.sh` | VPS, con sudo: comandos de `app.acceso_cli` con la configuración del servicio (contraseña, máquinas, tokens, sesiones). |
+| `respaldar.sh`, `restaurar.sh`, `activar-version.sh` | VPS (los llaman el timer, `primer-arranque.sh` y `desplegar.sh`). |
+
+Los scripts corren desde `/` (el usuario del servicio no puede entrar a `/home/<VPS_USER>`). `despliegue/.gitattributes` fuerza LF: `git archive` en Windows con `core.autocrlf` los mandaba con CRLF y bash fallaba.
+
+### Comandos para Washington (PowerShell)
+
+- Instalación del sistema (hecha el 2026-10-11): `ssh -t <VPS_USER>@<VPS_IP> "sudo bash ~/visualizador-agentes-instalacion/despliegue/instalar-sistema.sh"`
+- Contraseña de la oficina (fijada el 2026-10-11), o cambiarla: `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/acceso.sh contrasena"`
+- Respaldo con restauración, prueba de caída y estado: `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/primer-arranque.sh --sin-contrasena"`
+- Actualizar el VPS (desde `E:\visualizador-agentes`, en Git Bash): `bash despliegue/desplegar.sh`; ver el estado: `bash despliegue/estado.sh`
+- Token de la Alienware (etapa 1.4): `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/acceso.sh token-crear --maquina alienware"`
+
+### Revisión independiente (2026-10-11)
+
+Un subagente revisó nginx, systemd, permisos y scripts. Corregido:
+- la CSP rompía la vista 2D (Pixi necesitaba eval: ahora importa `pixi.js/unsafe-eval`);
+- `connect-src` sin `data:`/`blob:`;
+- cualquier subdominio de example.com podía abrir el WebSocket con la cookie (ahora nginx exige el Origin propio o ninguno);
+- el chequeo de salud del despliegue podía aceptar el proceso viejo (ahora espera un InvocationID nuevo);
+- la restauración no volvía atrás si fallaba y extraía como root un archivo escribible por el servicio;
+- `python3` sin `-I` corriendo como root;
+- `umask` que seguía activo en el resto de la instalación;
+- versiones ordenadas por fecha de archivo y no por id;
+- sin bloqueo contra dos despliegues a la vez;
+- conexiones de SQLite sin cerrar;
+- `python3-venv` sin comprobar;
+- caché de uv sin limpiar;
+- gzip de JS y CSS.
+
+No aplicaba: el aviso sobre IPv6 (los demás sitios ya escuchan en `[::]` y hay un `default_server`). Queda anotado: <VPS_USER> es dueño del código que corre el servicio, así que puede leer el secreto (ya tiene sudo, no es una escalada). Además `instalar-sistema.sh` no reemplaza un sitio que certbot ya modificó: los cambios futuros a `nginx/agents.example.com` se aplican a mano.
+
+### Comprobaciones (2026-10-11)
+
+- `https://agents.example.com/entrar` carga con certificado válido; http redirige a https (301).
+- Sin sesión, `/api` responde 401 y el WebSocket se cierra con 4401; desde otro subdominio, 403.
+- Encabezados de seguridad presentes; `/docs`, `/.env` y `/health` responden 404 y `openapi.json` 401.
+- Con la CSP real, `/entrar`, `/`, `/oficina` y `/oficina/3d` cargan sin violaciones y renderizan las escenas 2D y 3D (Playwright, con respuestas de la API simuladas en el navegador).
+- Los otros 12 sitios: las 24 respuestas (https y http) son iguales a la línea base.
+- Respaldo y restauración en una copia, probados primero como <VPS_USER> en una carpeta de prueba y después en el servidor.
+- Reinicio al desplegar: cuatro despliegues sin sudo, cada uno con un proceso nuevo y `/health`.
 
 ## Hook compartido (oficina diaria y desarrollo)
 
@@ -479,7 +571,7 @@ El orden de trabajo lo marca el "Plan por etapas"; esta lista queda como referen
 2. Permisos desde la oficina (hecho y probado en el iPhone el 2026-10-10).
 3. Chatear por completo con el agente desde la oficina: primero investigar las funciones oficiales de Claude Code para usarlo a distancia; luego decidir si integrar o construir.
 4. Mejores voces para los avisos (acento latino o ecuatoriano); por ahora, voces de Google en Chrome (no Edge).
-5. VPS con dominio propio y https, para verla desde internet.
+5. VPS con dominio propio y https, para verla desde internet (hecho el 2026-10-11: https://agents.example.com).
 6. Instalador que envía los eventos de cada máquina al VPS (monitor e instalador de Windows hechos el 2026-10-10; se instala en la etapa 1.4).
 7. Mac: ver en una sola cuenta los agentes de la Mac y de la laptop Alienware.
 8. App de iPhone con notificaciones push.
@@ -494,7 +586,7 @@ Decisión de Washington (2026-10-10).
 - **Etapa 0, cierre**: clic en un agente sin pantalla gris, acentos de los scripts, plan registrado (hecha el 2026-10-10).
 - **Etapa 1.1** (hecha el 2026-10-10): backend para varias máquinas con inicio de sesión (sección "Inicio de sesión y máquinas").
 - **Etapa 1.2** (hecha el 2026-10-10): monitor e instalador de Windows (sección "Monitor de máquina").
-- **Etapa 1.3, decisión de Washington**: en el VPS, nginx sirve el frontend estático y reenvía `/api` y `/ws` al backend.
+- **Etapa 1.3** (hecha el 2026-10-11): publicada en https://agents.example.com; nginx sirve el frontend estático y reenvía `/api` y `/ws` al backend (sección "VPS y despliegue").
 - **Etapa 1, publicar**: backend para varias máquinas con inicio de sesión y token por monitor; monitor e instalador de Windows (recibe los hooks, lee transcripts, cola sin conexión, arranque automático, recuperación tras reinicio, comandos peligrosos siempre con aprobación); despliegue en el VPS con nginx, https y respaldos diarios; pasar el uso diario al VPS. El monitor debe diseñarse para que más adelante pueda lanzar sesiones de Claude Code (`claude -p` con stream-json y `--resume`) en carpetas que se le indiquen.
 - **Etapa 2, ver bien**: ficha útil del agente (no chat): tarea actual, pasos, estimado contra real, tokens, commits, archivos, permisos y acciones; esperas específicas (por ejemplo "Unity: compilando scripts, 2 min"); historial preciso; tokens, tiempo de trabajo y límites de 5 h y semanal; detector de atascos.
 - **Etapa 3, app iOS**: bocetos para aprobación, base que consume el VPS, push de tres alertas (permiso pendiente, pregunta del orquestador, tarea terminada), bandeja de decisiones, bandeja de ideas, widget, Live Activity y Apple Watch.
@@ -518,5 +610,5 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Etapa 1.3: despliegue en el VPS (nginx sirve el frontend estático y reenvía `/api` y `/ws` al backend; https; respaldos diarios; `LECTURA_LOCAL=false`).
-2. Etapa 1.4: pasar el uso diario al VPS: Washington fija la contraseña, crea el token de la Alienware e instala el monitor (guía en "Instalación en la Alienware").
+1. Etapa 1.4: pasar el uso diario al VPS: crear el token de la Alienware, instalar el monitor (guía en "Instalación en la Alienware") y comprobar la oficina en https://agents.example.com desde la PC y el iPhone.
+2. Vigilar el disco del VPS (85 % usado).

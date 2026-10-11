@@ -11,6 +11,8 @@
 
 "use client";
 
+// Sin eval: la página se publica con una CSP sin unsafe-eval (despliegue/nginx).
+import "pixi.js/unsafe-eval";
 import { Application, extend } from "@pixi/react";
 import {
   Container,

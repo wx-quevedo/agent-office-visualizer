@@ -38,6 +38,8 @@ _COMILLA = r"[\"']"
 # git and its global options (-C repo, -c clave=valor, --no-pager...) before the
 # subcommand. Only options: a long command full of "git" is checked in linear time.
 _GIT = r"\bgit(?:\s+-[\w.-]+(?:=\S*|\s+(?!-)[^\s;&|]+)?)*\s+"
+# A broad path: the whole tree (., ./, *, .., /, :/ and :/*), alone as an argument.
+_AMPLIA = r"(?:\.{1,2}/?|\*|/|:/\*?)(?=$|[\s;&|)])"
 
 # (regex, description). Recursive and forced deletes need BOTH flags.
 PREDETERMINADOS: list[tuple[str, str]] = [
@@ -69,12 +71,27 @@ PREDETERMINADOS: list[tuple[str, str]] = [
         rf"(?={_SEG}\s-[a-z]*[dx])",
         "git clean -fd",
     ),
+    # Discard the uncommitted changes of the whole tree.
+    (rf"{_GIT}checkout\b{_SEG}\s(?:--\s+)?{_AMPLIA}", "git checkout -- ."),
+    (
+        # restore with a broad path, except --staged alone (it only unstages).
+        rf"{_GIT}restore\b(?!(?={_SEG}\s(?:--staged|-S)\b)(?!{_SEG}\s(?:--worktree|-W)\b))"
+        rf"{_SEG}\s{_AMPLIA}",
+        "git restore .",
+    ),
+    # -D (or --delete --force) deletes a branch even if it was not merged; -d is safe.
+    (
+        rf"{_GIT}branch\b{_SEG}\s(?:(?-i:-[a-zA-Z]*D[a-zA-Z]*)\b|--delete\s+--force\b|"
+        rf"--force\s+--delete\b|(?-i:-f)\s+(?-i:-d)\b|(?-i:-d)\s+(?-i:-f)\b)",
+        "git branch -D",
+    ),
     (rf"{_INICIO}format(?:\.com)?\s+[a-z]:", "formatear un disco"),
     (r"\b(?:format-volume|clear-disk|initialize-disk)\b", "formatear un disco"),
     (r"\bdiskpart\b", "diskpart"),
     (r"\bmkfs(?:\.\w+)?\b", "formatear un disco"),
     (rf"\bdd\s{_SEG}\bof=/dev/", "dd sobre un disco"),
     (r"\bdrop\s+(?:database|schema|table)\b", "DROP DATABASE / DROP TABLE"),
+    (r"\btruncate\s+table\b", "TRUNCATE TABLE"),
 ]
 
 # Text of the default file (the installer writes it; Washington edits it).

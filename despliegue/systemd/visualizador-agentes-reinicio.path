@@ -1,0 +1,11 @@
+# Reinicio sin sudo: el despliegue (<VPS_USER>) toca este archivo al activar una
+# versión nueva y systemd reinicia el backend.
+[Unit]
+Description=Oficina de agentes: reinicio al activar una versión
+
+[Path]
+PathChanged=/var/www/visualizador-agentes/reiniciar
+Unit=visualizador-agentes-reinicio.service
+
+[Install]
+WantedBy=multi-user.target

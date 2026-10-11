@@ -1,0 +1,47 @@
+# Backend de la oficina de agentes (https://agents.example.com).
+# Lo instala despliegue/instalar-sistema.sh en /etc/systemd/system/.
+[Unit]
+Description=Oficina de agentes (backend FastAPI)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=visualizador
+Group=visualizador
+WorkingDirectory=/var/www/visualizador-agentes/actual/backend
+EnvironmentFile=/etc/visualizador-agentes/backend.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HOME=/var/lib/visualizador-agentes
+# Solo en 127.0.0.1 (nginx es la única entrada). --no-proxy-headers: la IP del
+# cliente sigue siendo la de nginx; el backend lee X-Real-IP él mismo (CONFIAR_PROXY).
+ExecStart=/var/www/visualizador-agentes/actual/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8320 --no-proxy-headers --no-server-header --timeout-graceful-shutdown 10
+Restart=always
+RestartSec=3
+UMask=0077
+
+# Endurecimiento: solo escribe en su carpeta de datos.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/visualizador-agentes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

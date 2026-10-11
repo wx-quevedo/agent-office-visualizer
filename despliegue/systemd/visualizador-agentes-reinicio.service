@@ -1,0 +1,6 @@
+[Unit]
+Description=Oficina de agentes: reinicia el backend (versión nueva)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart visualizador-agentes.service

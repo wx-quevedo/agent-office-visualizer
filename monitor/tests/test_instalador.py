@@ -216,3 +216,27 @@ def test_guion_de_arranque(tmp_path: Path) -> None:
     g = guion_arranque(Path("C:/Users/o'brien/m/visualizador-monitor.exe"), tmp_path / "datos")
     assert "'C:\\Users\\o''brien\\m\\visualizador-monitor.exe'" in g or "o''brien" in g
     assert "detener" in g and "arranque.pid" in g and "servir" in g
+
+
+def test_dos_instalaciones_en_el_mismo_segundo_no_pisan_el_original(
+    usuario: Path, origen: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Con la misma hora, el respaldo de la segunda no reemplaza al original."""
+    from datetime import datetime
+
+    from visualizador_monitor import instalador as modulo
+
+    class Fija(datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[no-untyped-def, override]
+            return datetime(2026, 10, 11, 12, 0, 0, 123456)
+
+    monkeypatch.setattr(modulo, "datetime", Fija)
+    antes = (usuario / ".claude" / "settings.json").read_bytes()
+    _instalar(usuario, origen, tmp_path)
+    with pytest.raises(FileExistsError):  # misma carpeta de versión: no se pisa
+        _instalar(usuario, origen, tmp_path)
+    monkeypatch.undo()
+    _instalar(usuario, origen, tmp_path)
+    desinstalar(inicio=usuario)
+    assert (usuario / ".claude" / "settings.json").read_bytes() == antes

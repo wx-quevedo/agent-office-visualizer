@@ -356,14 +356,19 @@ def instalar(
     # 3. hooks de cada cuenta (respaldo antes de tocar; el manifiesto se guarda
     # después de cada archivo, así la desinstalación siempre sabe qué revertir)
     guardar_manifiesto()
-    sello = ahora.strftime("%Y%m%d-%H%M%S")
+    sello = ahora.strftime("%Y%m%d-%H%M%S-%f")
     for ruta, datos in leidos.items():
         cambios = cambiar_hooks(datos, exe)
         if not cambios:
             continue
         previo = previos.get(str(ruta))
         huella_antes = _huella(ruta)
+        # Nunca se pisa un respaldo anterior: el de la primera instalación es el original.
         respaldo = ruta.with_name(f"settings.json.respaldo-visualizador-{sello}")
+        n = 1
+        while respaldo.exists():
+            respaldo = ruta.with_name(f"settings.json.respaldo-visualizador-{sello}-{n}")
+            n += 1
         shutil.copy2(ruta, respaldo)
         _escribir_json(ruta, datos)
         # Si alguien cambió el archivo entre dos instalaciones, el respaldo original ya

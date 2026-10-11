@@ -1,0 +1,14 @@
+[Unit]
+Description=Oficina de agentes: respaldo diario de las bases
+
+[Service]
+Type=oneshot
+User=visualizador
+Group=visualizador
+UMask=0077
+ExecStart=/usr/bin/bash /var/www/visualizador-agentes/actual/despliegue/respaldar.sh
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/visualizador-agentes
