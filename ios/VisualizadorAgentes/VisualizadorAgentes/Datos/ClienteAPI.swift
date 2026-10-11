@@ -149,8 +149,9 @@ final class ClienteAPI: @unchecked Sendable {
     // MARK: - Cambios
 
     /// El mismo endpoint que la web: aprobar o rechazar una solicitud de permiso.
+    /// Queda registrado como "app iOS".
     func decidir(permiso id: String, aprobar: Bool, motivo: String? = nil) async throws -> Permiso {
-        var cuerpo: [String: Any] = ["decision": aprobar ? "aprobar" : "rechazar", "dispositivo": "celular"]
+        var cuerpo: [String: Any] = ["decision": aprobar ? "aprobar" : "rechazar", "dispositivo": "app"]
         if let m = motivo?.trimmingCharacters(in: .whitespacesAndNewlines), !m.isEmpty { cuerpo["motivo"] = m }
         let enc = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
         let (datos, r) = try await enviar(
@@ -165,6 +166,46 @@ final class ClienteAPI: @unchecked Sendable {
         let cuerpo = try JSONSerialization.data(withJSONObject: ["cliente": cliente, "dispositivo": "celular"])
         let (datos, r) = try await enviar("/api/v1/agents/presence", metodo: "POST", cuerpo: cuerpo, conSesion: true)
         try Self.comprobar(datos, r)
+    }
+
+    // MARK: - Bandejas (Prompt 33)
+
+    func decisiones() async throws -> Bandeja { try await leer("/api/v1/decisiones") }
+
+    /// "Ya lo vi": saca el atasco de la bandeja sin tocar al agente.
+    func atascoVisto(_ id: String) async throws {
+        _ = try await cambiar("/api/v1/decisiones/atascos/visto", "POST", ["id": id, "dispositivo": "app"])
+    }
+
+    func ideas(archivadas: Bool = false) async throws -> IdeasRespuesta {
+        try await leer("/api/v1/ideas" + (archivadas ? "?archivadas=true" : ""))
+    }
+
+    func crearIdea(texto: String, proyecto: String?, dictada: Bool) async throws -> Idea {
+        var cuerpo: [String: Any] = ["texto": texto, "origen": dictada ? "dictada" : "escrita"]
+        if let proyecto { cuerpo["proyecto"] = proyecto }
+        return try Self.decodificar(try await cambiar("/api/v1/ideas", "POST", cuerpo))
+    }
+
+    /// Cambia el proyecto de una idea (nil: "Sin proyecto todavía").
+    func cambiarProyecto(idea id: String, proyecto: String?) async throws -> Idea {
+        let cuerpo: [String: Any] = ["proyecto": proyecto.map { $0 as Any } ?? NSNull()]
+        return try Self.decodificar(try await cambiar("/api/v1/ideas/\(Self.ruta(id))", "PATCH", cuerpo))
+    }
+
+    func archivar(idea id: String, archivar: Bool = true) async throws -> Idea {
+        try Self.decodificar(try await cambiar("/api/v1/ideas/\(Self.ruta(id))/archivar", "POST", ["archivar": archivar]))
+    }
+
+    private static func ruta(_ id: String) -> String {
+        id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_."))) ?? id
+    }
+
+    private func cambiar(_ ruta: String, _ metodo: String, _ cuerpo: [String: Any]) async throws -> Data {
+        let (datos, r) = try await enviar(ruta, metodo: metodo,
+                                          cuerpo: try JSONSerialization.data(withJSONObject: cuerpo), conSesion: true)
+        try Self.comprobar(datos, r)
+        return datos
     }
 
     // MARK: - Base

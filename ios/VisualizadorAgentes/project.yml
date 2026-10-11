@@ -27,6 +27,8 @@ targets:
         UIUserInterfaceStyle: Light
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSFaceIDUsageDescription: Face ID abre la app y confirma los permisos peligrosos.
+        NSMicrophoneUsageDescription: El micrófono se usa solo mientras dictas una idea.
+        NSSpeechRecognitionUsageDescription: El reconocimiento de voz de Apple convierte tu dictado en el texto de la idea. Si el iPhone lo permite, se hace en el propio iPhone.
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:

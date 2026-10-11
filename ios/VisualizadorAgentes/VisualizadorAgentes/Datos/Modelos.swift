@@ -47,6 +47,8 @@ struct EstadoOficina: Codable, Equatable, Sendable {
     var generado: String?
     var presencia: Presencia?
     var agentes: [Agente]
+    /// Conteo de la bandeja de Decisiones (Prompt 33), para la insignia.
+    var decisiones_pendientes: Int?
 }
 
 struct Presencia: Codable, Equatable, Sendable {
@@ -128,6 +130,7 @@ struct Agente: Codable, Equatable, Identifiable, Sendable {
     var herramienta_actual: String?
     var ultimo_evento: UltimoEvento?
     var pregunta_pendiente: String?
+    var pregunta_opciones: [PreguntaAgente]?
     var cierre: Cierre?
     var indicadores: Indicadores?
     var eventos_recientes: [EventoReciente]?
@@ -135,6 +138,103 @@ struct Agente: Codable, Equatable, Identifiable, Sendable {
     var resumenes: [String: Resumen]?
 
     var id: String { agente.session_id }
+}
+
+// MARK: - Preguntas (AskUserQuestion), solo lectura
+
+struct PreguntaAgente: Codable, Equatable, Sendable {
+    struct Opcion: Codable, Equatable, Sendable {
+        var etiqueta: String
+        var descripcion: String?
+    }
+
+    var texto: String
+    var encabezado: String?
+    var opciones: [Opcion]
+    var multiple: Bool?
+}
+
+// MARK: - GET /decisiones
+
+struct Bandeja: Codable, Equatable, Sendable {
+    struct Conteo: Codable, Equatable, Sendable {
+        var permiso: Int?
+        var pregunta: Int?
+        var atasco: Int?
+        var total: Int
+    }
+
+    var pendientes: [Decision]
+    var conteo: Conteo?
+    var resueltas_hoy: [Resuelta]
+}
+
+struct Decision: Codable, Equatable, Identifiable, Sendable {
+    struct PermisoItem: Codable, Equatable, Sendable {
+        var id: String?
+        var herramienta: String?
+        var esperando: Bool
+        var segundos_restantes: Int?
+        var estado: String?
+    }
+
+    struct PreguntaItem: Codable, Equatable, Sendable {
+        var texto: String?
+        var preguntas: [PreguntaAgente]
+        var responder_en: String?
+    }
+
+    struct AtascoItem: Codable, Equatable, Sendable {
+        var tipo: String?
+        var motivo: String?
+        var ultimo_intento: String?
+        var ultimo_error: String?
+    }
+
+    var tipo: String // permiso, pregunta, atasco
+    var id: String
+    var session_id: String
+    var proyecto: String?
+    var carpeta: String?
+    var cuenta: String?
+    var maquina: String?
+    var desde: String?
+    var hace_s: Double?
+    var resumen: String?
+    var detalle: String?
+    var permiso: PermisoItem?
+    var pregunta: PreguntaItem?
+    var atasco: AtascoItem?
+}
+
+struct Resuelta: Codable, Equatable, Identifiable, Sendable {
+    var tipo: String
+    var id: String
+    var proyecto: String?
+    var cuenta: String?
+    var maquina: String?
+    var texto: String?
+    var como: String?
+    var motivo: String?
+    var quien: String?
+    var cuando: String?
+}
+
+// MARK: - Ideas
+
+struct Idea: Codable, Equatable, Identifiable, Sendable {
+    var id: String
+    var texto: String
+    var proyecto: String?
+    var origen: String?
+    var estado: String // nueva, asignada, archivada
+    var creada: String?
+    var actualizada: String?
+}
+
+struct IdeasRespuesta: Codable, Equatable, Sendable {
+    var ideas: [Idea]
+    var proyectos: [String]
 }
 
 // MARK: - Permisos

@@ -962,7 +962,7 @@ Investigado el 2026-10-10.
 1. Washington actualiza el monitor de la Alienware a la 0.3.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`): trae el auxiliar de los avisos resumidos.
 2. Washington despliega el frontend (commit `797c025`, modo `?app=ios` de la oficina 3D) e instala la app en su iPhone desde Xcode con su Personal Team.
 3. Etapa 3, Prompt 32: push de las tres alertas (permiso pendiente, pregunta, tarea terminada); los avisos resumidos ya sirven de texto. El push necesita la membresía de pago del programa de desarrolladores.
-4. Etapa 3, Prompt 33, parte C: Washington despliega el backend de las bandejas (`bash despliegue/desplegar.sh`) y después se construyen las pestañas Decisiones e Ideas en la app.
+4. Etapa 3, Prompt 33, parte C (en curso, app): Decisiones e Ideas construidas y probadas contra el servidor real (35 pruebas unitarias). Falta: guardar una idea y cambiar su proyecto en el simulador, el dictado (en el simulador el audio de entrada se cuelga, hay que probarlo en el iPhone), una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png. Las resueltas de hoy muestran proyectos como `e--visualizador-agentes` (nombre de carpeta de la transcripción, viene del backend).
 5. Washington usa la ficha, "Dónde quedamos" y los avisos resumidos, y anota lo que hay que refinar.
 6. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
 7. Vigilar el disco del VPS (85 % usado).

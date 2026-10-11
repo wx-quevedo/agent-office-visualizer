@@ -45,7 +45,8 @@ final class ModeloApp {
 
     var visibles: [Agente] { Logica.filtrar(agentes, cuenta: .todas, ahora: ahora) }
 
-    var pendientes: Int { Logica.pendientes(visibles) }
+    /// Insignia de Decisiones: el conteo de la bandeja que trae /agents/state.
+    var pendientes: Int { estado?.decisiones_pendientes ?? Logica.pendientes(visibles) }
 
     func agente(_ id: String) -> Agente? { agentes.first { $0.id == id } }
 
@@ -148,25 +149,34 @@ final class ModeloApp {
 
     // MARK: - Permisos
 
-    func esPeligroso(_ p: Permiso) -> Bool {
+    func esPeligroso(_ p: Permiso) -> Bool { esPeligroso(herramienta: p.herramienta, detalle: p.detalle) }
+
+    func esPeligroso(herramienta: String, detalle: String) -> Bool {
         let lista = configPermisos?.confirmar ?? ModeloApp.confirmarPorDefecto
-        return Logica.pideConfirmacion(herramienta: p.herramienta, detalle: p.detalle, lista: lista)
+        return Logica.pideConfirmacion(herramienta: herramienta, detalle: detalle, lista: lista)
+    }
+
+    func decidir(_ p: Permiso, aprobar: Bool, motivo: String? = nil) async throws {
+        try await decidir(id: p.id, herramienta: p.herramienta, detalle: p.detalle, aprobar: aprobar, motivo: motivo)
     }
 
     /// Aprobar un comando peligroso pide Face ID antes de llamar al servidor.
-    func decidir(_ p: Permiso, aprobar: Bool) async throws {
+    /// Devuelve false si se canceló el Face ID (no se envió nada).
+    @discardableResult
+    func decidir(id: String, herramienta: String, detalle: String, aprobar: Bool, motivo: String? = nil) async throws -> Bool {
         guard let api else { throw ErrorAPI.sinSesion }
-        if aprobar && esPeligroso(p) {
+        if aprobar && esPeligroso(herramienta: herramienta, detalle: detalle) {
             let r = await Autenticacion.comprobar(motivo: "Aprobar un comando peligroso")
-            if r == .cancelado { return }
+            if r == .cancelado { return false }
         }
         do {
-            _ = try await api.decidir(permiso: p.id, aprobar: aprobar)
+            _ = try await api.decidir(permiso: id, aprobar: aprobar, motivo: motivo)
         } catch ErrorAPI.sinSesion {
             sesionVencida()
             throw ErrorAPI.sinSesion
         }
         await leerUnaVez()
+        return true
     }
 
     static let confirmarPorDefecto = [

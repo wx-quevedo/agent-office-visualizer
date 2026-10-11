@@ -146,7 +146,7 @@ final class ClienteAPITests: XCTestCase {
         XCTAssertEqual(r.value(forHTTPHeaderField: "X-Visualizador"), "1")
         XCTAssertEqual(r.value(forHTTPHeaderField: "Cookie"), "__Host-visualizador_sesion=vas_abc")
         let cuerpo = try XCTUnwrap(JSONSerialization.jsonObject(with: r.httpBody ?? Data()) as? [String: String])
-        XCTAssertEqual(cuerpo, ["decision": "aprobar", "dispositivo": "celular"])
+        XCTAssertEqual(cuerpo, ["decision": "aprobar", "dispositivo": "app"])
     }
 
     func testDecidirYaDecididaDevuelveElMensaje() async {

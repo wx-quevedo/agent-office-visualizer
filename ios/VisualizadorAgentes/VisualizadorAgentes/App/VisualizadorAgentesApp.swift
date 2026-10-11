@@ -48,36 +48,16 @@ struct Pestanas: View {
                 OficinaVista()
             }
             Tab("Decisiones", systemImage: "checkmark.circle", value: Pestana.decisiones) {
-                ProximamenteVista(titulo: "Decisiones",
-                                  texto: "Aquí vas a ver todo lo que espera por ti, lo más urgente arriba. Llega en el Prompt 33.")
+                DecisionesVista()
             }
             .badge(modelo.pendientes)
             Tab("Dónde quedamos", systemImage: "map", value: Pestana.donde) {
                 DondeVista()
             }
             Tab("Ideas", systemImage: "lightbulb", value: Pestana.ideas) {
-                ProximamenteVista(titulo: "Ideas",
-                                  texto: "Aquí vas a anotar ideas para cada proyecto. Llega en el Prompt 33.")
+                IdeasVista()
             }
         }
-    }
-}
-
-struct ProximamenteVista: View {
-    var titulo: String
-    var texto: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(titulo).font(.system(size: 34, weight: .bold))
-            Text(texto).font(.system(size: 16)).foregroundStyle(Color.texto2)
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.fondo)
-        .foregroundStyle(Color.texto)
     }
 }
 
