@@ -30,12 +30,36 @@ export interface Indicadores {
   errores_motivo: string | null;
 }
 
+/** The wait or long task in one sentence (stage 2.1, esperas.py). */
+export interface EsperaDetalle {
+  texto: string;
+  base: string;
+  segundos: number;
+  limite_min: number | null;
+  regla?: string | null;
+  sujeto?: string | null;
+}
+
+/** What the stuck detector found (stage 2.1, atascos.py). */
+export interface Atasco {
+  tipo: string;
+  motivo: string;
+  desde: string;
+  ultimos_intentos: string[];
+  ultimo_error: string | null;
+}
+
 export interface Agente {
   agente: {
     session_id: string;
     proyecto: string | null;
     cuenta: string | null;
+    maquina?: string | null;
+    modelo?: string | null;
   };
+  espera_detalle?: EsperaDetalle | null;
+  atasco?: Atasco | null;
+  trabajo_continuo_s?: number;
   estado: { numero: number; nombre: string; desde: string };
   espera: Espera | null;
   herramienta_actual: string | null;

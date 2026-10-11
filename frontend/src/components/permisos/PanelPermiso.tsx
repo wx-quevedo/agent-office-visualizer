@@ -9,6 +9,7 @@
  */
 
 import { useState, useSyncExternalStore, type MouseEvent } from "react";
+import { fraseDePermiso, haceTiempo } from "@/components/ficha/logica";
 import { dispositivo } from "@/components/oficina/logica";
 import {
   decidirPermiso,
@@ -41,10 +42,14 @@ type Fase = "botones" | "confirmar" | "motivo";
 export default function PanelPermiso({
   permiso,
   ahora,
+  variante = "caja",
 }: {
   permiso: Permiso;
   ahora: number;
+  /** "ficha": the agent card's version (one clear sentence, blue card). */
+  variante?: "caja" | "ficha";
 }) {
+  const ficha = variante === "ficha";
   const disp = useDispositivo();
   const config = useConfigPermisos();
   const [fase, setFase] = useState<Fase>("botones");
@@ -86,26 +91,45 @@ export default function PanelPermiso({
 
   return (
     <section
-      className={s.permiso}
+      className={ficha ? `${s.permiso} ${s.ficha}` : s.permiso}
       aria-label="Permiso solicitado"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className={s.titulo}>
-        Pide permiso para usar {actual.herramienta}
-        <small>
-          {actual.herramienta === "Bash" || actual.herramienta === "PowerShell"
-            ? "Comando completo"
-            : "Lo que pide"}
-        </small>
-      </div>
+      {ficha ? (
+        <>
+          <h3 className={s.fichaEtiqueta}>
+            {puede ? "Te pide permiso" : "Pidió permiso"} ·{" "}
+            {haceTiempo(actual.creada, ahora)}
+          </h3>
+          <p className={s.fichaFrase}>
+            {fraseDePermiso(actual.herramienta, actual.detalle)}
+          </p>
+        </>
+      ) : (
+        <div className={s.titulo}>
+          Pide permiso para usar {actual.herramienta}
+          <small>
+            {actual.herramienta === "Bash" ||
+            actual.herramienta === "PowerShell"
+              ? "Comando completo"
+              : "Lo que pide"}
+          </small>
+        </div>
+      )}
       <pre className={s.bloque}>{actual.detalle}</pre>
 
       {puede ? (
         <>
-          <div className={s.restante} aria-live="polite">
+          <div className={s.restante}>
             Quedan <b>{textoRestante(restante)}</b> para responder desde aquí;
             después responde VS Code.
           </div>
+          {/* Only the last 30 s are announced (the count changes every 2 s). */}
+          <span className={s.oculto} aria-live="polite">
+            {restante <= 30
+              ? "Quedan menos de 30 segundos para responder."
+              : ""}
+          </span>
           {fase === "botones" && (
             <div className={s.botones}>
               <button
@@ -129,13 +153,13 @@ export default function PanelPermiso({
                   setFase("motivo");
                 }}
               >
-                Rechazar
+                {ficha ? "Rechazar con motivo" : "Rechazar"}
               </button>
             </div>
           )}
           {fase === "confirmar" && (
             <>
-              <div className={s.alerta} role="alertdialog">
+              <div className={s.alerta} role="alert">
                 Este comando borra o sube algo. ¿Lo apruebas de todas formas?
               </div>
               <div className={s.botones}>

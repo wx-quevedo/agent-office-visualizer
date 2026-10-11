@@ -77,7 +77,7 @@
 }
 
 .entorno select {
-  min-height: 40px;
+  min-height: 44px;
   border: 2px solid var(--negro);
   background: var(--blanco);
   color: var(--negro);
@@ -135,10 +135,10 @@
 
 .capaAvisos {
   position: absolute;
-  top: 70px;
+  top: 8px;
   right: 16px;
   width: min(1100px, calc(100% - 32px));
-  max-height: calc(100% - 86px);
+  max-height: calc(100% - 16px);
   overflow-y: auto;
   /* above the agent labels (drei Html, z-index up to 1000) */
   z-index: 2000;
@@ -183,68 +183,6 @@
   pointer-events: none;
 }
 
-/* Request of an agent with its hand up (13): Approve / Reject */
-.capaPermiso {
-  position: absolute;
-  top: 70px;
-  left: 16px;
-  width: min(520px, calc(100% - 32px));
-  max-height: calc(100% - 86px);
-  overflow-y: auto;
-  z-index: 2001;
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px 16px;
-  background: #fff;
-  border: 3px solid #111;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
-}
-
-.permisoCabeza {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.permisoCabeza b {
-  font-size: 18px;
-}
-
-.permisoCabeza span {
-  color: #555;
-  font-size: 14px;
-  flex: 1;
-}
-
-.permisoVsCode {
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px dashed #8a8a8a;
-  color: #555;
-  font-weight: 600;
-}
-
-.panelDato {
-  color: #555;
-  font-size: 14px;
-}
-
-.panelBloque {
-  padding: 8px 12px;
-  background: #f4f4f4;
-  border: 1px solid #b5b5b5;
-  font-family: var(--font-plex-mono), "Courier New", monospace;
-  font-size: 13px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.permisoEnlace {
-  color: #111;
-  font-weight: 600;
-}
-
 @media (max-width: 699px) {
   .barra {
     padding: 8px 12px;
@@ -275,25 +213,26 @@
     flex: 1 1 100%;
   }
 
+  .entorno > span {
+    display: none;
+  }
+
   .entorno select {
     flex: 1;
   }
 
+  /* One row that scrolls inside the bar (not the page): the scene keeps its room. */
   .acciones {
     flex: 1 1 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
     margin-left: 0;
   }
 
   .boton {
-    flex: 1;
+    flex: 0 0 auto;
     justify-content: center;
-  }
-
-  .capaPermiso {
-    top: 8px;
-    left: 8px;
-    width: calc(100% - 16px);
-    max-height: calc(100% - 16px);
   }
 
   .capaAvisos {

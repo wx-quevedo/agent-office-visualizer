@@ -162,7 +162,14 @@
 }
 
 .vacio {
-  color: var(--gris);
+  color: var(--gris-oscuro);
+}
+
+/* With the agent card open (PC), the page leaves its 460 px free. */
+@media (min-width: 700px) {
+  .conFicha {
+    padding-right: calc(460px + 32px);
+  }
 }
 
 .rejillaEspera {
@@ -203,9 +210,7 @@
 }
 
 .escritorio:focus-visible,
-.selector button:focus-visible,
-.volver:focus-visible,
-.listaItem:focus-visible {
+.selector button:focus-visible {
   outline: 3px solid var(--negro);
   outline-offset: 2px;
 }
@@ -236,10 +241,6 @@
   font-size: 12px;
 }
 
-.avatar140 {
-  width: 140px;
-  height: 140px;
-}
 .avatar88 {
   width: 88px;
   height: 88px;
@@ -432,123 +433,6 @@
   text-overflow: ellipsis;
 }
 
-/* -- detail ---------------------------------------------------------------- */
-
-.detalle {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-}
-
-.lista {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  opacity: 0.55;
-}
-
-.lista:hover,
-.lista:focus-within {
-  opacity: 0.85;
-}
-
-.listaItem {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 44px;
-  align-items: center;
-  padding: 6px 10px;
-  border: 1px solid var(--gris-borde);
-  color: inherit;
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-
-.panel {
-  border: 3px solid var(--negro);
-  padding: 24px;
-  min-width: 0;
-}
-
-.panelCabeza {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-}
-
-.panelProyecto {
-  font-size: 24px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.estadoGrande {
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 22px;
-  font-weight: 600;
-  margin-top: 8px;
-}
-
-.cuadricula {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.cuadricula > div {
-  border: 1px solid var(--gris-borde);
-  padding: 8px 10px;
-}
-
-.cuadricula span {
-  display: block;
-  font-size: 12px;
-  color: var(--gris-oscuro);
-}
-
-.cuadricula b {
-  font-family: var(--font-plex-mono), monospace;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.tablaEventos {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-  font-size: 13px;
-  table-layout: fixed;
-}
-
-.tablaEventos th,
-.tablaEventos td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--gris-claro);
-  vertical-align: top;
-  overflow-wrap: anywhere;
-}
-
-.tablaEventos th {
-  font-weight: 600;
-  color: var(--gris-oscuro);
-}
-
-.volver {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 16px;
-  margin-bottom: 16px;
-  border: 2px solid var(--negro);
-  color: var(--negro);
-  font-weight: 600;
-  text-decoration: none;
-}
-
 /* -- phone (< 700 px) -------------------------------------------------------- */
 
 @media (max-width: 699px) {
@@ -623,35 +507,10 @@
     width: 40px;
     height: 40px;
   }
-  .avatar140 {
-    width: 88px;
-    height: 88px;
-  }
 
   .filaCerrado {
     grid-template-columns: minmax(0, 1fr);
     gap: 2px;
-  }
-
-  .detalle {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .lista {
-    display: none;
-  }
-
-  .panel {
-    padding: 14px;
-  }
-
-  .panelCabeza {
-    flex-direction: column;
-  }
-
-  .tablaEventos th:first-child,
-  .tablaEventos td:first-child {
-    width: 72px;
   }
 }
 

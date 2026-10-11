@@ -1,0 +1,716 @@
+/* "Dónde quedamos" (stage 2.3): light theme, IBM Plex, colours of the mockups. */
+
+.pagina {
+  --tinta: #1f2329;
+  --tinta-2: #2b2f36;
+  --gris: #4a505c;
+  --gris-2: #5a6170;
+  --borde: #d5d9df;
+  --linea: #e4e7eb;
+  --suave: #eef0f3;
+  --fondo: #f4f5f7;
+  --azul: #1d4faf;
+  --azul-suave: #e3ecfb;
+  --verde: #2f5c45;
+  --naranja: #8a3e0e;
+  --naranja-borde: #e8b98f;
+  --rojo: #9b2c1e;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  background: var(--fondo);
+  color: var(--tinta);
+  font-family: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.soloCel {
+  display: none;
+}
+
+.oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.etiqueta {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gris);
+}
+
+.secundario {
+  margin: 0;
+  font-size: 14px;
+  color: var(--gris);
+}
+
+.texto {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--tinta-2);
+  overflow-wrap: anywhere;
+}
+
+.fuerte {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.mono,
+.consumo,
+.promptDato {
+  font-family: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.mono {
+  margin: 0;
+  font-size: 12px;
+  color: var(--gris);
+  overflow-wrap: anywhere;
+}
+
+.azul {
+  color: var(--azul);
+}
+
+.rojo {
+  color: var(--rojo);
+}
+
+.naranja {
+  color: var(--naranja);
+}
+
+.verde {
+  color: var(--verde);
+}
+
+.gris {
+  color: var(--gris);
+}
+
+.boton {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--tinta);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.boton:hover,
+.item:hover {
+  background: var(--suave);
+}
+
+.boton:focus-visible,
+.item:focus-visible,
+.enlace:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.enlace {
+  color: var(--azul);
+  font-weight: 600;
+}
+
+/* -- project list ------------------------------------------------------------- */
+
+.lista {
+  order: -1;
+  width: 300px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-right: 1px solid var(--borde);
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 100vh;
+  max-height: 100dvh;
+  position: sticky;
+  top: 0;
+}
+
+.listaTitulo {
+  margin: 0;
+  padding: 0 8px 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.item {
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--linea);
+  background: #ffffff;
+  color: var(--tinta);
+  text-decoration: none;
+}
+
+.itemElegido {
+  border: 2px solid var(--azul);
+  background: var(--azul-suave);
+  padding: 11px;
+}
+
+.itemElegido:hover {
+  background: var(--azul-suave);
+}
+
+.itemFila {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.itemNombre {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.itemCuando {
+  font-size: 12px;
+  color: var(--gris);
+  white-space: nowrap;
+}
+
+.itemDonde {
+  font-size: 13px;
+  color: var(--tinta-2);
+  overflow-wrap: anywhere;
+}
+
+.itemAlerta {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* -- chosen project ----------------------------------------------------------- */
+
+.principal {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.bienvenida {
+  overflow-wrap: anywhere;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--azul-suave);
+  border: 1px solid #9db8ee;
+  font-size: 14px;
+}
+
+.cabeza {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cabezaTexto {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.consumo {
+  margin: 0;
+  font-size: 13px;
+  color: var(--gris);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.consumoProyecto {
+  font-size: 12px;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.etapas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  gap: 6px;
+}
+
+.etapa {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 2px solid var(--borde);
+  background: #ffffff;
+  min-height: 92px;
+  min-width: 0;
+}
+
+.etapaNumero {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--gris-2);
+}
+
+.etapaNombre {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.etapaEstado {
+  font-size: 11px;
+  color: var(--gris-2);
+  margin-top: auto;
+}
+
+.etapa_hecha {
+  background: var(--tinta-2);
+  border-color: var(--tinta-2);
+  color: #ffffff;
+}
+
+.etapa_hecha .etapaNumero,
+.etapa_hecha .etapaEstado {
+  color: #c9cdd3;
+}
+
+.etapa_actual {
+  background: var(--azul-suave);
+  border-color: var(--azul);
+}
+
+.etapa_actual .etapaNumero,
+.etapa_actual .etapaEstado {
+  color: var(--azul);
+  font-weight: 600;
+}
+
+.aqui {
+  background: #ffffff;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aquiCabeza {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.marcaAqui {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--azul);
+  color: #ffffff;
+}
+
+.aquiTitulo {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.prompts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 2px solid var(--linea);
+  background: #ffffff;
+  min-width: 0;
+}
+
+.promptActual {
+  border-color: var(--azul);
+  background: var(--azul-suave);
+}
+
+.promptFila {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.promptNumero {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.promptEstado {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.promptNombre {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.promptDato {
+  font-size: 11px;
+  color: var(--gris);
+  overflow-wrap: anywhere;
+}
+
+.botonAviso {
+  min-height: 44px;
+}
+
+.bienvenida:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 14px;
+}
+
+.tarjeta {
+  background: #ffffff;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tarjetaSiguiente {
+  border: 2px solid var(--azul);
+  padding: 17px;
+}
+
+.tarjetaDecision {
+  border-color: var(--naranja-borde);
+}
+
+.decisiones {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.decisiones li {
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 8px 0;
+  border-top: 1px solid #f0e2d6;
+  overflow-wrap: anywhere;
+}
+
+.decisiones li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.avisoPlan {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px dashed var(--gris-2);
+  background: #ffffff;
+  color: var(--tinta-2);
+  font-size: 14px;
+}
+
+/* Tablets: stage names do not fit in narrow blocks. */
+@media (max-width: 1099px) {
+  .etapaNombre {
+    display: none;
+  }
+
+  .etapa {
+    min-height: 44px;
+  }
+}
+
+/* -- phones (< 700 px): compact, the other projects at the end ------------------- */
+
+@media (max-width: 699px) {
+  .soloPc {
+    display: none;
+  }
+
+  .soloCel {
+    display: revert;
+  }
+
+  .pagina {
+    flex-direction: column;
+  }
+
+  .lista {
+    order: 0;
+    width: auto;
+    max-height: none;
+    position: static;
+    border-right: none;
+    background: transparent;
+    padding: 14px 16px 24px;
+    gap: 8px;
+  }
+
+  .elegidoItem {
+    display: none;
+  }
+
+  .items {
+    gap: 8px;
+  }
+
+  .item {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+  }
+
+  .itemFila {
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+    order: 1;
+  }
+
+  .itemCuando {
+    display: none;
+  }
+
+  .itemDonde {
+    order: 3;
+    flex: 1 1 100%;
+    font-size: 12px;
+    color: var(--gris);
+  }
+
+  .itemAlerta {
+    order: 2;
+  }
+
+  .principal {
+    padding: 0 0 8px;
+    gap: 14px;
+  }
+
+  .barraCel {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 16px 0;
+    background: #ffffff;
+  }
+
+  .bienvenida {
+    margin: 0 16px;
+  }
+
+  .cabeza {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 6px 16px 12px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--linea);
+  }
+
+  .barraCel + .cabeza {
+    margin-top: -14px;
+  }
+
+  .titulo {
+    font-size: 20px;
+  }
+
+  .cabeza .secundario {
+    font-size: 12px;
+  }
+
+  .consumo {
+    align-items: flex-start;
+    text-align: left;
+    font-size: 12px;
+  }
+
+  .plan,
+  .aqui,
+  .tarjeta,
+  .avisoPlan,
+  .tarjetas {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .tarjetas {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .etapas {
+    grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+  }
+
+  .tarjetas .tarjeta {
+    margin: 0;
+  }
+
+  .etapas {
+    gap: 4px;
+  }
+
+  .etapa {
+    min-height: 34px;
+    padding: 0;
+    border-radius: 6px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .etapaNumero {
+    font-size: 12px;
+  }
+
+  .etapa_hecha .etapaNumero {
+    color: #ffffff;
+  }
+
+  .plan .secundario {
+    font-size: 13px;
+    color: var(--tinta-2);
+  }
+
+  .aqui {
+    border: 2px solid var(--azul);
+    padding: 14px;
+    gap: 8px;
+  }
+
+  .aquiCabeza {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .marcaAqui {
+    font-size: 11px;
+    padding: 3px 7px;
+  }
+
+  .prompts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .promptOtro {
+    display: none;
+  }
+
+  .promptActual {
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .tarjeta {
+    padding: 14px;
+  }
+
+  .tarjetaSiguiente {
+    padding: 13px;
+  }
+}

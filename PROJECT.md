@@ -125,7 +125,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-11 | Etapa 1.3: la oficina publicada en https://agents.example.com (VPS de the VPS provider): backend como servicio systemd con usuario sin privilegios en 127.0.0.1:8320 (acceso activado, `LECTURA_LOCAL=false`, secreto generado en el servidor), frontend estático servido por nginx, `/api` y `/ws` al backend, certificado de Let's Encrypt con renovación automática, respaldos diarios con 14 días y restauración probada, despliegue repetible desde la PC y script de estado. Los otros 12 sitios del VPS responden igual que antes. El WebSocket sin sesión ahora cierra con 4401 detrás de nginx (antes rechazaba con 403). Nuevos comandos peligrosos: `git checkout -- .`, `git restore .`, `git branch -D` y `TRUNCATE TABLE`. Instalador del monitor: dos instalaciones en el mismo segundo ya no pisan el respaldo original de `settings.json`. Commits `8ef06b5` y `67eed31` (prueba de caída con `kill -9` al proceso principal) |
 | 2026-10-11 | Etapa 1.3 cerrada en el VPS: Washington ejecutó la instalación del sistema, fijó la contraseña de la oficina y corrió el respaldo con restauración en una copia y la prueba de caída (`kill -9`): todo correcto (detalle en "Resultado de los comandos de Washington"). Commit `53c1976` |
 | 2026-10-11 | Etapa 1.4 cerrada: Washington creó el token de la Alienware e instaló el monitor el 2026-10-11 a las 08:30 (hora de Ecuador); primera conexión correcta con https://agents.example.com y cola en 0. Se quitó la web original de ClaudeOffice Visualizer (frontend, pipeline clásico del backend, dependencias y pruebas): `/` abre la oficina 3D y el sitio se llama "Oficina de agentes". CSP más estricta (sin wasm, workers ni WebSocket). La diaria local quedó detenida y sin arranque automático (carpeta y datos conservados como respaldo). El export copia las cargas RSC con el nombre plano que pide Next 16 (`frontend/scripts/rsc-planos.mjs`): sin 404 al precargar ni recarga completa con `router.replace`. Capturas en `docs/capturas/etapa-1-4/` (PC 1440 y celular 390, con y sin sesión). Commits `f2842d5`, `7dabd9b` y `1d686fb` (en GitHub) |
-| 2026-10-11 | Etapa 2.1 (Prompt 26), datos para ver bien: esperas específicas con tabla editable, historial por turno (endpoint paginado), tokens y tiempo por turno, sesión y día (por cuenta y modelo, con trabajo continuo), límites de 5 h y semanal desde la barra de estado de Claude Code, detector de atascos y "Dónde quedamos" (el monitor lee el PROJECT.md de cada proyecto). Todo visible en `/datos` sin rediseño. Monitor 0.2.0 con `statusline` y `--actualizar` (conserva la versión anterior para las sesiones de Claude Code ya abiertas). README nuevo en español en lugar de la documentación heredada. Revisión independiente de las reglas de esperas y del detector, con correcciones |
+| 2026-10-11 | Etapa 2.1 (Prompt 26), datos para ver bien: esperas específicas con tabla editable, historial por turno (endpoint paginado), tokens y tiempo por turno, sesión y día (por cuenta y modelo, con trabajo continuo), límites de 5 h y semanal desde la barra de estado de Claude Code, detector de atascos y "Dónde quedamos" (el monitor lee el PROJECT.md de cada proyecto). Todo visible en `/datos` sin rediseño. Monitor 0.2.0 con `statusline` y `--actualizar` (conserva la versión anterior para las sesiones de Claude Code ya abiertas). README nuevo en español en lugar de la documentación heredada. Revisión independiente de las reglas de esperas y del detector, con correcciones. Commit `ac740e2` |
+| 2026-10-11 | Etapa 2.3 (Prompt 28), ficha del agente y "Dónde quedamos" según los bocetos aprobados (`docs/bocetos/etapa-2/`): ficha en panel derecho de 460 px sobre la oficina 3D y en hoja inferior en celular, también desde `/oficina`; historial completo paginado en `/historial`; `/donde-quedamos` con plan por etapas, prompts de la etapa, lo último, lo siguiente, lo que espera decisión y el consumo de hoy; regla de las 8 horas al entrar a la oficina. Prompts de la etapa desde el PROJECT.md (monitor 0.2.1) y desde los pedidos "Prompt N" de los agentes. La vista de prompts se reemplazará por el sistema de prompts de Washington. Revisión independiente de accesibilidad y celular, con correcciones |
 
 ## Cómo levantar
 
@@ -491,6 +492,60 @@ Junto al motivo se guardan los últimos 3 intentos y el último error. Los umbra
 
 Con datos reales, después aparecieron dos defectos más que también se corrigieron: los mensajes de subagentes como pedido y los "commits" detectados dentro del código de un heredoc.
 
+## Ver bien: ficha y "Dónde quedamos" (etapa 2.3)
+
+Implementa los bocetos aprobados de `docs/bocetos/etapa-2/` (Main y FichaCelular para la ficha, DondeQuedamos y DondeCelular) con los componentes y estilos del proyecto: tema claro, IBM Plex Sans y Mono, sin emojis, botones de 44 px o más.
+
+**Ficha del agente** (`frontend/src/components/ficha/`).
+- **Dónde se abre:** al hacer clic en un agente de `/oficina/3d` (reemplaza el panel anterior) o de `/oficina`, y con `?agente=<sesión>`.
+- **PC:** panel derecho de 460 px sobre la escena, que sigue visible.
+- **Celular (< 700 px):** hoja inferior con scroll interno que deja ver parte de la escena.
+- **Orden:**
+  1. Cabecera: iniciales, proyecto, carpeta y máquina, cuenta y modelo. El esfuerzo todavía no llega en los datos.
+  2. Permiso pendiente arriba de todo, en una frase clara, con el comando y Aprobar o "Rechazar con motivo". Reutiliza `PanelPermiso` con la variante `ficha`.
+  3. Tarjeta de atasco: motivo, desde cuándo, último intento y último error.
+  4. Pregunta del agente.
+  5. "Ahora mismo": la espera específica, su tiempo y el tiempo razonable.
+  6. Tres cifras: trabajo continuo, tokens de hoy, y atascos o errores.
+  7. Turno actual y turnos anteriores.
+  8. Enlaces a "Historial completo" (`/historial?agente=`, 20 turnos por página) y a "Dónde quedamos" del proyecto. Con un atasco, el primero dice "Ver qué intentó".
+- **Teclado:** el foco entra a la ficha al abrirla y vuelve donde estaba al cerrarla. Escape la cierra. En celular es un diálogo que retiene el foco.
+
+**"Dónde quedamos"** (`/donde-quedamos?proyecto=<carpeta>`, `frontend/src/components/donde/`).
+- **Lista de proyectos:** nombre, última actividad, dónde va y alerta. Primero los urgentes (permiso, atasco, pregunta, decisión), después los más recientes. Incluye las carpetas con agentes que el monitor todavía no reportó.
+- **Plan por etapas:** bloques hecha, actual ("Estás aquí") y pendiente. Si el plan tiene "Etapa N", solo se muestran las etapas principales.
+- **Prompts de la etapa actual:** con estado, commit y tiempo.
+  - La lista sale de los subítems numerados de la etapa en el PROJECT.md ("- 26: datos y API"), que lee el monitor 0.2.1, con los commits de las filas del registro que nombran ese prompt.
+  - El tiempo, los commits y el estado salen de los pedidos "Prompt N · ..." de los agentes (`prompts_turnos` en `GET /api/v1/proyectos`). Los pedidos siguientes de la misma sesión hasta el próximo "Prompt M" se suman al mismo prompt.
+  - **Esta vista se reemplazará por el sistema de prompts que Washington diseña aparte.**
+- **Tres tarjetas:** lo último que se hizo (commit y último pedido), lo siguiente con quién debe hacerlo, y lo que espera tu decisión.
+- **Consumo de hoy:** total y del proyecto.
+- **Sin PROJECT.md:** lo último que hizo el agente en esa carpeta y el aviso de que no hay plan.
+- **Celular:** versión compacta con los otros proyectos al final.
+- **Acceso:** botón "Dónde quedamos" en la oficina 3D y en la vista de cajas.
+- **Regla de las 8 horas:** al entrar a la oficina, si pasaron más de 8 h desde la última visita en ese dispositivo, se abre primero "Dónde quedamos" con un aviso.
+  - La hora de la última visita se guarda en el navegador (`localStorage`) mientras la oficina está abierta.
+  - No aplica en la primera visita del dispositivo ni con un enlace a un agente.
+
+**Revisión independiente (2026-10-11).** Un subagente revisó accesibilidad y celular. Se corrigieron:
+- en celular la ficha tapaba toda la escena; ahora se ancla a la escena y los botones de la barra van en una fila desplazable;
+- las etapas no se anunciaban bien a los lectores de pantalla;
+- la ficha quedaba encima de Avisos y Permisos;
+- los paneles de Avisos y Permisos tapaban la segunda fila de la barra;
+- en `/oficina` la ficha tapaba los botones del encabezado;
+- el foco no volvía al cerrar la ficha;
+- el foco se escapaba detrás de la hoja en celular;
+- el contador del permiso se anunciaba cada 2 s;
+- el orden de lectura en celular;
+- etapas y tarjetas aplastadas en tablet;
+- bordes de controles con contraste menor a 3:1;
+- el permiso no tenía encabezado;
+- el aviso de las 8 horas no se anunciaba;
+- fondo oscuro del sistema en `/historial`;
+- detalles menores (selector de entorno de 44 px, paginación que se parte, Escape dentro de otros paneles).
+
+**Verificación con datos reales** en el Chrome de Washington, sin escribir credenciales. Capturas en `docs/capturas/etapa-2-3/` (PC 1440 y celular 390). El celular se emuló limitando la página a 390 px dentro de una ventana de 500, el mínimo de Chrome; el sitio prohíbe marcos, así que no se usó un iframe.
+
 ## Limpieza de la web original (etapa 1.4)
 
 Decisión de Washington (2026-10-11): la web original de ClaudeOffice Visualizer ya no existe en el proyecto; solo queda lo construido aquí. Inventario hecho con un grafo de imports desde las rutas que se conservan (`/oficina`, `/oficina/3d`, `/datos`, `/entrar` y el layout raíz): 72 de 233 archivos del frontend las usan.
@@ -744,8 +799,8 @@ Decisión de Washington (2026-10-10).
 - **Etapa 1, publicar**: backend para varias máquinas con inicio de sesión y token por monitor; monitor e instalador de Windows (recibe los hooks, lee transcripts, cola sin conexión, arranque automático, recuperación tras reinicio, comandos peligrosos siempre con aprobación); despliegue en el VPS con nginx, https y respaldos diarios; pasar el uso diario al VPS. El monitor debe diseñarse para que más adelante pueda lanzar sesiones de Claude Code (`claude -p` con stream-json y `--resume`) en carpetas que se le indiquen.
 - **Etapa 2, ver bien**, en 4 prompts:
   - 26: datos y API: esperas, historial, consumo, límites, atascos, "Dónde quedamos" (hecho el 2026-10-11).
-  - 27: bocetos de la ficha del agente y de "Dónde quedamos", hechos en Claude.ai para su aprobación.
-  - 28: ficha del agente y "Dónde quedamos" en la oficina.
+  - 27: bocetos de la ficha del agente y de "Dónde quedamos", hechos en Claude.ai para su aprobación (hecho el 2026-10-11).
+  - 28: ficha del agente y "Dónde quedamos" en la oficina (hecho el 2026-10-11).
   - 29: avisos resumidos con un agente auxiliar.
   - Alcance: ficha útil del agente (no chat): tarea actual, pasos, estimado contra real, tokens, commits, archivos, permisos y acciones; esperas específicas (por ejemplo "Unity: compilando scripts, 2 min"); historial preciso; tokens, tiempo de trabajo y límites de 5 h y semanal; detector de atascos.
 - **Etapa 3, app iOS**: bocetos para aprobación, base que consume el VPS, push de tres alertas (permiso pendiente, pregunta del orquestador, tarea terminada), bandeja de decisiones, bandeja de ideas, widget, Live Activity y Apple Watch.
@@ -769,7 +824,8 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington actualiza el monitor de la Alienware a la 0.2.0 (`instalar-visualizador-monitor.exe --actualizar`): trae la barra de estado con los límites y "Dónde quedamos".
-2. Prompt 27: bocetos de la ficha del agente y de "Dónde quedamos" en Claude.ai, para aprobar.
-3. Prompt 28: ficha del agente y "Dónde quedamos" en la oficina, con los datos de la etapa 2.1.
-4. Vigilar el disco del VPS (85 % usado).
+1. Washington actualiza el monitor de la Alienware a la 0.2.1 (`instalar-visualizador-monitor.exe --actualizar`): manda los prompts de la etapa anotados en el PROJECT.md.
+2. Washington usa la ficha y "Dónde quedamos" y anota lo que hay que refinar.
+3. Prompt 29: avisos resumidos con un agente auxiliar.
+4. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
+5. Vigilar el disco del VPS (85 % usado).

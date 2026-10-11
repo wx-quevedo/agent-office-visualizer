@@ -163,6 +163,7 @@ def test_sin_secciones_conocidas() -> None:
         "titulo": None,
         "plan": [],
         "posicion": None,
+        "prompts": [],
         "siguiente_paso": None,
         "espera_decision": [],
         "ultimo_commit": None,
@@ -300,3 +301,49 @@ def test_git_que_falla_no_rompe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(proyecto_md.subprocess, "run", falla)
     assert proyecto_md.ultimo_commit_git(tmp_path) is None
+
+
+# --- Prompts de la etapa actual (etapa 2.3) ------------------------------------
+
+_CON_PROMPTS = """# Proyecto
+
+## Plan por etapas
+- Etapa 1 (hecha)
+- **Etapa 2, ver bien**, en 4 prompts:
+  - 26: datos y API (hecho el 2026-10-11).
+  - Prompt 27 · bocetos de la ficha
+  - 28) ficha en curso
+  - Alcance: no es un prompt
+- Etapa 3, app
+
+## Registro
+| Fecha | Qué |
+|---|---|
+| 2026-10-11 | Etapa 2.1 (Prompt 26), datos. Commit `ac740e2` |
+| 2026-10-12 | Otra cosa `bbbbbbb` |
+"""
+
+
+def test_prompts_de_la_etapa_actual() -> None:
+    r = resumir(_CON_PROMPTS)
+    assert r["posicion"] == "Etapa 2, ver bien"
+    assert [(p["numero"], p["nombre"], p["estado"]) for p in r["prompts"]] == [
+        (26, "datos y API", "hecho"),
+        (27, "bocetos de la ficha", "pendiente"),
+        (28, "ficha en curso", "en_curso"),
+    ]
+    assert r["prompts"][0]["fecha"] == "2026-10-11"
+    assert r["prompts"][0]["commits"] == ["ac740e2"]
+    assert r["prompts"][1]["commits"] == []
+
+
+def test_sin_prompts_lista_vacia() -> None:
+    r = resumir("# P\n\n## Plan\n- Fase 1\n- Fase 2\n")
+    assert r["prompts"] == []
+    assert resumir("")["prompts"] == []
+
+
+def test_prompts_del_project_md_real() -> None:
+    r = resumir((RAIZ / "PROJECT.md").read_text(encoding="utf-8"))
+    numeros = [p["numero"] for p in r["prompts"]]
+    assert numeros[:2] == [26, 27]

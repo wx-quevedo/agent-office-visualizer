@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Dónde quedamos en celular</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; background: #F4F5F7; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1F2329; display: flex; flex-direction: column; overflow: hidden">
+  <div style="padding: 18px 16px 10px; display: flex; flex-direction: column; gap: 4px; background: #FFFFFF; border-bottom: 1px solid #E4E7EB">
+    <div style="font-size: 13px; color: #4A505C">Dónde quedamos</div>
+    <div style="font-size: 20px; font-weight: 600">visualizador-agentes</div>
+    <div style="font-size: 12px; color: #4A505C">Hoy 10:36 · 4 h 35 min de agentes</div>
+  </div>
+  <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+    <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">PLAN</div>
+    <div style="display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px">
+      <sc-for list="{{etapas}}" as="e" hint-placeholder-count="9">
+        <div style="height: 34px; border-radius: 6px; background: {{e.bg}}; border: 2px solid {{e.bd}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: {{e.fg}}; box-sizing: border-box">{{e.n}}</div>
+      </sc-for>
+    </div>
+    <div style="font-size: 13px; color: #2B2F36">Etapa 2 de 8 · Ver bien lo que pasa</div>
+  </div>
+  <div style="margin: 0 16px; padding: 14px; background: #FFFFFF; border: 2px solid #1D4FAF; border-radius: 10px; display: flex; flex-direction: column; gap: 6px">
+    <span style="align-self: flex-start; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 3px 7px; border-radius: 4px; background: #1D4FAF; color: #FFFFFF">ESTÁS AQUÍ</span>
+    <div style="font-size: 16px; font-weight: 600">Prompt 27 · Bocetos</div>
+    <div style="font-size: 13px; color: #2B2F36; line-height: 1.4">Lo siguiente: aprobar la ficha y esta vista. Quién: tú.</div>
+  </div>
+  <div style="padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px">
+    <div style="background: #FFFFFF; border: 1px solid #D5D9DF; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">LO ÚLTIMO</div>
+      <div style="font-size: 14px; line-height: 1.4">Esperas, historial, consumo y atascos</div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #4A505C">ac740e2 · desplegado</div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E8B98F; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #8A3E0E">ESPERA TU DECISIÓN · 2</div>
+      <div style="font-size: 14px">Umbrales del detector de atascos</div>
+      <div style="font-size: 14px">Disco del VPS al 85 %</div>
+    </div>
+  </div>
+  <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; margin-top: auto">
+    <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">OTROS PROYECTOS</div>
+    <sc-for list="{{otros}}" as="o" hint-placeholder-count="3">
+      <a href="#" style="min-height: 44px; display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #FFFFFF; border: 1px solid #E4E7EB; border-radius: 8px; text-decoration: none; color: #1F2329">
+        <span style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 14px; font-weight: 600">{{o.nombre}}</span>
+          <span style="font-size: 12px; color: #4A505C">{{o.donde}}</span>
+        </span>
+        <span style="font-size: 12px; color: {{o.color}}">{{o.alerta}}</span>
+      </a>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const hecha = { bg: '#2B2F36', bd: '#2B2F36', fg: '#FFFFFF' };
+    const actual = { bg: '#E3ECFB', bd: '#1D4FAF', fg: '#1D4FAF' };
+    const futura = { bg: '#FFFFFF', bd: '#D5D9DF', fg: '#5A6170' };
+    return {
+      etapas: [0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => Object.assign({ n }, n < 2 ? hecha : n === 2 ? actual : futura)),
+      otros: [
+        { nombre: 'SkyNest', donde: 'Fase 7A · Prompt 1', alerta: 'Permiso', color: '#1D4FAF' },
+        { nombre: 'server-monitor', donde: 'F1 · U2 completado', alerta: 'Listo', color: '#2F5C45' },
+        { nombre: 'vive-demo', donde: 'Sin PROJECT.md', alerta: 'Atascado', color: '#9B2C1E' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

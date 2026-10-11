@@ -4,12 +4,14 @@
 - GET  /consumo?dia=AAAA-MM-DD: tokens y tiempo de un día (hoy por defecto), por
   sesión, cuenta y modelo.
 - GET  /limites: límites de 5 h y semanal por cuenta (lo último que vio cada monitor).
-- GET  /proyectos: "Dónde quedamos" por proyecto, con lo último que hizo un agente ahí.
+- GET  /proyectos: "Dónde quedamos" por proyecto, con lo último que hizo un agente ahí
+  y los prompts que corrieron sus agentes ("Prompt N · ...", con tiempo y commits).
 - POST /maquinas/limites y /maquinas/proyectos: los manda cada monitor (token de máquina).
 """
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -20,6 +22,7 @@ from pydantic import BaseModel, Field
 from app.config import get_settings
 from app.core.agent_state_engine import get_state_engine
 from app.core.datos_maquinas import get_datos_maquinas
+from app.core.historial import una_linea
 
 router = APIRouter(tags=["ver bien"])
 
@@ -72,6 +75,46 @@ def _misma_carpeta(a: str | None, b: str | None) -> bool:
     return a.replace("\\", "/").rstrip("/").lower() == b.replace("\\", "/").rstrip("/").lower()
 
 
+# "Prompt 28 · Etapa 2.3, ficha..." al inicio del pedido.
+_PROMPT = re.compile(r"^\s*prompt\s+(\d{1,4})\b\s*[·:.\-–—]?\s*(.*)$", re.IGNORECASE)
+_MAX_PROMPTS = 40
+
+
+def prompts_de_turnos(sesiones: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Los prompts que corrieron los agentes de un proyecto.
+
+    ``sesiones``: historiales (turnos del más reciente al más antiguo). Un prompt
+    empieza con un pedido "Prompt N" y sigue con los pedidos siguientes de la misma
+    sesión (respuestas, resultados de comandos) hasta el próximo "Prompt M": su
+    tiempo y sus commits se suman. El resultado es el del último turno.
+    """
+    vistos: dict[int, dict[str, Any]] = {}
+    for hist in sesiones:
+        actual: dict[str, Any] | None = None
+        for turno in reversed(hist.get("turnos") or []):
+            m = _PROMPT.match(turno.get("pedido") or "")
+            if m:
+                numero = int(m.group(1))
+                actual = vistos.get(numero)
+                if actual is None:
+                    actual = {
+                        "numero": numero,
+                        "nombre": una_linea(m.group(2), 100),
+                        "inicio": turno["inicio"],
+                        "duracion_s": 0,
+                        "commits": [],
+                        "resultado": turno["resultado"],
+                        "session_id": hist.get("session_id"),
+                    }
+                    vistos[numero] = actual
+            if actual is None:
+                continue
+            actual["duracion_s"] += int(turno.get("duracion_s") or 0)
+            actual["commits"].extend(turno.get("commits") or [])
+            actual["resultado"] = turno["resultado"]
+    return sorted(vistos.values(), key=lambda p: p["numero"])[-_MAX_PROMPTS:]
+
+
 @router.get("/proyectos")
 async def proyectos() -> dict[str, Any]:
     motor = get_state_engine()
@@ -85,6 +128,11 @@ async def proyectos() -> dict[str, Any]:
             and a["agente"].get("maquina") in (None, p.get("maquina"))
         ]
         ultimo = max(agentes, key=lambda a: a["ultimo_evento"]["hora"] or "", default=None)
+        historiales = [
+            h
+            for a in agentes
+            if (h := motor.historial(a["agente"]["session_id"], 1, 100)) is not None
+        ]
         actividad: dict[str, Any] | None = None
         if ultimo is not None:
             sid = ultimo["agente"]["session_id"]
@@ -97,7 +145,13 @@ async def proyectos() -> dict[str, Any]:
                 "ultimo_evento": ultimo["ultimo_evento"]["hora"],
                 "ultimo_turno": turno,
             }
-        out.append({**p, "ultima_actividad": actividad})
+        out.append(
+            {
+                **p,
+                "ultima_actividad": actividad,
+                "prompts_turnos": prompts_de_turnos(historiales),
+            }
+        )
     out.sort(key=lambda p: str(p.get("recibido") or ""), reverse=True)
     return {"proyectos": out}
 
@@ -144,6 +198,14 @@ class ItemPlan(BaseModel):
     estado: str = Field(max_length=20)
 
 
+class PromptPlan(BaseModel):
+    numero: int = Field(ge=0, le=9999)
+    nombre: str = Field(max_length=200)
+    estado: str = Field(max_length=20)
+    fecha: str | None = Field(default=None, max_length=40)
+    commits: list[str] = Field(default_factory=lambda: [], max_length=10)
+
+
 class Commit(BaseModel):
     hash: str = Field(max_length=64)
     mensaje: str | None = Field(default=None, max_length=300)
@@ -159,6 +221,7 @@ class Proyecto(BaseModel):
     siguiente_paso: str | None = Field(default=None, max_length=400)
     espera_decision: list[str] = Field(default_factory=lambda: [], max_length=10)
     ultimo_commit: Commit | None = None
+    prompts: list[PromptPlan] = Field(default_factory=lambda: [], max_length=40)
     modificado: str | None = Field(default=None, max_length=40)
     error: str | None = Field(default=None, max_length=200)
 

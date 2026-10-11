@@ -1,0 +1,479 @@
+/* Agent card (stage 2.3): light theme, IBM Plex, colours of the stage 2 mockups. */
+
+.ficha {
+  --tinta: #1f2329;
+  --tinta-2: #2b2f36;
+  --gris: #4a505c;
+  --borde: #d5d9df;
+  --linea: #e4e7eb;
+  --suave: #eef0f3;
+  --azul: #1d4faf;
+  --azul-suave: #e3ecfb;
+  --azul-borde: #9db8ee;
+  --verde: #2f5c45;
+  --naranja: #8a3e0e;
+  --rojo: #9b2c1e;
+  --rojo-suave: #fbeae7;
+  --rojo-borde: #e4a69c;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: var(--tinta);
+  border-left: 1px solid var(--borde);
+  box-shadow: -8px 0 24px rgba(31, 35, 41, 0.08);
+  font-family: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  /* above the agent labels of the 3D scene (drei Html, z-index up to 1000) */
+  z-index: 2001;
+}
+
+.fija {
+  position: fixed;
+}
+
+.asa {
+  display: none;
+}
+
+.cabeza {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--linea);
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tinta-2);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.identidad {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nombre {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ruta {
+  font-size: 13px;
+  color: var(--gris);
+  overflow-wrap: anywhere;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.chip {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--suave);
+  color: var(--tinta-2);
+}
+
+.cerrar {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--gris);
+  cursor: pointer;
+}
+
+.cerrar:hover {
+  background: var(--suave);
+}
+
+.cerrar:focus-visible,
+.enlace:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.cuerpo:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: -3px;
+}
+
+.cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 8px;
+}
+
+.nota {
+  margin: 16px 24px 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--borde);
+  border-radius: 8px;
+  color: var(--gris);
+}
+
+.arriba {
+  margin: 16px 24px 0;
+}
+
+.tarjetaAzul,
+.atasco {
+  margin: 16px 24px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.arriba .tarjetaAzul {
+  margin: 0;
+}
+
+.tarjetaAzul {
+  background: var(--azul-suave);
+  border: 1px solid var(--azul-borde);
+}
+
+.atasco {
+  background: var(--rojo-suave);
+  border: 1px solid var(--rojo-borde);
+}
+
+.etiqueta,
+.etiquetaAzul,
+.etiquetaRoja {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gris);
+}
+
+.etiquetaAzul {
+  color: var(--azul);
+}
+
+.etiquetaRoja {
+  color: var(--rojo);
+}
+
+.texto {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.secundario {
+  margin: 0;
+  font-size: 13px;
+  color: var(--gris);
+  overflow-wrap: anywhere;
+}
+
+.mono,
+.hora,
+.ahoraTiempo {
+  font-family: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.seccion {
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--linea);
+}
+
+.ahoraFila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ahoraTexto {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ahoraTiempo {
+  font-size: 15px;
+  color: var(--tinta-2);
+  white-space: nowrap;
+}
+
+.cifras {
+  margin: 0;
+  padding: 16px 24px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border-bottom: 1px solid var(--linea);
+}
+
+.cifra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.cifra dt {
+  font-size: 12px;
+  color: var(--gris);
+}
+
+.cifra dd {
+  margin: 0;
+  font-family: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cifraAlerta {
+  border-color: var(--rojo-borde);
+}
+
+.cifraAlerta dd {
+  color: var(--rojo);
+}
+
+.pedido {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.seccionLista {
+  padding: 8px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.turnos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.turno {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--suave);
+}
+
+.hora {
+  width: 42px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--gris);
+}
+
+.turnoPedido {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.fin {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bien {
+  color: var(--verde);
+}
+
+.aviso {
+  color: var(--naranja);
+}
+
+.mal {
+  color: var(--rojo);
+}
+
+.info {
+  color: var(--azul);
+}
+
+.neutro {
+  color: var(--gris);
+}
+
+.pie {
+  display: flex;
+  gap: 10px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--linea);
+}
+
+.enlace {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tinta);
+  background: #ffffff;
+}
+
+.enlace:hover {
+  background: var(--suave);
+}
+
+.enlaceFuerte {
+  background: var(--tinta-2);
+  border-color: var(--tinta-2);
+  color: #ffffff;
+}
+
+.enlaceFuerte:hover {
+  background: var(--tinta);
+}
+
+/* Phones: bottom sheet with its own scroll; the office stays visible above. */
+@media (max-width: 699px) {
+  /* Inside the 3D scene (below the bar): at least 28 % of the scene stays visible. */
+  .ficha {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 72%;
+    border-left: none;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 24px rgba(31, 35, 41, 0.16);
+  }
+
+  .fija {
+    position: fixed;
+    max-height: 82vh;
+    max-height: 82dvh;
+  }
+
+  .asa {
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 2px;
+    background: #c9cdd3;
+  }
+
+  .cabeza {
+    padding: 12px 16px 14px;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .avatar {
+    width: 44px;
+    height: 44px;
+  }
+
+  .nombre {
+    font-size: 18px;
+  }
+
+  .ruta {
+    font-size: 12px;
+  }
+
+  .nota,
+  .arriba,
+  .tarjetaAzul,
+  .atasco {
+    margin-left: 16px;
+    margin-right: 16px;
+    margin-top: 14px;
+  }
+
+  .seccion,
+  .cifras,
+  .seccionLista {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .cifras {
+    gap: 8px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .cifra {
+    padding: 8px 10px;
+  }
+
+  .cifra dd {
+    font-size: 14px;
+  }
+
+  .ahoraTexto {
+    font-size: 18px;
+  }
+
+  .ahoraTiempo {
+    font-size: 14px;
+  }
+
+  .pie {
+    gap: 8px;
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+}

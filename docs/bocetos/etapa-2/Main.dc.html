@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha del agente en PC</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="width: 1280px; height: 820px; display: flex; background: #EEF0F3; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1F2329; overflow: hidden">
+  <div style="flex: 1; position: relative; display: flex; align-items: center; justify-content: center">
+    <div style="position: absolute; top: 20px; left: 24px; display: flex; gap: 10px; align-items: center">
+      <div style="font-size: 18px; font-weight: 600">Oficina de agentes</div>
+      <div style="font-size: 13px; color: #4A505C">· vista 3D (la escena sigue detrás de la ficha)</div>
+    </div>
+    <div style="width: 640px; height: 420px; border-radius: 12px; background: #E2E5EA; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; padding: 48px; box-sizing: border-box">
+      <sc-for list="{{escritorios}}" as="d" hint-placeholder-count="6">
+        <div style="background: {{d.bg}}; border: 2px solid {{d.bd}}; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px">
+          <div style="width: 26px; height: 26px; border-radius: 13px; background: {{d.dot}}"></div>
+          <div style="font-size: 12px; font-weight: 600; color: #1F2329">{{d.nombre}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="width: 460px; background: #FFFFFF; border-left: 1px solid #D5D9DF; display: flex; flex-direction: column; box-sizing: border-box">
+    <div style="padding: 22px 24px 18px; border-bottom: 1px solid #E4E7EB; display: flex; gap: 14px; align-items: flex-start">
+      <div style="width: 48px; height: 48px; border-radius: 24px; background: #2B2F36; color: #FFFFFF; font-weight: 600; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0">SK</div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+        <div style="font-size: 20px; font-weight: 600">SkyNest</div>
+        <div style="font-size: 13px; color: #4A505C">E:\Test\SkyNest · Alienware</div>
+        <div style="display: flex; gap: 6px; margin-top: 4px">
+          <span style="font-size: 12px; padding: 3px 8px; border-radius: 4px; background: #EEF0F3; color: #2B2F36">Cuenta personal</span>
+          <span style="font-size: 12px; padding: 3px 8px; border-radius: 4px; background: #EEF0F3; color: #2B2F36">Opus 5.5 · esfuerzo alto</span>
+        </div>
+      </div>
+      <button aria-label="Cerrar ficha" style="width: 44px; height: 44px; border: 1px solid #D5D9DF; background: #FFFFFF; border-radius: 8px; font-size: 18px; color: #4A505C; cursor: pointer">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="#4A505C" stroke-width="1.6" fill="none"></path></svg>
+      </button>
+    </div>
+    <div style="padding: 18px 24px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid #E4E7EB">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">AHORA MISMO</div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px">
+        <div style="font-size: 22px; font-weight: 600">Unity: compilando scripts</div>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: #2B2F36">2 min 14 s</div>
+      </div>
+      <div style="font-size: 13px; color: #4A505C">Tiempo razonable para esto: hasta 10 min</div>
+    </div>
+    <div style="margin: 16px 24px 0; padding: 16px; border-radius: 10px; background: #E3ECFB; border: 1px solid #9DB8EE; display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #1D4FAF">TE PIDE PERMISO · hace 40 s</div>
+      <div style="font-size: 15px; line-height: 1.45; color: #1F2329">Quiere borrar la carpeta de compilación de Unity para recompilar desde cero.</div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #2B2F36; background: #FFFFFF; border-radius: 6px; padding: 8px 10px">Remove-Item -Recurse Library\ScriptAssemblies</div>
+      <div style="display: flex; gap: 10px">
+        <button style="flex: 1; height: 44px; border-radius: 8px; border: none; background: #1D4FAF; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">Aprobar</button>
+        <button style="flex: 1; height: 44px; border-radius: 8px; border: 1px solid #9AA0AA; background: #FFFFFF; color: #1F2329; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer">Rechazar con motivo</button>
+      </div>
+    </div>
+    <div style="padding: 16px 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; border-bottom: 1px solid #E4E7EB">
+      <sc-for list="{{metricas}}" as="m" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid #E4E7EB; border-radius: 8px">
+          <div style="font-size: 12px; color: #4A505C">{{m.t}}</div>
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 500">{{m.v}}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding: 16px 24px 8px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">TURNO ACTUAL · 6</div>
+      <div style="font-size: 15px; font-weight: 500">Fase 7A · Prompt 1 · Propuesta de distribución del home en VR</div>
+      <div style="font-size: 13px; color: #4A505C">48 herramientas · 3 archivos editados · commit a3f91c2 · 52 735 tokens</div>
+    </div>
+    <div style="padding: 8px 24px; display: flex; flex-direction: column; flex: 1; overflow: hidden">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C; padding-bottom: 6px">TURNOS ANTERIORES</div>
+      <sc-for list="{{turnos}}" as="t" hint-placeholder-count="4">
+        <div style="display: flex; gap: 12px; align-items: baseline; padding: 8px 0; border-top: 1px solid #EEF0F3">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #4A505C; width: 40px">{{t.hora}}</div>
+          <div style="flex: 1; font-size: 13px; line-height: 1.35">{{t.pedido}}</div>
+          <div style="font-size: 12px; color: {{t.color}}; white-space: nowrap">{{t.fin}}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding: 14px 24px; border-top: 1px solid #E4E7EB; display: flex; gap: 10px">
+      <a href="#" style="flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid #D5D9DF; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500; color: #1F2329">Historial completo</a>
+      <a href="#" style="flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid #D5D9DF; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500; color: #1F2329">Dónde quedamos</a>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const n = { bg: '#FFFFFF', bd: '#2B2F36', dot: '#9AA0AA' };
+    return {
+      escritorios: [
+        { nombre: 'SkyNest', bg: '#E3ECFB', bd: '#1D4FAF', dot: '#1D4FAF' },
+        Object.assign({ nombre: 'visualizador' }, n),
+        Object.assign({ nombre: 'server-monitor' }, n),
+        Object.assign({ nombre: 'vive-demo' }, n),
+        Object.assign({ nombre: 'Buscapez' }, n),
+        { nombre: 'Libre', bg: '#F4F5F7', bd: '#C9CDD3', dot: '#D5D8DD' }
+      ],
+      metricas: [
+        { t: 'Trabajo continuo', v: '34 min' },
+        { t: 'Tokens hoy', v: '312 480' },
+        { t: 'Atascos', v: 'Ninguno' }
+      ],
+      turnos: [
+        { hora: '09:12', pedido: 'Revisar el ritmo de aparición de enemigos en la arena', fin: 'Completado', color: '#2F5C45' },
+        { hora: '08:40', pedido: 'Corregir el error de compilación en InventarioVR.cs', fin: 'Completado', color: '#2F5C45' },
+        { hora: '08:05', pedido: 'Ajustar la economía de monedas del mercado', fin: 'Interrumpido', color: '#8A3E0E' },
+        { hora: '07:31', pedido: 'Preparar la escena del home para pruebas en Quest', fin: 'Completado', color: '#2F5C45' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

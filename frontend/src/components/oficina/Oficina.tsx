@@ -6,6 +6,7 @@
  * Reads GET /api/v1/agents/state every 2 s and sends a presence heartbeat
  * (POST /api/v1/agents/presence) every 30 s so an open /oficina counts as the
  * user being present, on PC or phone. Grouping and ordering live in logica.ts.
+ * Clicking an agent opens its card (FichaAgente) over the boxes (?agente=<id>).
  */
 
 import Link from "next/link";
@@ -19,10 +20,12 @@ import {
 } from "react";
 import BotonSalir from "@/components/acceso/BotonSalir";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
+import { useVisitaOficina } from "@/components/donde/visita";
+import FichaAgente from "@/components/ficha/FichaAgente";
 import PanelConfigPermisos from "@/components/permisos/PanelConfigPermisos";
 import PanelPermiso from "@/components/permisos/PanelPermiso";
 import { useAvisos } from "@/components/avisos/useAvisos";
-import { LogoDemoOrg, MarcaCuenta } from "@/components/marca/Marca";
+import { MarcaCuenta } from "@/components/marca/Marca";
 import {
   CONTADORES,
   GRUPOS,
@@ -98,7 +101,7 @@ function Proyecto({ a, className }: { a: Agente; className: string }) {
 
 // -- small pieces --------------------------------------------------------------
 
-function Avatar({ tam }: { tam: 140 | 88 | 72 | 64 | 48 }) {
+function Avatar({ tam }: { tam: 88 | 72 | 64 | 48 }) {
   return (
     <div className={`${s.avatar} ${s[`avatar${tam}`]}`} aria-hidden="true">
       avatar
@@ -413,135 +416,6 @@ function VistaProyecto({
   );
 }
 
-// -- detail -------------------------------------------------------------------------
-
-function horaCorta(iso: string): string {
-  return new Date(iso).toLocaleTimeString("es", { hour12: false });
-}
-
-function Detalle({
-  a,
-  otros,
-  ahora,
-}: {
-  a: Agente;
-  otros: Agente[];
-  ahora: number;
-}) {
-  const g = grupoDe(a.estado.numero);
-  const pide = a.permiso && a.estado.numero === 13 ? null : loQuePide(a);
-  const i = a.indicadores;
-  const datos: Array<[string, string]> = [
-    ["Trabajó", numero(i.minutos_con_actividad, " min")],
-    ["Ritmo", numero(i.herramientas_por_minuto, " herr/min")],
-    ["Esfuerzo", numero(i.tokens_por_minuto, " tok/min")],
-    ["Contexto", numero(i.contexto_usado_pct, " %")],
-    ["Errores seguidos", numero(i.errores_seguidos)],
-    ["Subagentes", String(a.subagentes_activos)],
-    ["Tokens totales", numero(i.tokens_totales)],
-  ];
-  return (
-    <>
-      <Link href="/oficina" className={s.volver}>
-        Volver a la oficina
-      </Link>
-      <div className={s.detalle}>
-        <nav className={s.lista} aria-label="Otros agentes">
-          {otros.map((o) => (
-            <Link
-              key={o.agente.session_id}
-              href={enlace(o)}
-              className={s.listaItem}
-            >
-              <span className={s.conMarca}>
-                <MarcaCuenta cuenta={o.agente.cuenta} />
-                {nombreProyecto(o)}
-              </span>
-              <span className={s.mono}>{o.estado.numero}</span>
-            </Link>
-          ))}
-        </nav>
-        <article className={s.panel} aria-label={`Agente ${nombreProyecto(a)}`}>
-          <div className={s.panelCabeza}>
-            <Avatar tam={140} />
-            <div className={s.cuerpo}>
-              <div className={`${s.panelProyecto} ${s.conMarca}`}>
-                {a.agente.cuenta === "demo" && <LogoDemoOrg alto={30} />}
-                {nombreProyecto(a)}
-              </div>
-              <div className={`${s.meta} ${s.mono}`}>
-                {sesionCorta(a.agente.session_id)} · PID {a.proceso?.pid ?? "—"}{" "}
-                · {a.agente.proyecto ?? "ruta desconocida"}
-              </div>
-              <EstadoTexto a={a} className={s.estadoGrande} />
-              <div className={s.etiquetas}>
-                {g === "espera" && (
-                  <span className={`${s.etiqueta} ${s.etiquetaNegra}`}>
-                    Espera a: ti ({tipoEspera(a)})
-                  </span>
-                )}
-                {a.espera && g !== "espera" && (
-                  <span className={s.etiqueta}>Espera: {a.espera.tipo}</span>
-                )}
-                {a.cierre && (
-                  <span className={s.etiqueta}>Cerrado: {a.cierre.motivo}</span>
-                )}
-                <span className={s.etiqueta}>
-                  En este estado {duracion(a.estado.desde, ahora)}
-                </span>
-              </div>
-            </div>
-          </div>
-          <BloquePermiso a={a} ahora={ahora} />
-          {pide && (
-            <div className={s.cajaGris}>
-              <small>{pide.titulo}</small>
-              {pide.texto}
-            </div>
-          )}
-          {!pide && !a.permiso && g !== "cerrados" && (
-            <div className={s.cajaMono} title={detalleActual(a)}>
-              {detalleActual(a)}
-            </div>
-          )}
-          <div className={s.cuadricula}>
-            {datos.map(([k, v]) => (
-              <div key={k}>
-                <span>{k}</span>
-                <b>{v}</b>
-              </div>
-            ))}
-          </div>
-          <table className={s.tablaEventos}>
-            <caption className={s.meta} style={{ textAlign: "left" }}>
-              Últimos {Math.min(15, a.eventos_recientes.length)} eventos
-            </caption>
-            <thead>
-              <tr>
-                <th style={{ width: 90 }}>Hora</th>
-                <th style={{ width: "28%" }}>Tipo</th>
-                <th>Texto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {a.eventos_recientes.slice(0, 15).map((e, n) => (
-                <tr key={`${e.hora}-${n}`}>
-                  <td className={s.mono}>{horaCorta(e.hora)}</td>
-                  <td className={s.mono}>{e.tipo}</td>
-                  <td>
-                    {[e.herramienta, e.detalle].filter(Boolean).join(": ") ||
-                      "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
-      </div>
-    </>
-  );
-}
-
 // -- page ---------------------------------------------------------------------------
 
 export default function Oficina() {
@@ -559,6 +433,8 @@ export default function Oficina() {
 
   // Presence heartbeat: an open /oficina counts as the user being present.
   useLatidoPresencia();
+  // More than 8 h since the last visit on this device: "Dónde quedamos" first.
+  useVisitaOficina(Boolean(agenteId));
 
   const agentes = useMemo(
     () => (datos ? visibles(datos.agentes, ahora) : []),
@@ -570,6 +446,7 @@ export default function Oficina() {
     : null;
 
   const cambiarVista = guardarVista;
+  const cerrarFicha = useCallback(() => router.replace("/oficina"), [router]);
 
   // Spoken alerts and Windows notifications (module reusable in /oficina/3d).
   const abrirAgente = useCallback(
@@ -582,7 +459,7 @@ export default function Oficina() {
   const avisos = useAvisos(datos?.agentes ?? null, { abrirAgente });
 
   return (
-    <main className={s.pagina}>
+    <main className={agenteId ? `${s.pagina} ${s.conFicha}` : s.pagina}>
       <header className={s.encabezado}>
         <div>
           <h1 className={s.titulo}>Oficina de agentes</h1>
@@ -596,6 +473,9 @@ export default function Oficina() {
           </div>
         </div>
         <div className={s.acciones}>
+          <Link href="/donde-quedamos" className={s.botonAvisos}>
+            Dónde quedamos
+          </Link>
           <Link href="/oficina/3d" className={s.botonAvisos}>
             Vista 3D
           </Link>
@@ -619,28 +499,26 @@ export default function Oficina() {
             Permisos
           </button>
           <BotonSalir className={s.botonAvisos} />
-          {!agenteId && (
-            <div
-              className={s.selector}
-              role="group"
-              aria-label="Ordenar la oficina"
+          <div
+            className={s.selector}
+            role="group"
+            aria-label="Ordenar la oficina"
+          >
+            <button
+              type="button"
+              aria-pressed={vista === "urgencia"}
+              onClick={() => cambiarVista("urgencia")}
             >
-              <button
-                type="button"
-                aria-pressed={vista === "urgencia"}
-                onClick={() => cambiarVista("urgencia")}
-              >
-                Por urgencia
-              </button>
-              <button
-                type="button"
-                aria-pressed={vista === "proyecto"}
-                onClick={() => cambiarVista("proyecto")}
-              >
-                Por proyecto
-              </button>
-            </div>
-          )}
+              Por urgencia
+            </button>
+            <button
+              type="button"
+              aria-pressed={vista === "proyecto"}
+              onClick={() => cambiarVista("proyecto")}
+            >
+              Por proyecto
+            </button>
+          </div>
         </div>
       </header>
 
@@ -657,35 +535,27 @@ export default function Oficina() {
         </div>
       )}
 
-      {!agenteId && (
-        <div className={s.contadores}>
-          {CONTADORES.map((c) => (
-            <div key={c.id} className={s.contador}>
-              <strong>{n[c.id]}</strong>
-              <span>{c.titulo}</span>
-            </div>
-          ))}
-        </div>
+      <div className={s.contadores}>
+        {CONTADORES.map((c) => (
+          <div key={c.id} className={s.contador}>
+            <strong>{n[c.id]}</strong>
+            <span>{c.titulo}</span>
+          </div>
+        ))}
+      </div>
+
+      {agenteId && (
+        <FichaAgente
+          agente={elegido ?? undefined}
+          id={agenteId}
+          cargando={!datos}
+          ahora={ahora}
+          onCerrar={cerrarFicha}
+          fija
+        />
       )}
 
-      {agenteId ? (
-        elegido ? (
-          <Detalle
-            a={elegido}
-            otros={agentes.filter((a) => a.agente.session_id !== agenteId)}
-            ahora={ahora}
-          />
-        ) : (
-          <>
-            <Link href="/oficina" className={s.volver}>
-              Volver a la oficina
-            </Link>
-            <div className={s.aviso}>
-              {datos ? "Ese agente ya no está en la oficina." : "Cargando…"}
-            </div>
-          </>
-        )
-      ) : !datos ? (
+      {!datos ? (
         <div className={s.vacio}>Cargando…</div>
       ) : vista === "urgencia" ? (
         <VistaUrgencia agentes={datos.agentes} ahora={ahora} />

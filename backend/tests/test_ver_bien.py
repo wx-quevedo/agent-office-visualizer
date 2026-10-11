@@ -348,8 +348,12 @@ def test_clave_de_error_ignora_numeros_rutas_e_ids() -> None:
             )
         )[0]
 
-    a = clave_error(falla("Bash", "python build.py", "Error en C:\\p\\a.py línea 12: id 0xdeadbeef"))
-    b = clave_error(falla("Bash", "python build.py", "Error en /home/x/b.py línea 99: id 0x1234abcd"))
+    a = clave_error(
+        falla("Bash", "python build.py", "Error en C:\\p\\a.py línea 12: id 0xdeadbeef")
+    )
+    b = clave_error(
+        falla("Bash", "python build.py", "Error en /home/x/b.py línea 99: id 0x1234abcd")
+    )
     assert a == b
     assert clave_error(falla("Edit", "x", "x")) != clave_error(falla("Bash", "x", "x"))
     # "Exit code N" no es el error: cuenta la línea siguiente y el programa
@@ -639,3 +643,75 @@ def test_ventana_sin_avances_despues_de_una_herramienta_larga() -> None:
     )
     # 30 min desde el pedido, pero solo 5 desde que terminaron las pruebas
     assert _detectar(r, 1900) is None
+
+
+# -- etapa 2.3: prompts de la etapa en "Dónde quedamos" ------------------------------------
+
+
+def _turno(numero: int, pedido: str | None, resultado: str, segundos: int, commits: int = 0):
+    return {
+        "numero": numero,
+        "inicio": f"2026-10-11T1{numero}:00:00+00:00",
+        "pedido": pedido,
+        "duracion_s": segundos,
+        "commits": [{"hora": "x", "mensaje": f"c{i}"} for i in range(commits)],
+        "resultado": resultado,
+    }
+
+
+def test_prompts_de_turnos_suma_los_pedidos_siguientes() -> None:
+    from app.api.routes.ver_bien import prompts_de_turnos
+
+    # Del más reciente al más antiguo, como el historial.
+    hist = {
+        "session_id": "s1",
+        "turnos": [
+            _turno(5, "Prompt 28 · Etapa 2.3, ficha", "en_curso", 600),
+            _turno(4, "Ejecuté el comando 2. Resultado: ok", "completado", 300, commits=1),
+            _turno(3, "Ejecuté el comando 1", "completado", 200),
+            _turno(2, "Prompt 27: bocetos", "completado", 100, commits=1),
+            _turno(1, "Revisa el README", "completado", 50),
+        ],
+    }
+    p = prompts_de_turnos([hist])
+    assert [(x["numero"], x["nombre"], x["duracion_s"], len(x["commits"])) for x in p] == [
+        (27, "bocetos", 600, 2),
+        (28, "Etapa 2.3, ficha", 600, 0),
+    ]
+    assert p[0]["resultado"] == "completado" and p[1]["resultado"] == "en_curso"
+    assert p[1]["session_id"] == "s1"
+    assert prompts_de_turnos([{"turnos": [_turno(1, "Prompt 280x", "completado", 1)]}]) == []
+
+
+def test_proyecto_acepta_prompts_del_monitor(tmp_path: Path) -> None:
+    from app.main import app
+
+    set_datos_maquinas(DatosMaquinas(tmp_path))
+    try:
+        c = TestClient(app)
+        r = c.post(
+            "/api/v1/maquinas/proyectos",
+            json={
+                "proyectos": [
+                    {
+                        "carpeta": "E:/p",
+                        "tiene_project_md": True,
+                        "prompts": [
+                            {
+                                "numero": 26,
+                                "nombre": "datos",
+                                "estado": "hecho",
+                                "fecha": "2026-10-11",
+                                "commits": ["ac740e2"],
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+        assert r.status_code == 200
+        p = c.get("/api/v1/proyectos").json()["proyectos"][0]
+        assert p["prompts"][0]["commits"] == ["ac740e2"]
+        assert p["prompts_turnos"] == []
+    finally:
+        set_datos_maquinas(None)

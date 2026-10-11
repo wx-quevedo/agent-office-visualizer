@@ -28,6 +28,8 @@ MAX_NOMBRE = 100
 MAX_MENSAJE_REGISTRO = 200
 MAX_COLA_ESTADO = 40
 TIEMPO_GIT = 5.0
+MAX_PROMPTS = 40
+MAX_COMMITS_PROMPT = 10
 
 # Palabras clave de los títulos de sección (ya normalizados: minúsculas, sin tildes).
 _CLAVES_PLAN = ("plan", "etapas", "fases", "roadmap", "hoja de ruta", "milestones")
@@ -60,6 +62,8 @@ _PARENTESIS_FINAL = re.compile(r"\s*\([^()]*\)\s*$")
 _PARENTESIS = re.compile(r"\(([^()]*)\)")
 _HASH = re.compile(r"`([0-9a-fA-F]{7,40})`")
 _FECHA = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+# Subítem de prompt: "26: datos y API", "Prompt 27 · bocetos", "28) ficha".
+_PROMPT_ITEM = re.compile(r"^(?:prompt\s+)?(\d{1,4})\s*[:.)·\-–—]\s*(.+)$", re.IGNORECASE)
 _SEPARADOR_TABLA = re.compile(r"^\s*\|?\s*:?-{2,}")
 
 _HECHO = re.compile(
@@ -335,6 +339,60 @@ def _commit_registro(doc: _Doc) -> dict[str, Any] | None:
     }
 
 
+def _prompts(doc: _Doc, posicion: str | None) -> list[dict[str, Any]]:
+    """Los prompts de la etapa actual: los subítems numerados de su ítem del plan
+    ("- 26: datos y API (hecho el 2026-10-11)"), con los commits de las filas del
+    registro que nombran ese prompt ("Prompt 26")."""
+    if not posicion:
+        return []
+    salida: list[dict[str, Any]] = []
+    for inicio, fin, _ in doc.secciones(_CLAVES_PLAN):
+        lineas = doc.lineas[inicio:fin]
+        for i, linea in enumerate(lineas):
+            m = _ITEM.match(linea)
+            if not m or _nombre(m.group(3).strip()) != posicion:
+                continue
+            sangria = len(m.group(1))
+            for sub in lineas[i + 1 :]:
+                ms = _ITEM.match(sub)
+                if ms is None:
+                    if sub.strip() and len(sub) - len(sub.lstrip()) <= sangria:
+                        break
+                    continue
+                if len(ms.group(1)) <= sangria:
+                    break
+                plano = quitar_markdown(ms.group(3).strip())
+                mp = _PROMPT_ITEM.match(plano)
+                if not mp:
+                    continue
+                fecha = _FECHA.search(plano)
+                nombre = _PARENTESIS_FINAL.sub("", mp.group(2).strip().rstrip(".")).strip()
+                salida.append(
+                    {
+                        "numero": int(mp.group(1)),
+                        "nombre": _acortar(nombre or mp.group(2), MAX_NOMBRE),
+                        "estado": _estado(ms.group(3), ms.group(2)),
+                        "fecha": fecha.group(0) if fecha else None,
+                        "commits": [],
+                    }
+                )
+            break
+        if salida:
+            break
+    if not salida:
+        return []
+    for inicio, fin, _ in doc.secciones(_CLAVES_REGISTRO):
+        for linea in doc.lineas[inicio:fin]:
+            hashes = [h.lower() for h in _HASH.findall(linea) if re.search(r"[a-fA-F]", h)]
+            if not hashes:
+                continue
+            plano = normalizar(linea)
+            for p in salida:
+                if re.search(rf"\bprompt\s+{p['numero']}\b", plano):
+                    p["commits"] = [h for h in [*p["commits"], *hashes] if h][-MAX_COMMITS_PROMPT:]
+    return salida[:MAX_PROMPTS]
+
+
 def resumir(texto: str) -> dict[str, Any]:
     """Resumen de un PROJECT.md ya leído (sin tocar el disco)."""
     try:
@@ -351,10 +409,12 @@ def _resumir(texto: str) -> dict[str, Any]:
             titulo = quitar_markdown(t) or None
             break
     plan = _plan(doc)
+    posicion = _posicion(plan)
     return {
         "titulo": titulo,
         "plan": plan,
-        "posicion": _posicion(plan),
+        "posicion": posicion,
+        "prompts": _prompts(doc, posicion),
         "siguiente_paso": _siguiente_paso(doc),
         "espera_decision": _espera_decision(doc),
         "ultimo_commit": _commit_registro(doc),

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha del agente en celular</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; background: #E2E5EA; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1F2329; overflow: hidden">
+  <div style="padding: 16px; font-size: 13px; color: #4A505C">Oficina 3D (detrás)</div>
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 690px; background: #FFFFFF; border-radius: 16px 16px 0 0; display: flex; flex-direction: column">
+    <div style="display: flex; justify-content: center; padding-top: 8px">
+      <div style="width: 40px; height: 4px; border-radius: 2px; background: #C9CDD3"></div>
+    </div>
+    <div style="padding: 12px 16px 14px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid #E4E7EB">
+      <div style="width: 44px; height: 44px; border-radius: 22px; background: #2B2F36; color: #FFFFFF; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0">VB</div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+        <div style="font-size: 18px; font-weight: 600">vive-demo</div>
+        <div style="font-size: 12px; color: #4A505C">Cuenta Demo Org · Opus 5.5 · Alienware</div>
+      </div>
+      <button aria-label="Cerrar ficha" style="width: 44px; height: 44px; border: 1px solid #D5D9DF; background: #FFFFFF; border-radius: 8px; cursor: pointer">
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="#4A505C" stroke-width="1.6" fill="none"></path></svg>
+      </button>
+    </div>
+    <div style="margin: 14px 16px 0; padding: 14px; border-radius: 10px; background: #FBEAE7; border: 1px solid #E4A69C; display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #9B2C1E">PARECE ATASCADO · 18 min</div>
+      <div style="font-size: 15px; line-height: 1.45">Repitió 3 veces el mismo error al compilar: falta la variable de entorno de la base de datos.</div>
+      <div style="font-size: 13px; color: #4A505C">Último intento: npm run build · falló hace 2 min</div>
+    </div>
+    <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #E4E7EB">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">AHORA MISMO</div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <div style="font-size: 18px; font-weight: 600">Compilando la web (npm)</div>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 14px">1 min 05 s</div>
+      </div>
+    </div>
+    <div style="padding: 12px 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-bottom: 1px solid #E4E7EB">
+      <sc-for list="{{metricas}}" as="m" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid #E4E7EB; border-radius: 8px">
+          <div style="font-size: 11px; color: #4A505C">{{m.t}}</div>
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 500">{{m.v}}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 2px">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">TURNO ACTUAL · 3</div>
+      <div style="font-size: 14px; font-weight: 500">Conectar el formulario de registro con la API</div>
+      <div style="font-size: 12px; color: #4A505C">22 herramientas · 4 archivos · sin commit todavía</div>
+    </div>
+    <div style="padding: 4px 16px; flex: 1; display: flex; flex-direction: column; overflow: hidden">
+      <sc-for list="{{turnos}}" as="t" hint-placeholder-count="3">
+        <div style="display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid #EEF0F3">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #4A505C; width: 36px">{{t.hora}}</div>
+          <div style="flex: 1; font-size: 13px">{{t.pedido}}</div>
+          <div style="font-size: 11px; color: {{t.color}}">{{t.fin}}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding: 12px 16px 24px; display: flex; gap: 8px; border-top: 1px solid #E4E7EB">
+      <a href="#" style="flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #2B2F36; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600">Ver qué intentó</a>
+      <a href="#" style="flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid #D5D9DF; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500; color: #1F2329">Dónde quedamos</a>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      metricas: [
+        { t: 'Continuo', v: '41 min' },
+        { t: 'Tokens hoy', v: '98 210' },
+        { t: 'Errores', v: '3 iguales' }
+      ],
+      turnos: [
+        { hora: '09:02', pedido: 'Validar el correo en el registro', fin: 'Completado', color: '#2F5C45' },
+        { hora: '08:20', pedido: 'Crear la tabla de usuarios', fin: 'Completado', color: '#2F5C45' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -173,3 +173,101 @@
     font-size: 17px;
   }
 }
+
+/* Agent card (ficha) version: blue card, as in the stage 2 mockups. */
+.ficha {
+  border: 1px solid #9db8ee;
+  border-radius: 10px;
+  background: #e3ecfb;
+  color: #1f2329;
+  padding: 16px;
+  gap: 10px;
+}
+
+.oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.fichaEtiqueta {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1d4faf;
+}
+
+.fichaFrase {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.ficha .bloque {
+  background: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #2b2f36;
+  max-height: 160px;
+}
+
+.ficha .restante {
+  font-size: 13px;
+  color: #3d4350;
+}
+
+.ficha .restante b {
+  color: #1f2329;
+}
+
+.ficha .botones {
+  flex-wrap: nowrap;
+}
+
+.ficha .boton {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #737985;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2329;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ficha .aprobar {
+  border-color: #1d4faf;
+  background: #1d4faf;
+  color: #ffffff;
+}
+
+.ficha .boton:focus-visible,
+.ficha .campo input:focus-visible {
+  outline: 3px solid #123a85;
+  outline-offset: 2px;
+}
+
+.ficha .campo input {
+  border: 1px solid #737985;
+  border-radius: 8px;
+}
+
+.ficha .alerta,
+.ficha .error,
+.ficha .vscode {
+  border: 1px solid #737985;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2329;
+}

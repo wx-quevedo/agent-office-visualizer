@@ -4,6 +4,7 @@
  * /oficina/3d — the office as a 3D scene (based on Agent Office 3D, MIT),
  * fed by our engine. Own simple top bar (light theme), the same alerts
  * (useAvisos) and presence heartbeat as /oficina. Loaded only in the browser.
+ * Clicking an agent opens its card (FichaAgente) over the scene.
  */
 
 import Link from "next/link";
@@ -11,6 +12,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BotonSalir from "@/components/acceso/BotonSalir";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
+import { useVisitaOficina } from "@/components/donde/visita";
+import FichaAgente from "@/components/ficha/FichaAgente";
 import PanelConfigPermisos from "@/components/permisos/PanelConfigPermisos";
 import { useAvisos } from "@/components/avisos/useAvisos";
 import {
@@ -33,7 +36,6 @@ import { activarEntorno, ENTORNOS } from "./entornos/activo";
 import type { ClaveEntorno } from "./entornos/tipos";
 import { useEditor } from "./editor";
 import EditorPanel from "./EditorPanel";
-import PanelAgente3D from "./PanelAgente3D";
 import Escena3D from "./Escena3D";
 import { useSettings } from "./settings";
 import { useOffice } from "./store";
@@ -69,6 +71,8 @@ export default function Oficina3D() {
   const setPanel = useOffice((st) => st.setPanel);
   const params = useSearchParams();
   const agenteUrl = params.get("agente");
+  // More than 8 h since the last visit on this device: "Dónde quedamos" first.
+  useVisitaOficina(Boolean(agenteUrl));
   useEffect(() => {
     setPanel(agenteUrl);
   }, [agenteUrl, setPanel]);
@@ -82,7 +86,7 @@ export default function Oficina3D() {
   const abrirAgente = useCallback(
     (id: string) =>
       router.push(
-        id ? `/oficina?agente=${encodeURIComponent(id)}` : "/oficina",
+        id ? `/oficina/3d?agente=${encodeURIComponent(id)}` : "/oficina/3d",
       ),
     [router],
   );
@@ -91,7 +95,7 @@ export default function Oficina3D() {
   const agentePanel = panel
     ? datos?.agentes.find((a) => a.agente.session_id === panel)
     : undefined;
-  const cerrarPanel = () => {
+  const cerrarPanel = useCallback(() => {
     setPanel(null);
     if (agenteUrl) {
       // Only ?agente goes away (the framing ?zoom=&centro= stays).
@@ -100,7 +104,7 @@ export default function Oficina3D() {
       const q = resto.toString();
       router.replace(q ? `/oficina/3d?${q}` : "/oficina/3d");
     }
-  };
+  }, [agenteUrl, params, router, setPanel]);
 
   // Layout of this copy (environment, furniture, theme). Read again every
   // 30 s (not while editing) so the PC and the iPhone show the same environment.
@@ -187,6 +191,7 @@ export default function Oficina3D() {
         <label className={s.entorno}>
           <span>{t("barra.entorno")}</span>
           <select
+            aria-label={t("barra.entorno")}
             value={clave}
             disabled={editando}
             onChange={(e) =>
@@ -208,11 +213,15 @@ export default function Oficina3D() {
             disabled={editando}
             onClick={() => {
               setPanelAvisos(false);
+              cerrarPanel();
               useEditor.getState().entrar();
             }}
           >
             {t("barra.editar")}
           </button>
+          <Link href="/donde-quedamos" className={s.boton}>
+            {t("barra.dondeQuedamos")}
+          </Link>
           <Link href="/oficina" className={s.boton}>
             {t("barra.vistaCajas")}
           </Link>
@@ -220,7 +229,10 @@ export default function Oficina3D() {
             type="button"
             className={s.boton}
             aria-expanded={panelAvisos}
-            onClick={() => setPanelAvisos((v) => !v)}
+            onClick={() => {
+              cerrarPanel();
+              setPanelAvisos((v) => !v);
+            }}
           >
             {t("barra.avisos")}
             <span className={s.mono}>
@@ -233,7 +245,10 @@ export default function Oficina3D() {
             type="button"
             className={s.boton}
             aria-expanded={panelPermisos}
-            onClick={() => setPanelPermisos((v) => !v)}
+            onClick={() => {
+              cerrarPanel();
+              setPanelPermisos((v) => !v);
+            }}
           >
             {t("barra.permisos")}
           </button>
@@ -241,27 +256,17 @@ export default function Oficina3D() {
         </div>
       </header>
 
-      {panelAvisos && (
-        <div className={s.capaAvisos}>
-          <PanelAvisos api={avisos} onCerrar={() => setPanelAvisos(false)} />
-        </div>
-      )}
-      {panelPermisos && (
-        <div className={s.capaAvisos}>
-          <PanelConfigPermisos onCerrar={() => setPanelPermisos(false)} />
-        </div>
-      )}
-      {panel && (
-        <PanelAgente3D
-          agente={agentePanel}
-          id={panel}
-          cargando={!datos}
-          ahora={ahora}
-          onCerrar={cerrarPanel}
-        />
-      )}
-
       <main className={s.lienzo}>
+        {panelAvisos && (
+          <div className={s.capaAvisos}>
+            <PanelAvisos api={avisos} onCerrar={() => setPanelAvisos(false)} />
+          </div>
+        )}
+        {panelPermisos && (
+          <div className={s.capaAvisos}>
+            <PanelConfigPermisos onCerrar={() => setPanelPermisos(false)} />
+          </div>
+        )}
         {editando && <EditorPanel />}
         <Escena3D
           zoom={
@@ -279,6 +284,15 @@ export default function Oficina3D() {
           <div className={s.aviso}>{t("barra.sinAgentes")}</div>
         )}
         {!editando && <div className={s.ayuda}>{t("barra.ayuda")}</div>}
+        {panel && (
+          <FichaAgente
+            agente={agentePanel}
+            id={panel}
+            cargando={!datos}
+            ahora={ahora}
+            onCerrar={cerrarPanel}
+          />
+        )}
       </main>
     </div>
   );
