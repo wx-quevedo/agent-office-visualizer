@@ -5,6 +5,13 @@
 # Copia de desarrollo: E:\visualizador-agentes (3100 y 8100). Estos scripts
 # nunca tocan procesos de la copia de desarrollo, VS Code ni Claude Code.
 
+# Acentos: git, uv y npm escriben UTF-8, pero Windows PowerShell 5.1 lee la
+# salida de los programas con la página de códigos de la consola (850) y
+# "está" salía como "est├í". Se lee y se escribe en UTF-8. Sin consola (tarea
+# programada oculta) no hay nada que ajustar.
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false
+
 $Raiz = if ($env:VISUALIZADOR_DIARIO_RAIZ) { $env:VISUALIZADOR_DIARIO_RAIZ } else { 'E:\visualizador-agentes-diario' }
 $Datos = if ($env:VISUALIZADOR_DIARIO_DATOS) { $env:VISUALIZADOR_DIARIO_DATOS } else { Join-Path $env:USERPROFILE '.visualizador-agentes\datos-diario' }
 $Logs = Join-Path $Datos 'logs'

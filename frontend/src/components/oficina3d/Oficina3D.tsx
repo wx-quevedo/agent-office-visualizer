@@ -7,12 +7,10 @@
  */
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
-import { nombreProyecto } from "@/components/oficina/logica";
 import PanelConfigPermisos from "@/components/permisos/PanelConfigPermisos";
-import PanelPermiso from "@/components/permisos/PanelPermiso";
 import { useAvisos } from "@/components/avisos/useAvisos";
 import {
   useEstadoOficina,
@@ -34,6 +32,7 @@ import { activarEntorno, ENTORNOS } from "./entornos/activo";
 import type { ClaveEntorno } from "./entornos/tipos";
 import { useEditor } from "./editor";
 import EditorPanel from "./EditorPanel";
+import PanelAgente3D from "./PanelAgente3D";
 import Escena3D from "./Escena3D";
 import { useSettings } from "./settings";
 import { useOffice } from "./store";
@@ -62,22 +61,22 @@ export default function Oficina3D() {
   useLatidoPresencia();
   const [panelAvisos, setPanelAvisos] = useState(false);
   const [panelPermisos, setPanelPermisos] = useState(false);
-  // Agent with its hand up (13) whose request panel is open.
-  // ?agente=<id> opens it directly (links from other pages).
-  const [conPermiso, setConPermiso] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get("agente"),
-  );
-  const agentesRef = useRef(datos?.agentes ?? []);
+  // Panel of the clicked agent, over the scene (the scene stays mounted).
+  // ?agente=<id> opens it too; read from Next (not window.location, which
+  // still has the previous page during a client-side navigation).
+  const panel = useOffice((st) => st.panel);
+  const setPanel = useOffice((st) => st.setPanel);
+  const params = useSearchParams();
+  const agenteUrl = params.get("agente");
   useEffect(() => {
-    agentesRef.current = datos?.agentes ?? [];
-  }, [datos]);
+    setPanel(agenteUrl);
+  }, [agenteUrl, setPanel]);
   const editando = useEditor((st) => st.activo);
   const [angosta, setAngosta] = useState(false);
   const memoria = useRef<EstadoAdaptador>(estadoInicial());
   // Optional framing from the URL (?zoom=60&centro=x,z), handy for close-ups.
   const [encuadre] = useState(() => leerEncuadre(window.location.search));
   const setAgents = useOffice((st) => st.setAgents);
-  const setAbrir = useOffice((st) => st.setAbrir);
 
   const abrirAgente = useCallback(
     (id: string) =>
@@ -88,18 +87,19 @@ export default function Oficina3D() {
   );
   const avisos = useAvisos(datos?.agentes ?? null, { abrirAgente });
 
-  // Clicking an agent or its desk opens the existing detail; an agent that
-  // asks for permission (13) opens the panel with Approve / Reject instead.
-  useEffect(() => {
-    setAbrir((id: string) => {
-      const a = agentesRef.current.find((x) => x.agente.session_id === id);
-      if (a?.estado.numero === 13) setConPermiso(id);
-      else abrirAgente(id);
-    });
-  }, [abrirAgente, setAbrir]);
-  const agentePermiso = conPermiso
-    ? datos?.agentes.find((a) => a.agente.session_id === conPermiso)
+  const agentePanel = panel
+    ? datos?.agentes.find((a) => a.agente.session_id === panel)
     : undefined;
+  const cerrarPanel = () => {
+    setPanel(null);
+    if (agenteUrl) {
+      // Only ?agente goes away (the framing ?zoom=&centro= stays).
+      const resto = new URLSearchParams(params.toString());
+      resto.delete("agente");
+      const q = resto.toString();
+      router.replace(q ? `/oficina/3d?${q}` : "/oficina/3d");
+    }
+  };
 
   // Layout of this copy (environment, furniture, theme). Read again every
   // 30 s (not while editing) so the PC and the iPhone show the same environment.
@@ -249,37 +249,14 @@ export default function Oficina3D() {
           <PanelConfigPermisos onCerrar={() => setPanelPermisos(false)} />
         </div>
       )}
-      {agentePermiso && (
-        <div
-          className={s.capaPermiso}
-          role="dialog"
-          aria-label={`Permiso de ${nombreProyecto(agentePermiso)}`}
-        >
-          <div className={s.permisoCabeza}>
-            <b>{nombreProyecto(agentePermiso)}</b>
-            <span>
-              {agentePermiso.estado.numero} · {agentePermiso.estado.nombre}
-            </span>
-            <button
-              type="button"
-              className={s.boton}
-              onClick={() => setConPermiso(null)}
-            >
-              {t("permiso.cerrar")}
-            </button>
-          </div>
-          {agentePermiso.permiso ? (
-            <PanelPermiso permiso={agentePermiso.permiso} ahora={ahora} />
-          ) : (
-            <p className={s.permisoVsCode}>{t("permiso.vscode")}</p>
-          )}
-          <Link
-            href={`/oficina?agente=${encodeURIComponent(agentePermiso.agente.session_id)}`}
-            className={s.permisoEnlace}
-          >
-            {t("permiso.detalle")}
-          </Link>
-        </div>
+      {panel && (
+        <PanelAgente3D
+          agente={agentePanel}
+          id={panel}
+          cargando={!datos}
+          ahora={ahora}
+          onCerrar={cerrarPanel}
+        />
       )}
 
       <main className={s.lienzo}>

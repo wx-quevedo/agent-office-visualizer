@@ -140,7 +140,8 @@
   width: min(1100px, calc(100% - 32px));
   max-height: calc(100% - 86px);
   overflow-y: auto;
-  z-index: 5;
+  /* above the agent labels (drei Html, z-index up to 1000) */
+  z-index: 2000;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
 }
 
@@ -190,7 +191,7 @@
   width: min(520px, calc(100% - 32px));
   max-height: calc(100% - 86px);
   overflow-y: auto;
-  z-index: 6;
+  z-index: 2001;
   display: grid;
   gap: 10px;
   padding: 14px 16px 16px;
@@ -222,6 +223,21 @@
   border: 1px dashed #8a8a8a;
   color: #555;
   font-weight: 600;
+}
+
+.panelDato {
+  color: #555;
+  font-size: 14px;
+}
+
+.panelBloque {
+  padding: 8px 12px;
+  background: #f4f4f4;
+  border: 1px solid #b5b5b5;
+  font-family: var(--font-plex-mono), "Courier New", monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .permisoEnlace {

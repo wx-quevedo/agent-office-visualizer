@@ -10,7 +10,8 @@ const TEXTOS = {
   "barra.avisos": "Avisos",
   "barra.permisos": "Permisos",
   "permiso.cerrar": "Cerrar",
-  "permiso.detalle": "Ver detalle",
+  "permiso.detalle": "Ver detalle completo",
+  "panel.noEsta": "Ese agente ya no está en la oficina",
   "permiso.vscode": "Responde en VS Code.",
   "barra.avisosActivos": "activos",
   "barra.avisosApagados": "apagados",
@@ -38,7 +39,7 @@ const TEXTOS = {
   "detalle.pregunta": "Pregunta pendiente",
   "detalle.pide": "Lo que pide",
   "detalle.cuenta": "Cuenta",
-  "detalle.clic": "Clic para ver el detalle",
+  "detalle.clic": "Clic para ver su panel",
 
   "pantalla.titulo": "OFICINA DE AGENTES",
   "pantalla.nadie": "nadie",

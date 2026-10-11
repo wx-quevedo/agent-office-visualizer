@@ -91,11 +91,11 @@ interface OfficeState {
   setCerrados(list: EscritorioCerrado[]): void;
   marcarSalido(id: string): void;
   olvidarSalidos(ids: string[]): void;
-  /** Opens the agent detail (/oficina?agente=<id>); set by the page. */
-  abrir: (id: string) => void;
-  setAbrir(f: (id: string) => void): void;
+  /** Agent whose panel is open over the scene (click on it, or ?agente=<id>). */
+  panel: string | null;
+  setPanel(id: string | null): void;
   setAgents(list: AgentView[]): void;
-  /** Click on an agent or a desk: opens its detail. */
+  /** Click on an agent or a desk: opens its panel over the scene (no navigation). */
   select(id: string | null): void;
   hover(id: string | null): void;
 }
@@ -130,8 +130,10 @@ export const useOffice = create<OfficeState>()((set, get) => ({
       salidos: new Set([...get().salidos].filter((id) => !ids.includes(id))),
     });
   },
-  abrir: () => undefined,
-  setAbrir: (f) => set({ abrir: f }),
+  panel: null,
+  setPanel: (id) => {
+    if (get().panel !== id) set({ panel: id });
+  },
   setAgents: (list) => {
     const prev = get().agents;
     const agents: Record<string, AgentView> = {};
@@ -147,7 +149,7 @@ export const useOffice = create<OfficeState>()((set, get) => ({
     set({ agents, order: sameOrder ? get().order : order });
   },
   select: (id) => {
-    if (id) get().abrir(id);
+    if (id) get().setPanel(id);
   },
   hover: (id) => set({ hoveredId: id }),
 }));

@@ -7,6 +7,7 @@
  */
 
 import dynamic from "next/dynamic";
+import { Suspense } from "react";
 
 const Oficina3D = dynamic(() => import("@/components/oficina3d/Oficina3D"), {
   ssr: false,
@@ -22,6 +23,11 @@ const Oficina3D = dynamic(() => import("@/components/oficina3d/Oficina3D"), {
   ),
 });
 
+// Suspense: the page reads ?agente=<id> with useSearchParams (static export).
 export default function Oficina3DPage() {
-  return <Oficina3D />;
+  return (
+    <Suspense>
+      <Oficina3D />
+    </Suspense>
+  );
 }

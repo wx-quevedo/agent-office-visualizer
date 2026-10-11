@@ -43,7 +43,9 @@ try {
 } catch {
     Write-Host "  ERROR: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "  Volviendo a la versión anterior ($($anterior.Substring(0, 7)))..." -ForegroundColor Yellow
-    & git -C $Raiz reset --hard $anterior *>> $log
+    # Por cmd, como Invoke-Paso: los bytes de git van tal cual al registro UTF-8 (con *>>
+    # Windows PowerShell 5.1 escribía UTF-16) y una línea de git en stderr no aborta la vuelta atrás.
+    & cmd.exe /d /c "git -C `"$Raiz`" reset --hard $anterior >> `"$log`" 2>&1"
     if (Test-Path $respaldoOut) {
         if (Test-Path $DirExport) { Remove-Item -Recurse -Force $DirExport }
         Copy-Item -Recurse $respaldoOut $DirExport
