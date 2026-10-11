@@ -476,6 +476,9 @@ export default function Oficina() {
           <Link href="/donde-quedamos" className={s.botonAvisos}>
             Dónde quedamos
           </Link>
+          <Link href="/proyectos" className={s.botonAvisos}>
+            Proyectos
+          </Link>
           <Link href="/oficina/3d" className={s.botonAvisos}>
             Vista 3D
           </Link>

@@ -29,6 +29,22 @@
   display: none;
 }
 
+/* Inside /proyectos/ver: no full-page height, the host page gives the margins. */
+.incrustada {
+  min-height: 0;
+  background: transparent;
+}
+
+.incrustada .principal {
+  padding: 0;
+}
+
+.tituloIncrustado {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
 .oculto {
   position: absolute;
   width: 1px;
@@ -612,6 +628,20 @@
 
   .barraCel + .cabeza {
     margin-top: -14px;
+  }
+
+  .incrustada .cabeza {
+    padding: 0 0 12px;
+    background: transparent;
+  }
+
+  .incrustada .plan,
+  .incrustada .aqui,
+  .incrustada .tarjeta,
+  .incrustada .avisoPlan,
+  .incrustada .tarjetas {
+    margin-left: 0;
+    margin-right: 0;
   }
 
   .titulo {

@@ -1,0 +1,719 @@
+/* Projects created from the office (Prompt 37): light theme, IBM Plex. */
+
+.pagina {
+  --tinta: #1f2329;
+  --tinta-2: #2b2f36;
+  --gris: #4a505c;
+  --gris-2: #5a6170;
+  --borde: #d5d9df;
+  --borde-control: #8a919c;
+  --linea: #e4e7eb;
+  --suave: #eef0f3;
+  --fondo: #f4f5f7;
+  --azul: #1d4faf;
+  --azul-suave: #e3ecfb;
+  --verde: #2f5c45;
+  --verde-suave: #e5efe9;
+  --naranja: #8a3e0e;
+  --rojo: #9b2c1e;
+  --rojo-suave: #f8e7e4;
+  --morado: #5b3fa8;
+  --morado-suave: #ece7f8;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--fondo);
+  color: var(--tinta);
+  font-family: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.contenido {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 36px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.angosto {
+  max-width: 760px;
+}
+
+.oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+  overflow-wrap: anywhere;
+}
+
+.secundario {
+  margin: 0;
+  color: var(--gris);
+  overflow-wrap: anywhere;
+}
+
+.etiqueta {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gris);
+}
+
+.titulo {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.subtitulo {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* -- buttons and links ----------------------------------------------------------- */
+
+.boton,
+.botonPrincipal {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: 1px solid var(--borde-control);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--tinta);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.botonPrincipal {
+  background: var(--azul);
+  border-color: var(--azul);
+  color: #ffffff;
+}
+
+.boton:hover:not(:disabled) {
+  background: var(--suave);
+}
+
+.botonPrincipal:hover:not(:disabled) {
+  background: #173f8c;
+}
+
+.boton:disabled,
+.botonPrincipal:disabled {
+  cursor: not-allowed;
+  background: var(--suave);
+  border-color: var(--borde);
+  color: var(--gris);
+}
+
+.boton:focus-visible,
+.botonPrincipal:focus-visible,
+.enlace:focus-visible,
+.fila:focus-visible,
+.segmento:focus-visible,
+.interruptor:focus-visible,
+.control:focus-visible,
+.opcion:has(input:focus-visible),
+.pestana:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.enlace {
+  color: var(--azul);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* -- header ---------------------------------------------------------------------- */
+
+.cabeza {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+}
+
+.cabezaTexto {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.migas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+/* -- states ---------------------------------------------------------------------- */
+
+.estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+
+.estado::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.verde {
+  color: var(--verde);
+  background: var(--verde-suave);
+}
+
+.azul {
+  color: var(--azul);
+  background: var(--azul-suave);
+}
+
+.gris {
+  color: var(--gris);
+  background: var(--suave);
+}
+
+.rojo {
+  color: var(--rojo);
+  background: var(--rojo-suave);
+}
+
+.morado {
+  color: var(--morado);
+  background: var(--morado-suave);
+}
+
+.aviso {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px dashed var(--gris-2);
+  background: #ffffff;
+  color: var(--tinta-2);
+  overflow-wrap: anywhere;
+}
+
+.avisoError {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--rojo);
+  background: var(--rojo-suave);
+  color: var(--rojo);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* -- list ------------------------------------------------------------------------ */
+
+.filas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fila {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--tinta);
+  text-decoration: none;
+}
+
+.fila:hover {
+  border-color: var(--azul);
+}
+
+.filaFuerte {
+  border-left: 4px solid var(--morado);
+  padding-left: 13px;
+}
+
+.filaNombre {
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.filaDatos {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.filaHaciendo {
+  color: var(--tinta-2);
+  overflow-wrap: anywhere;
+}
+
+.filaHaciendoError {
+  color: var(--rojo);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* -- form ------------------------------------------------------------------------ */
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.bloque {
+  margin: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.bloque > legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.bloque > legend + * {
+  clear: both;
+}
+
+.campoTitulo {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.control {
+  min-height: 44px;
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--borde-control);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--tinta);
+  font: inherit;
+}
+
+.controlError {
+  border-color: var(--rojo);
+  border-width: 2px;
+}
+
+.ruta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--tinta-2);
+}
+
+.errorCampo {
+  margin: 0;
+  color: var(--rojo);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.opciones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.opcion {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.opcion input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--azul);
+}
+
+.opcion:has(input:checked) {
+  border: 2px solid var(--azul);
+  background: var(--azul-suave);
+  padding: 9px 11px;
+}
+
+.opcionApagada {
+  cursor: not-allowed;
+  background: var(--fondo);
+  color: var(--gris);
+}
+
+.opcionTexto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.opcionNombre {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.segmentos {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--borde-control);
+  border-radius: 8px;
+  overflow: hidden;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.segmento {
+  position: relative;
+  min-height: 44px;
+  min-width: 88px;
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  background: #ffffff;
+  color: var(--tinta);
+  font-weight: 600;
+  cursor: pointer;
+  border-left: 1px solid var(--borde-control);
+}
+
+.segmento:first-child {
+  border-left: none;
+}
+
+.segmento input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.segmento:has(input:checked) {
+  background: var(--azul);
+  color: #ffffff;
+}
+
+.segmento:has(input:focus-visible) {
+  outline: 3px solid var(--azul);
+  outline-offset: -5px;
+  box-shadow: inset 0 0 0 5px #ffffff;
+}
+
+.miembroForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--linea);
+}
+
+.miembroForm:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.miembroTitulo {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-weight: 600;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--gris);
+}
+
+.interruptorFila {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.interruptor {
+  position: relative;
+  flex-shrink: 0;
+  width: 56px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.interruptor::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 10px;
+  width: 52px;
+  height: 24px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 2px solid var(--borde-control);
+  box-sizing: border-box;
+}
+
+.interruptor::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 15px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--gris);
+  transition: transform 0.15s ease;
+}
+
+.interruptor[aria-checked="true"]::before {
+  background: var(--azul);
+  border-color: var(--azul);
+}
+
+.interruptor[aria-checked="true"]::after {
+  background: #ffffff;
+  transform: translateX(28px);
+}
+
+.nota {
+  margin: 0;
+  font-size: 13px;
+  color: var(--gris);
+}
+
+.pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+/* -- project --------------------------------------------------------------------- */
+
+.ficha {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.datos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  color: var(--gris);
+}
+
+.pestanas {
+  display: flex;
+  border-bottom: 1px solid var(--borde);
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pestana {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  color: var(--gris);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+}
+
+.pestana:hover {
+  color: var(--tinta);
+}
+
+.pestanaActual {
+  color: var(--azul);
+  border-bottom-color: var(--azul);
+}
+
+.equipo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.miembro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.miembroOrq {
+  border: 2px solid var(--azul);
+  padding: 13px 15px;
+}
+
+.miembroCabeza {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.miembroNombre {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.miembroResto {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+}
+
+.botonesEquipo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* -- phones ---------------------------------------------------------------------- */
+
+@media (max-width: 699px) {
+  .contenido {
+    padding: 16px 16px 32px;
+    gap: 16px;
+  }
+
+  .titulo {
+    font-size: 22px;
+  }
+
+  .cabeza {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .acciones > * {
+    flex: 1 1 auto;
+  }
+
+  .fila,
+  .miembro {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bloque {
+    padding: 14px;
+  }
+
+  .miembroForm {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .miembroForm > .boton {
+    grid-column: 1 / -1;
+  }
+
+  .segmentos {
+    width: 100%;
+  }
+
+  .segmento {
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .pie > * {
+    flex: 1 1 auto;
+  }
+}

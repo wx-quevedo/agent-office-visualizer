@@ -49,6 +49,25 @@ export interface PropsVista {
   /** Opened first on entering the office: "oficina" (8 h) or "nuevo" (new device). */
   desdeOficina?: boolean | "nuevo" | "oficina";
   error?: string | null;
+  /**
+   * Fixed project (inside /proyectos/ver): only that one, without the side
+   * list nor the link to the office, and a notice when it has no data yet.
+   */
+  fijo?: boolean;
+}
+
+/** The project with that id, or the one whose folder name is that id. */
+export function buscarProyecto(
+  proyectos: ProyectoVista[] | null,
+  id: string | null,
+): ProyectoVista | null {
+  if (!proyectos || !id) return null;
+  const clave = id.toLowerCase();
+  return (
+    proyectos.find((p) => p.id === clave) ??
+    proyectos.find((p) => p.nombre.toLowerCase() === clave) ??
+    null
+  );
 }
 
 function Lista({
@@ -337,9 +356,11 @@ export function DondeVista({
   turnoExtra = null,
   desdeOficina = false,
   error = null,
+  fijo = false,
 }: PropsVista) {
-  const elegido =
-    proyectos?.find((p) => p.id === idElegido) ?? proyectos?.[0] ?? null;
+  const elegido = fijo
+    ? buscarProyecto(proyectos, idElegido)
+    : (proyectos?.find((p) => p.id === idElegido) ?? proyectos?.[0] ?? null);
   const hoy = lineaConsumo(consumo);
   const delProyecto = elegido ? consumoDe(consumo, elegido.carpeta) : null;
   // Opened by the 8-hour rule: the reason is read first.
@@ -349,13 +370,15 @@ export function DondeVista({
   }, [desdeOficina]);
 
   return (
-    <div className={s.pagina}>
+    <div className={fijo ? `${s.pagina} ${s.incrustada}` : s.pagina}>
       <main className={s.principal}>
-        <div className={`${s.barraCel} ${s.soloCel}`}>
-          <Link href="/oficina/3d" className={s.boton}>
-            Ir a la oficina
-          </Link>
-        </div>
+        {!fijo && (
+          <div className={`${s.barraCel} ${s.soloCel}`}>
+            <Link href="/oficina/3d" className={s.boton}>
+              Ir a la oficina
+            </Link>
+          </div>
+        )}
         {desdeOficina && (
           <p className={s.bienvenida} ref={aviso} tabIndex={-1}>
             {desdeOficina === "nuevo"
@@ -372,7 +395,14 @@ export function DondeVista({
           </p>
         )}
         {!proyectos && !error && <p className={s.secundario}>Cargando…</p>}
-        {proyectos && proyectos.length === 0 && (
+        {fijo && proyectos && !elegido && (
+          <p className={s.avisoPlan} role="status">
+            Todavía no hay datos de este proyecto en &quot;Dónde quedamos&quot;:
+            aparecen cuando un agente trabaja en su carpeta y el monitor de la
+            máquina manda su PROJECT.md.
+          </p>
+        )}
+        {!fijo && proyectos && proyectos.length === 0 && (
           <>
             <h1 className={s.titulo}>Dónde quedamos</h1>
             <p className={s.avisoPlan}>
@@ -385,8 +415,16 @@ export function DondeVista({
           <>
             <header className={s.cabeza}>
               <div className={s.cabezaTexto}>
-                <p className={`${s.secundario} ${s.soloCel}`}>Dónde quedamos</p>
-                <h1 className={s.titulo}>{elegido.nombre}</h1>
+                {fijo ? (
+                  <h2 className={s.tituloIncrustado}>Dónde quedamos</h2>
+                ) : (
+                  <>
+                    <p className={`${s.secundario} ${s.soloCel}`}>
+                      Dónde quedamos
+                    </p>
+                    <h1 className={s.titulo}>{elegido.nombre}</h1>
+                  </>
+                )}
                 <p className={s.secundario}>
                   Última actividad: {textoUltima(elegido, ahora)}
                   {elegido.agentes[0]
@@ -427,19 +465,25 @@ export function DondeVista({
         )}
       </main>
       {/* After the content in the DOM (reading order); on PC it shows on the left. */}
-      {proyectos && proyectos.length > 0 && (
+      {!fijo && proyectos && proyectos.length > 0 && (
         <Lista proyectos={proyectos} elegido={elegido} ahora={ahora} />
       )}
     </div>
   );
 }
 
-/** The page with its reads: projects (30 s), consumption (60 s), agents (2 s). */
-export default function DondeQuedamos() {
+/**
+ * The page with its reads: projects (30 s), consumption (60 s), agents (2 s).
+ * With `proyecto`, that project only (inside /proyectos/ver).
+ */
+export default function DondeQuedamos({
+  proyecto: fijo,
+}: { proyecto?: string } = {}) {
   const params = useSearchParams();
-  const pedido = params.get("proyecto");
+  const pedido = fijo ?? params.get("proyecto");
   const desde = params.get("desde");
-  const desdeOficina = desde === "oficina" || desde === "nuevo" ? desde : false;
+  const desdeOficina =
+    !fijo && (desde === "oficina" || desde === "nuevo") ? desde : false;
   const { datos: estado, ahora } = useEstadoOficina();
   const api = useLectura<{ proyectos: ProyectoApi[] }>(
     "/api/v1/proyectos",
@@ -453,8 +497,9 @@ export default function DondeQuedamos() {
         : null,
     [api.datos, estado],
   );
-  const elegido =
-    proyectos?.find((p) => p.id === pedido) ?? proyectos?.[0] ?? null;
+  const elegido = fijo
+    ? buscarProyecto(proyectos, fijo)
+    : (proyectos?.find((p) => p.id === pedido) ?? proyectos?.[0] ?? null);
   // Without the last turn in the report (older monitor), read it from the agent.
   const sesion =
     elegido && !elegido.datos.ultima_actividad?.ultimo_turno
@@ -475,6 +520,7 @@ export default function DondeQuedamos() {
       turnoExtra={extra.datos?.turnos[0] ?? null}
       desdeOficina={desdeOficina}
       error={api.error}
+      fijo={Boolean(fijo)}
     />
   );
 }

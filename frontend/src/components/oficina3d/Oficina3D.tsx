@@ -238,6 +238,9 @@ export default function Oficina3D() {
             <Link href="/donde-quedamos" className={s.boton}>
               {t("barra.dondeQuedamos")}
             </Link>
+            <Link href="/proyectos" className={s.boton}>
+              {t("barra.proyectos")}
+            </Link>
             <Link href="/oficina" className={s.boton}>
               {t("barra.vistaCajas")}
             </Link>

@@ -8,6 +8,7 @@ const TEXTOS = {
   "barra.libres": "Libres",
   "barra.vistaCajas": "Vista de cajas",
   "barra.dondeQuedamos": "Dónde quedamos",
+  "barra.proyectos": "Proyectos",
   "barra.avisos": "Avisos",
   "barra.permisos": "Permisos",
   "barra.avisosActivos": "activos",
