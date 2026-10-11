@@ -7,6 +7,7 @@
     visualizador-monitor configurar --servidor URL [--token-archivo F]
     visualizador-monitor peligrosos          # ruta de la lista de comandos peligrosos
     visualizador-monitor hook <evento>       # lo usan los hooks de Claude Code
+    visualizador-monitor statusline          # barra de estado de Claude Code (límites)
 
 El token nunca se muestra: se pide sin eco o se lee de un archivo.
 """
@@ -58,6 +59,45 @@ def _hook(evento: str) -> int:
     except Exception:
         pass
     return 0  # un hook nunca bloquea a Claude Code
+
+
+def _statusline() -> int:
+    """Barra de estado de Claude Code: pasa los límites al monitor y escribe una línea."""
+    from visualizador_monitor.barra import extraer, linea
+
+    texto = "Oficina de agentes"
+    try:
+        crudo = sys.stdin.buffer.read(1_000_000) if sys.stdin else b""
+        datos = json.loads(crudo.decode("utf-8", errors="replace") or "{}")
+        if isinstance(datos, dict):
+            extraido = extraer(datos)
+            texto = linea(extraido)
+            if extraido["cinco_horas"] or extraido["semanal"]:
+                base = config.directorio()
+                try:
+                    puerto = config.cargar(base).puerto
+                except Exception:
+                    puerto = config.PUERTO_POR_DEFECTO
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{puerto}/api/v1/limites",
+                    data=json.dumps(extraido).encode("utf-8"),
+                    method="POST",
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-API-Key": config.clave_local(base),
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=0.8):
+                    pass
+    except Exception:
+        pass  # la barra nunca falla: sin monitor, solo se ve la línea
+    try:
+        # UTF-8 aunque la consola de Windows use otra página de códigos.
+        sys.stdout.buffer.write((texto + "\n").encode("utf-8"))
+        sys.stdout.flush()
+    except Exception:
+        pass
+    return 0
 
 
 def _servir(_: argparse.Namespace) -> int:
@@ -242,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["hook"]:
         return _hook(argv[1] if len(argv) > 1 else "")
+    if argv[:1] == ["statusline"]:
+        return _statusline()
     p = argparse.ArgumentParser(prog="visualizador-monitor", description="Monitor de máquina")
     p.add_argument("--version", action="version", version=f"visualizador-monitor {VERSION}")
     sub = p.add_subparsers(dest="comando", required=True)

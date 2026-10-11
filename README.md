@@ -1,384 +1,56 @@
-# Claude Office Visualizer
+# Oficina de agentes
 
-![CI](https://github.com/paulrobello/claude-office/actions/workflows/ci.yml/badge.svg)
-![GitHub Release](https://img.shields.io/github/v/release/paulrobello/claude-office)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![GitHub](https://img.shields.io/badge/github-paulrobello%2Fclaude--office-blue?logo=github)
-![Runs on Linux | MacOS | Windows](https://img.shields.io/badge/runs%20on-Linux%20%7C%20MacOS%20%7C%20Windows-blue)
+Una oficina en vivo para ver qué hacen los agentes de Claude Code de Washington en todas sus máquinas: quién trabaja, quién espera un permiso o una respuesta, en qué tarea larga está cada uno, cuánto consume y dónde quedó cada proyecto. Se usa en https://agents.example.com, desde la PC y el celular.
 
-[![Watch the demo](https://img.shields.io/badge/YouTube-Demo-red?logo=youtube)](https://youtu.be/AM2UjKYB8Ew)
+El plan por etapas, las decisiones, el registro de cambios y los detalles de cada parte están en [PROJECT.md](PROJECT.md).
 
-## Table of Contents
+## Arquitectura
 
-* [Screenshots](#screenshots)
-* [About](#about)
-* [What's New](#whats-new)
-* [Features](#features)
-* [Quick Start](#quick-start)
-* [Prerequisites](#prerequisites)
-* [Installation](#installation)
-* [Development](#development)
-* [Project Structure](#project-structure)
-* [Troubleshooting](#troubleshooting)
-* [Contributing](#contributing)
-* [Related Documentation](#related-documentation)
+```
+Claude Code (cada cuenta)                 Máquina (Windows)                         VPS (the VPS provider)
+  hooks ─────────────────────────────▶  monitor  127.0.0.1:8765 ──https + token──▶  nginx  agents.example.com
+  barra de estado (límites) ─────────▶   · cola SQLite sin conexión                  ├─ /      web estática (Next.js)
+                                         · transcripciones y procesos                └─ /api   backend (FastAPI, systemd)
+                                         · PROJECT.md de cada proyecto                         · motor de estados
+                                                                                                · permisos, acceso, máquinas
+navegador (PC, iPhone) ──https + sesión────────────────────────────────────────▶            · datos y respaldos diarios
+```
 
-## Screenshots
+- **Monitor** (`monitor/`): un proceso por máquina, sin ventana, que arranca solo al iniciar sesión. Recibe los hooks de Claude Code en 127.0.0.1 y guarda cada evento en una cola que sobrevive a cortes y reinicios. Lee las transcripciones, los procesos y el PROJECT.md de cada proyecto, toma los límites de 5 h y semanal de la barra de estado y lo envía todo al servidor. Es el único que conoce el token de la máquina.
+- **Backend** (`backend/`): FastAPI en el VPS, detrás de nginx. Arma el estado de cada agente con su registro propio de eventos: esperas específicas, detector de atascos, historial por turno, tokens y tiempo. También atiende los permisos (aprobar o rechazar desde la oficina), el inicio de sesión y las máquinas.
+- **Web** (`frontend/`): export estático de Next.js. Páginas: `/oficina/3d` (la oficina en 3D, también en la raíz), `/oficina` (vista de cajas), `/datos` (datos en bruto) y `/entrar`.
+- **Hook** (`hooks/`): el paquete que Claude Code ejecuta en cada evento. Las máquinas con monitor lo llaman a través de él. Los comandos peligrosos (borrados recursivos, `git push --force`, `DROP TABLE`...) siempre piden aprobación, también en modo Auto.
 
-The **Command Center** gathers the boss of every live terminal into one cross-session office — at a glance you can see which terminals need you, which are working, and which are done:
+## Desplegar al VPS
 
-![Command Center](https://raw.githubusercontent.com/paulrobello/claude-office/main/screenshots/sc_command_center.png)
-
-| | |
-|---|---|
-| ![Office View](https://raw.githubusercontent.com/paulrobello/claude-office/main/screenshot.png) | ![Multi-Floor Building](https://raw.githubusercontent.com/paulrobello/claude-office/main/screenshots/sc_floor_office.png) |
-| ![Floor View](https://raw.githubusercontent.com/paulrobello/claude-office/main/screenshots/sc_floor_view.png) | ![Building Settings](https://raw.githubusercontent.com/paulrobello/claude-office/main/screenshots/sc_building_settings.png) |
-
-
-## About
-
-Claude Office Visualizer is a real-time pixel art office simulation that visualizes Claude Code operations. Watch as a "boss" character (main Claude agent) manages work, spawns "employee" agents (subagents), and orchestrates tasks in an animated office environment.
-
-The application was built with [Next.js](https://nextjs.org/), [PixiJS](https://pixijs.com/), [FastAPI](https://fastapi.tiangolo.com/), and [Zustand](https://github.com/pmndrs/zustand).
-
-[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/probello3)
-
-## What's New
-
-### v0.24.1 (July 2026)
-
-- **Bug fix — API URL env vars now respected everywhere.** The floor-config hook (`useFloorConfig.ts`) and the simulation scripts (`scripts/scenarios/_base.py`) hardcoded `http://localhost:8000`, so they silently broke when the backend ran on another port (e.g. 8000 was already in use). They now read `NEXT_PUBLIC_API_URL` and `CLAUDE_OFFICE_API_URL` like the rest of the stack; standard-port defaults are unchanged. Thanks [@rasulboliev](https://github.com/rasulboliev) ([PR #55](https://github.com/paulrobello/claude-office/pull/55)).
-
-### v0.24.0 (July 2026)
-
-- **⚠ Breaking — OpenCode plugin remote backend is now opt-in**: a non-localhost `CLAUDE_OFFICE_API_URL` is clamped to the local default unless `CLAUDE_OFFICE_ALLOW_REMOTE=1` is set (matching the Claude Code hooks; event payloads carry tool I/O and file paths). **If you point the plugin at a remote server, set `CLAUDE_OFFICE_ALLOW_REMOTE=1` or events silently post to localhost.**
-- **Pluggable summary backend**: summaries now come from `SUMMARY_BACKEND` = `claude-cli` (default), any `openai`-compatible endpoint, or `disabled` — `CLAUDE_CODE_OAUTH_TOKEN` no longer required.
-- **Performance & architecture**: per-frame agent writes batched into one store update per tick (header/sidebar/modals stop re-rendering at 60fps during movement); `gameStore` split into 9 Zustand slices; single-writer agent-state ownership retires the 3-second "stuck boss" watchdog. 67 of 69 audit findings resolved.
-
-### v0.23.0 (July 2026)
-
-- **Audit remediation (60 findings)**: Full security hardening (API key no longer disclosed over HTTP — delivered via `?token=` launch URL, `focus`/clipboard gated behind the key, git invocation hardening against hostile repos, Docker bound to loopback), a real CI workflow running `make checkall` across all four components, and the entire backend structural chain consolidated (single event-dispatch table, `ConnectionManager` moved to the domain layer with functional DI seams, `EventData` discriminated union, `BasePoller` framework, `main.py` split into middleware/migrate/websockets, bounded growth with idle eviction + replay pagination). +489 tests. See `CHANGELOG.md` and `AUDIT-REMEDIATION.md`
-- **Code quality & docs**: 76 frontend characterization tests, `useWebSocketEvents` decomposed into pure transport + domain modules, the OpenCode plugin's session-tracking extracted into a tested `SessionTracker` with real ESLint, atomic `gameStore` dequeue, named constants, a fail-safe hooks installer that preserves user edits, `VERSION`/`__version__` derived via `importlib.metadata`, and `make bump-version` automation. API authentication, the `SERVE_STATIC` gate, Command Center architecture, and complete env-var tables documented
-
-### v0.22.0 (June 2026)
-
-- **Schedule editor cron helpers**: New pure `src/utils/cron.ts` utilities that round-trip between a friendly schedule editor and 5-field cron expressions (`timesToCron`, `intervalToCron`, `cronToEditor`)
-- **Bug fixes**: Attention toast dismiss glyph rendered as raw source text instead of ✕ (#54), a Windows hook crash caused by a conflicting system OpenSSL, and dropped proxy/redirect support for remote `http://` backends (#53)
-
-### v0.21.0 (June 2026)
-
-- **Dependency refresh**: All packages across backend, frontend, hooks, and the OpenCode plugin bumped to latest (FastAPI 0.137, Starlette 1.3, Next 16.2.9, React 19.2.7, pixi.js 8.19, and tooling) — supersedes dependabot PRs #47/#50
-- **Bug fixes**: Command Center exit-loop (#49), a Starlette 1.3 type-check regression (added `httpx2`), and a latent hooks logging bug
-
-### v0.20.0 (June 2026)
-
-- **Command Center**: New cross-terminal overview that gathers the boss (main agent) of every live session into a single pixel office — see at a glance what's finished, still running, or needs your attention. Reachable from the header (when ≥2 sessions are active) or the Building view's penthouse tile
-- **Scrollable Building View**: The building cross-section now scrolls when the floor list is taller than the viewport
-- **Full-system QA + security hardening**: 41 bug fixes (including a polling deadlock, a Docker blank-page fix, and a CORS preflight fix) plus per-session authorization guards and event-payload validation
-
-### v0.15.0 (May 2026)
-
-- **Multi-Floor Building Navigation**: Browse a multi-story building with floor-level views, each with its own office layout and agents
-- **Settings Overhaul**: New building configuration and consolidated general settings tabs
-- **Kanban Whiteboard Mode**: 12th whiteboard mode showing task workflow in columns
-
-Special thanks to [@mjcadile](https://github.com/mjcadile) ([PR #20](https://github.com/paulrobello/claude-office/pull/20)) for the multi-floor building navigation, floor/room routing, and live session counts that power this release.
-
-### v0.14.0 (April 2026)
-
-- **Pluralization Support (i18n)**: Count-based translations now correctly display singular/plural forms (e.g., "1 event" vs "5 events") in all supported languages
-- **Star History Chart**: Repository growth visualization added to README
-
-For the full release history, see [CHANGELOG.md](CHANGELOG.md).
-
-## Features
-
-### Core Capabilities
-- **Real-time Visualization**: Watch Claude Code operations as they happen in an animated office
-- **Boss & Employee Agents**: Main Claude agent as boss, subagents as employees
-- **Multi-Floor Building**: Navigate a multi-story building with independent offices per floor, breadcrumb navigation, and automatic session switching
-
-![Multi-Floor Building](https://raw.githubusercontent.com/paulrobello/claude-office/main/screenshots/sc_floor_office.png)
-
-- **Visual State Indicators**: Working, delegating, waiting states clearly displayed
-- **Thought/Speech Bubbles**: See agent activities and communications
-
-### Advanced Features
-- **Command Center**: Cross-terminal overview that gathers every live session's boss into one pixel office, with status columns (Needs-you, Working, Done, Ended) and A* pathfinding to free seats
-- **Multi-Mode Whiteboard**: 12 display modes with keyboard shortcuts (0-9, T, B, K) - todo list, remote workers, tool usage pie chart, org chart, stonks, weather, safety board, timeline, news ticker, coffee tracker, heat map, kanban
-- **Background Task Tracking**: Remote Workers display shows background task status in video-call-style tiles
-- **Context Window Tracking**: Animated trashcan fills with paper as context increases
-- **Compaction Animation**: Boss stomps on trashcan to compact context
-- **City Skyline Window**: Real-time day/night cycle based on local time with animated drifting clouds
-- **Wall Clock**: Click to cycle between analog and digital (12h/24h) display modes
-- **User Preferences**: Settings persist across sessions via backend database
-
-![Settings](https://raw.githubusercontent.com/paulrobello/claude-office/main/screenshots/sc_general_settings.png)
-- **Git Status Panel**: See repository status in real-time
-- **Printer Station**: Printer animates when Claude completes work that produces a report or document
-- **Random Quotes**: Agents display random acceptance/completion quotes when receiving or turning in work
-- **Safety Sign**: Tool counter tracks uses since last context compaction
-
-### Technical Excellence
-- **WebSocket Architecture**: Real-time state updates from backend to frontend
-- **Extensible Design**: Easy to add new visualizations and features
-- **Cross-Platform**: Runs on Windows, macOS, and Linux
-
-
-## Quick Start
-
-For the fastest setup, see the [Quick Start Guide](docs/guides/quickstart.md).
+Desde `E:\visualizador-agentes`, en Git Bash, con el trabajo en un commit:
 
 ```bash
-git clone https://github.com/paulrobello/claude-office.git
-cd claude-office
-make install-all
-make dev-tmux
+bash despliegue/desplegar.sh   # construye la web, sube el commit y reinicia el backend (sin sudo)
+bash despliegue/estado.sh      # versión, servicio, respaldos, certificado y respuestas públicas
 ```
 
-Then open [http://localhost:3000](http://localhost:3000) and run any Claude Code command to see it visualized.
+La instalación del sistema (una sola vez, con sudo), los respaldos y la restauración están en PROJECT.md, sección "VPS y despliegue".
 
-## Prerequisites
+## Instalar o actualizar el monitor
 
-- Python 3.13+
-- Node.js 20+ (Bun auto-detected if available)
-- uv (Python package manager)
-- Claude Code CLI installed and configured, **or** [OpenCode](https://opencode.ai) with Bun
+1. Crea el token de la máquina en el VPS (una vez por máquina):
+   `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/acceso.sh token-crear --maquina <id>"`
+2. Arma el instalador: `cd monitor; uv run python empaquetar.py` → `monitor/dist/instalar-visualizador-monitor.exe`.
+3. Instalar: doble clic en ese archivo (pide la dirección del servidor y el token).
+4. Actualizar sin pedir nada (conserva servidor, token y configuración): `& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`.
+5. Desinstalar y dejar todo como estaba: el mismo archivo con `--desinstalar`.
 
-## Installation
-
-### Quick Start
+## Desarrollo
 
 ```bash
-# Clone the repository
-git clone https://github.com/paulrobello/claude-office.git
-cd claude-office
-
-# Install all components (backend, frontend, hooks)
-make install-all
+make dev-local      # backend :8100 y web :3100 (sin tocar el uso diario)
+cd backend && uv run pytest -q --timeout=300
+cd hooks && uv run pytest -q
+cd monitor && uv run pytest -q
+cd frontend && npx tsc --noEmit && npx eslint . && npx vitest run
 ```
 
-### Manual Installation
+## Origen
 
-```bash
-# Install backend dependencies
-cd backend && uv sync && cd ..
-
-# Install frontend dependencies
-cd frontend && bun install && cd ..
-
-# Install hooks into Claude Code
-make hooks-install
-```
-
-### Enable AI Enhancements (Optional)
-
-For AI-powered features like agent name generation and task summaries, create a `.env` file in the `backend/` folder with your Claude Code OAuth token:
-
-```bash
-# Set up a long-lived authentication token (requires Claude subscription)
-# This will prompt you to authenticate and display your token
-claude setup-token
-
-# Create the .env file with the token
-echo "CLAUDE_CODE_OAUTH_TOKEN=your-token-here" > backend/.env
-```
-
-Without this token, the visualizer works fully but displays raw agent IDs instead of friendly generated names, and tool names instead of summarized tasks. The frontend displays AI status in the top right corner so you can verify if it's properly configured.
-
-## Development
-
-### Starting the Development Servers
-
-**Recommended: Using tmux**
-
-```bash
-make dev-tmux
-```
-
-Navigate between windows with `Ctrl-b n` (next) and `Ctrl-b p` (previous).
-
-**Alternative: Basic parallel mode**
-
-```bash
-make dev
-```
-
-### Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `make dev` | Start backend and frontend in parallel |
-| `make dev-tmux` | Start in tmux with separate windows (recommended) |
-| `make dev-tmux-kill` | Kill the tmux session |
-| `make checkall` | Run format, lint, typecheck, and tests |
-| `make test` | Run all test suites without the other checks |
-| `make simulate` | Run event simulation script |
-| `make build-static` | Build frontend and copy to backend for standalone deployment |
-| `make clean-all` | Remove all build artifacts and data |
-
-### Hook Management
-
-| Command | Description |
-|---------|-------------|
-| `make hooks-install` | Install hooks into Claude Code |
-| `make hooks-uninstall` | Remove hooks from Claude Code |
-| `make hooks-status` | Show installed hooks and config |
-| `make hooks-logs` | View recent hook logs |
-| `make hooks-debug-on` | Enable debug logging |
-| `make hooks-debug-off` | Disable debug logging |
-
-### OpenCode Integration
-
-This fork adds support for [OpenCode](https://opencode.ai) as an alternative to Claude Code CLI. The `opencode-plugin/` directory contains a plugin that sends OpenCode lifecycle events to the same backend API.
-
-> **⚠ Breaking in v0.24.0:** a non-localhost `CLAUDE_OFFICE_API_URL` is now clamped to the local default unless `CLAUDE_OFFICE_ALLOW_REMOTE=1` is set (the Claude Code hooks always did this). If your backend runs on another host, set `CLAUDE_OFFICE_ALLOW_REMOTE=1` or events will silently post to localhost.
-
-#### Install
-
-```bash
-make opencode-install
-```
-
-This builds the plugin, links it globally, and registers it in your `~/.config/opencode/opencode.json`.
-
-#### Uninstall
-
-```bash
-make opencode-uninstall
-```
-
-#### OpenCode Plugin Commands
-
-| Command | Description |
-|---------|-------------|
-| `make opencode-install` | Build and register plugin with OpenCode |
-| `make opencode-uninstall` | Remove plugin from OpenCode |
-| `make opencode-reinstall` | Uninstall and reinstall plugin |
-| `make opencode-build` | Build plugin without registering |
-
-#### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CLAUDE_OFFICE_API_URL` | `http://localhost:8000/api/v1/events` | Backend API endpoint. Non-localhost values are reset to the default unless `CLAUDE_OFFICE_ALLOW_REMOTE=1` |
-| `CLAUDE_OFFICE_ALLOW_REMOTE` | `0` | Set to `1` to permit a non-localhost backend (hooks + OpenCode plugin; opt-in since payloads carry tool I/O and file paths) |
-| `CLAUDE_OFFICE_TIMEOUT_MS` | `1500` | HTTP request timeout |
-| `CLAUDE_OFFICE_DEBUG` | `0` | Set to `1` to log events to stderr |
-
-#### Event Mapping
-
-The plugin maps OpenCode events to claude-office backend events:
-
-| OpenCode Event | Backend Event |
-|----------------|---------------|
-| `session.created` | `session_start` |
-| `session.deleted` | `session_end` |
-| `session.idle` | `stop` |
-| `session.compacted` | `context_compaction` |
-| `chat.message` hook | `user_prompt_submit` |
-| `tool.execute.before` | `pre_tool_use` / `subagent_start` |
-| `tool.execute.after` | `post_tool_use` / `subagent_stop` |
-| `permission.ask` | `permission_request` |
-| `step-finish` part | `reporting` (token usage) |
-| `message.updated` (assistant) | `reporting` (token usage) |
-
-### Docker Deployment
-
-| Command | Description |
-|---------|-------------|
-| `make docker-build` | Build Docker image |
-| `make docker-up` | Start container in background |
-| `make docker-down` | Stop container |
-| `make docker-logs` | View container logs |
-
-See [Docker Guide](docs/guides/deployment.md) for detailed configuration.
-
-### Accessing the Visualizer
-
-Once running, open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## Project Structure
-
-```
-claude-office/
-├── backend/               # FastAPI backend
-│   ├── app/
-│   │   ├── api/          # REST and WebSocket endpoints
-│   │   ├── core/         # State machine, event processor
-│   │   └── models/       # Pydantic models
-│   └── pyproject.toml
-├── frontend/             # Next.js + PixiJS frontend
-│   ├── src/
-│   │   ├── components/   # React/PixiJS components
-│   │   ├── hooks/        # Custom React hooks
-│   │   ├── stores/       # Zustand state stores
-│   │   └── systems/      # Animation, pathfinding
-│   └── package.json
-├── hooks/                # Claude Code integration
-│   ├── src/              # Hook implementation
-│   ├── install.sh        # Hook installer
-│   └── uninstall.sh      # Hook uninstaller
-├── opencode-plugin/      # OpenCode integration
-│   ├── src/              # Plugin TypeScript source
-│   ├── install.sh        # Plugin installer
-│   └── uninstall.sh      # Plugin uninstaller
-├── scripts/              # Utility scripts
-├── docs/                 # Documentation
-└── Makefile              # Project orchestration
-```
-
-## Troubleshooting
-
-### Hooks Not Firing
-
-1. Check hooks are installed: `make hooks-status`
-2. Enable debug logging: `make hooks-debug-on`
-3. Watch logs: `make hooks-logs-follow`
-
-### Frontend Not Updating
-
-1. Check WebSocket connection in browser dev tools (Network > WS)
-2. Verify backend is running: [http://localhost:8000/health](http://localhost:8000/health)
-3. Check browser console for errors
-
-### Backend Errors
-
-1. Check backend logs in tmux window or terminal
-2. Clear database and restart: `make clean-db && make dev`
-
-### Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| "Session already exists" | Run `make dev-tmux-kill` first |
-| Port 8000 in use | Stop other services on that port |
-| Port 3000 in use | Stop other services on that port |
-| Hooks not detected | Restart Claude Code after installing hooks |
-
-## Contributing
-
-Contributions are welcome! Please ensure that all pull requests:
-
-1. Pass all checks: `make checkall`
-2. Follow the existing code style
-3. Include appropriate tests for new features
-4. Update documentation as needed
-
-## Related Documentation
-
-- [Quick Start Guide](docs/guides/quickstart.md) - Get running in under 5 minutes
-- [Architecture](docs/architecture/ARCHITECTURE.md) - System design, data flow, component details
-- [Whiteboard Modes](docs/reference/whiteboard-modes.md) - 12 display modes with keyboard shortcuts
-- [Docker Guide](docs/guides/deployment.md) - Docker deployment and configuration
-- [AI Summary](docs/reference/ai-summary.md) - AI-powered summary service documentation
-- [Backend README](backend/README.md) - Backend-specific setup
-- [Frontend README](frontend/README.md) - Frontend-specific setup
-- [Hooks README](hooks/README.md) - Hook installation details
-- [OpenCode Plugin](opencode-plugin/) - OpenCode integration plugin
-- [Scripts README](scripts/README.md) - Testing and simulation scripts
-- [CLAUDE.md](CLAUDE.md) - AI assistant instructions for this project
-
-## Star History
-
-[![Star History Chart](https://star-history.dera.page/svg?repos=paulrobello/claude-office&type=Date)](https://star-history.dera.page/#paulrobello/claude-office&Date)
+Empezó como una copia de Claude Office Visualizer (Paul Robello, licencia MIT, ver `LICENSE` y `THIRD_PARTY_NOTICES.md`). De aquel proyecto quedan el hook base y partes del backend; la web original se quitó en la etapa 1.4.

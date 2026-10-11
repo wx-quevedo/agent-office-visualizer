@@ -45,10 +45,21 @@ CREATE TABLE IF NOT EXISTS ids_recibidos (
     recibido TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_event_ts ON events (event_ts);
+CREATE TABLE IF NOT EXISTS muestras_tokens (
+    session_id TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    total INTEGER NOT NULL,
+    modelo TEXT
+);
+CREATE INDEX IF NOT EXISTS muestras_tokens_ts ON muestras_tokens (ts, session_id);
 """
 
 _BATCH = 500
 _STOP = object()
+
+
+class _Muestra(tuple[str, str, int, str | None]):
+    """Accumulated output tokens of a session at a time (stage 2.1)."""
 
 
 def _iso(ts: datetime) -> str:
@@ -100,6 +111,74 @@ class AgentEventStore:
         if self._writer is None:
             self.start()
 
+    def append_muestra(
+        self, session_id: str, ts: datetime, total: int, modelo: str | None = None
+    ) -> None:
+        """Queue a token sample (kept so turns and days can be counted after a restart)."""
+        self._queue.put(_Muestra((session_id, _iso(ts), int(total), modelo)))
+        if self._writer is None:
+            self.start()
+
+    def muestras(
+        self, desde: datetime, hasta: datetime
+    ) -> tuple[dict[str, list[tuple[datetime, int]]], dict[str, str]]:
+        """Token samples per session up to ``hasta`` of the sessions with samples
+        between both times, and the last known model of each session."""
+        out: dict[str, list[tuple[datetime, int]]] = {}
+        modelos: dict[str, str] = {}
+        with closing(self._connect()) as conn:
+            filas = conn.execute(
+                "SELECT session_id, ts, total, modelo FROM muestras_tokens"
+                " WHERE ts <= ? AND session_id IN"
+                " (SELECT DISTINCT session_id FROM muestras_tokens WHERE ts >= ? AND ts <= ?)"
+                " ORDER BY session_id, ts",
+                (_iso(hasta), _iso(desde), _iso(hasta)),
+            ).fetchall()
+        for sid, ts, total, modelo in filas:
+            out.setdefault(sid, []).append((datetime.fromisoformat(ts), int(total)))
+            if modelo:
+                modelos[sid] = modelo
+        return out, modelos
+
+    def muestras_sesion(self, session_id: str) -> list[tuple[datetime, int]]:
+        with closing(self._connect()) as conn:
+            filas = conn.execute(
+                "SELECT ts, total FROM muestras_tokens WHERE session_id = ? ORDER BY ts",
+                (session_id,),
+            ).fetchall()
+        return [(datetime.fromisoformat(ts), int(total)) for ts, total in filas]
+
+    def eventos_sesion(self, session_id: str) -> Iterator[tuple[dict[str, Any], str]]:
+        """Every event of one session, in arrival order."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT payload, origin, machine_id FROM events WHERE session_id = ? ORDER BY id",
+                (session_id,),
+            )
+            for payload, origin, machine_id in rows:
+                datos = json.loads(payload)
+                if machine_id and not datos.get("machine_id"):
+                    datos["machine_id"] = machine_id
+                yield datos, origin
+
+    def eventos_de_sesiones(
+        self, desde: datetime, hasta: datetime
+    ) -> Iterator[tuple[dict[str, Any], str]]:
+        """Events up to ``hasta`` of the sessions with events between both times."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT payload, origin, machine_id FROM events"
+                " WHERE event_ts <= ? AND session_id IN ("
+                " SELECT DISTINCT session_id FROM events WHERE event_ts >= ? AND event_ts <= ?)"
+                " ORDER BY id",
+                (_iso(hasta), _iso(desde), _iso(hasta)),
+            )
+            for payload, origin, machine_id in rows:
+                datos = json.loads(payload)
+                if machine_id and not datos.get("machine_id"):
+                    datos["machine_id"] = machine_id
+                yield datos, origin
+
     def flush(self, timeout: float = 10.0) -> None:
         """Wait until every queued event has been written."""
         done = threading.Event()
@@ -118,6 +197,7 @@ class AgentEventStore:
             while True:
                 item = self._queue.get()
                 batch: list[tuple[str | None, ...]] = []
+                muestras: list[_Muestra] = []
                 markers: list[threading.Event] = []
                 stop = False
                 while True:
@@ -125,6 +205,8 @@ class AgentEventStore:
                         stop = True
                     elif isinstance(item, threading.Event):
                         markers.append(item)
+                    elif isinstance(item, _Muestra):
+                        muestras.append(item)
                     else:
                         batch.append(item)  # type: ignore[arg-type]
                     if stop or len(batch) >= _BATCH:
@@ -135,6 +217,17 @@ class AgentEventStore:
                         break
                 if batch:
                     self._write(conn, batch)
+                if muestras:
+                    try:
+                        with conn:
+                            conn.executemany(
+                                "INSERT INTO muestras_tokens (session_id, ts, total, modelo)"
+                                " VALUES (?, ?, ?, ?)",
+                                muestras,
+                            )
+                    except sqlite3.Error:
+                        self.write_errors += 1
+                        logger.exception("Agent event log: could not save token samples")
                 for m in markers:
                     m.set()
                 if stop:
@@ -236,6 +329,7 @@ class AgentEventStore:
         """Retention: drop events received before ``cutoff``."""
         with closing(self._connect()) as conn, conn:
             cur = conn.execute("DELETE FROM events WHERE received_ts < ?", (_iso(cutoff),))
+            conn.execute("DELETE FROM muestras_tokens WHERE ts < ?", (_iso(cutoff),))
             conn.execute("DELETE FROM ids_recibidos WHERE recibido < ?", (_iso(cutoff),))
             return cur.rowcount
 

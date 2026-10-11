@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     STATE_EVENT_LOG_LOAD_HOURS: float = 24
     # Retention of the log, applied on start-up.
     STATE_EVENT_LOG_RETENTION_DAYS: float = 7
+    # Stage 2.1: table of specific waits (pattern ## text ## minutes); empty:
+    # esperas.txt next to the event log (the built-in table if it does not exist).
+    ESPERAS_PATH: str = ""
+    # Stuck detector: same error N times among the last results of the turn,
+    # and minutes working without editing files or committing.
+    ATASCO_ERRORES_REPETIDOS: int = 3
+    ATASCO_VENTANA_ERRORES: int = 8
+    ATASCO_SIN_AVANCE_MIN: float = 30
+    # Days of the usage view (/api/v1/consumo).
+    ZONA_HORARIA: str = "America/Guayaquil"
     # Ended sessions stay listed ("se va") this long; older sessions are dropped.
     STATE_EXIT_VISIBLE_SECONDS: float = 120
     STATE_SESSION_MAX_AGE_HOURS: float = 24

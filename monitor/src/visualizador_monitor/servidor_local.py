@@ -7,6 +7,7 @@
   responde: ``{"esperar": false}`` y el hook sigue sin decisión (diálogo de VS Code).
 - ``GET /api/v1/permisos/solicitudes/{id}?espera=N``: espera larga reenviada al
   servidor. Si no responde: ``{"estado": "sin_conexion"}`` (sin decisión).
+- ``POST /api/v1/limites``: los límites de una cuenta, desde la barra de estado.
 - ``GET /estado``: estado del monitor (para el comando ``estado``).
 
 Solo atiende a quien trae la clave local (``X-API-Key``, archivo
@@ -146,6 +147,17 @@ class _Manejador(BaseHTTPRequestHandler):
                 self._responder(422, {"detail": "JSON inválido"})
                 return
             self._responder(200, app.recibir_evento(payload, cuerpo))
+            return
+        if url.path == "/api/v1/limites":
+            try:
+                datos = json.loads(cuerpo.decode("utf-8"))
+            except ValueError:
+                self._responder(422, {"detail": "JSON inválido"})
+                return
+            if not isinstance(datos, dict):
+                self._responder(422, {"detail": "JSON inválido"})
+                return
+            self._responder(200, app.recibir_limites(cast(dict[str, Any], datos)))
             return
         if url.path == "/api/v1/permisos/solicitudes":
             self._responder(200, app.registrar_permiso(cuerpo))

@@ -198,7 +198,10 @@ def test_reinstalar_tras_cambios_y_desinstalar_conserva_los_cambios(
     # una actualización: los hooks apuntan a la versión nueva (otra carpeta)
     m2 = _instalar(usuario, origen, tmp_path)
     carpetas = [d for d in Path(m2["destino"]).glob("v*") if d.is_dir()]
-    assert carpetas == [Path(m2["exe"]).parent]
+    # la actual y la anterior (las sesiones abiertas todavía la usan)
+    assert len(carpetas) == 2 and Path(m2["exe"]).parent in carpetas
+    _instalar(usuario, origen, tmp_path)
+    assert len([d for d in Path(m2["destino"]).glob("v*") if d.is_dir()]) == 2
     desinstalar(inicio=usuario)
     final = json.loads(ruta.read_text(encoding="utf-8"))
     assert final["model"] == "sonnet"

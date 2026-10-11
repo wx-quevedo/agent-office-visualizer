@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from "react";
 import { API_BASE, apiFetch } from "@/utils/api";
+import { HistorialAgente, SeccionesEtapa2, duracion } from "./etapa2";
 
 const REFRESH_MS = 2000;
 
@@ -39,7 +40,21 @@ interface Agente {
     session_id: string;
     proyecto: string | null;
     cuenta: string | null;
+    modelo?: string | null;
   };
+  espera_detalle: {
+    texto: string;
+    regla: string | null;
+    limite_min: number | null;
+  } | null;
+  atasco: {
+    tipo: string;
+    motivo: string;
+    desde: string;
+    ultimos_intentos: string[];
+    ultimo_error: string | null;
+  } | null;
+  trabajo_continuo_s: number;
   estado: { numero: number; nombre: string; desde: string };
   espera: Espera | null;
   herramienta_actual: string | null;
@@ -118,6 +133,20 @@ function TablaAgente({ a, ahora }: { a: Agente; ahora: string }) {
           <Fila nombre="Sesión">{a.agente.session_id}</Fila>
           <Fila nombre="Proyecto">{valor(a.agente.proyecto)}</Fila>
           <Fila nombre="Cuenta">{valor(a.agente.cuenta)}</Fila>
+          <Fila nombre="Modelo">{valor(a.agente.modelo)}</Fila>
+          <Fila nombre="Espera específica">
+            {a.espera_detalle
+              ? `${a.espera_detalle.texto}${a.espera_detalle.limite_min ? ` (razonable: ${a.espera_detalle.limite_min} min)` : ""}`
+              : "—"}
+          </Fila>
+          <Fila nombre="Atascado">
+            {a.atasco
+              ? `${a.atasco.motivo} — desde ${hora(a.atasco.desde)}; últimos intentos: ${a.atasco.ultimos_intentos.join(" | ") || "—"}`
+              : "no"}
+          </Fila>
+          <Fila nombre="Trabajo continuo">
+            {a.trabajo_continuo_s ? duracion(a.trabajo_continuo_s) : "—"}
+          </Fila>
           <Fila nombre="Estado">
             {a.estado.numero}. {a.estado.nombre}
           </Fila>
@@ -158,6 +187,7 @@ function TablaAgente({ a, ahora }: { a: Agente; ahora: string }) {
           ))}
         </tbody>
       </table>
+      <HistorialAgente sesion={a.agente.session_id} />
       <h3>Últimos {a.eventos_recientes.length} eventos en bruto</h3>
       <table border={1} cellPadding={4}>
         <thead>
@@ -265,6 +295,7 @@ export default function DatosPage() {
               </Fila>
             </tbody>
           </table>
+          <SeccionesEtapa2 />
           <h2>Agentes activos: {datos.agentes.length}</h2>
           {datos.agentes.map((a) => (
             <TablaAgente

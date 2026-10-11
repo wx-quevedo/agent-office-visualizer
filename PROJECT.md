@@ -124,7 +124,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Etapa 1.2: monitor de máquina (`monitor/`) con API local en 127.0.0.1:8765, cola SQLite sin conexión (orden, reintentos progresivos, id de evento sin duplicados), permisos reenviados (sin servidor: sin decisión al instante), lecturas de transcripciones y procesos, latido, comandos `estado`, `registro` y `reiniciar`, e instalador `.exe` de Windows (respaldo y cambio solo de las entradas de `claude-office-hook`, arranque oculto con tarea programada, desinstalación que deja todo como estaba). Comandos peligrosos siempre con aprobación, también en modo Auto. El backend recibe las observaciones de cada monitor y, con `LECTURA_LOCAL=false`, no lee nada de la máquina. Probado de punta a punta contra el backend de desarrollo con acceso activado y una carpeta de usuario simulada. Commit `ac72de4` |
 | 2026-10-11 | Etapa 1.3: la oficina publicada en https://agents.example.com (VPS de the VPS provider): backend como servicio systemd con usuario sin privilegios en 127.0.0.1:8320 (acceso activado, `LECTURA_LOCAL=false`, secreto generado en el servidor), frontend estático servido por nginx, `/api` y `/ws` al backend, certificado de Let's Encrypt con renovación automática, respaldos diarios con 14 días y restauración probada, despliegue repetible desde la PC y script de estado. Los otros 12 sitios del VPS responden igual que antes. El WebSocket sin sesión ahora cierra con 4401 detrás de nginx (antes rechazaba con 403). Nuevos comandos peligrosos: `git checkout -- .`, `git restore .`, `git branch -D` y `TRUNCATE TABLE`. Instalador del monitor: dos instalaciones en el mismo segundo ya no pisan el respaldo original de `settings.json`. Commits `8ef06b5` y `67eed31` (prueba de caída con `kill -9` al proceso principal) |
 | 2026-10-11 | Etapa 1.3 cerrada en el VPS: Washington ejecutó la instalación del sistema, fijó la contraseña de la oficina y corrió el respaldo con restauración en una copia y la prueba de caída (`kill -9`): todo correcto (detalle en "Resultado de los comandos de Washington"). Commit `53c1976` |
-| 2026-10-11 | Etapa 1.4 cerrada: Washington creó el token de la Alienware e instaló el monitor el 2026-10-11 a las 08:30 (hora de Ecuador); primera conexión correcta con https://agents.example.com y cola en 0. Se quitó la web original de ClaudeOffice Visualizer (frontend, pipeline clásico del backend, dependencias y pruebas): `/` abre la oficina 3D y el sitio se llama "Oficina de agentes". CSP más estricta (sin wasm, workers ni WebSocket). La diaria local quedó detenida y sin arranque automático (carpeta y datos conservados como respaldo). El export copia las cargas RSC con el nombre plano que pide Next 16 (`frontend/scripts/rsc-planos.mjs`): sin 404 al precargar ni recarga completa con `router.replace`. Capturas en `docs/capturas/etapa-1-4/` (PC 1440 y celular 390, con y sin sesión). Commits `f2842d5` y `7dabd9b` |
+| 2026-10-11 | Etapa 1.4 cerrada: Washington creó el token de la Alienware e instaló el monitor el 2026-10-11 a las 08:30 (hora de Ecuador); primera conexión correcta con https://agents.example.com y cola en 0. Se quitó la web original de ClaudeOffice Visualizer (frontend, pipeline clásico del backend, dependencias y pruebas): `/` abre la oficina 3D y el sitio se llama "Oficina de agentes". CSP más estricta (sin wasm, workers ni WebSocket). La diaria local quedó detenida y sin arranque automático (carpeta y datos conservados como respaldo). El export copia las cargas RSC con el nombre plano que pide Next 16 (`frontend/scripts/rsc-planos.mjs`): sin 404 al precargar ni recarga completa con `router.replace`. Capturas en `docs/capturas/etapa-1-4/` (PC 1440 y celular 390, con y sin sesión). Commits `f2842d5`, `7dabd9b` y `1d686fb` (en GitHub) |
+| 2026-10-11 | Etapa 2.1 (Prompt 26), datos para ver bien: esperas específicas con tabla editable, historial por turno (endpoint paginado), tokens y tiempo por turno, sesión y día (por cuenta y modelo, con trabajo continuo), límites de 5 h y semanal desde la barra de estado de Claude Code, detector de atascos y "Dónde quedamos" (el monitor lee el PROJECT.md de cada proyecto). Todo visible en `/datos` sin rediseño. Monitor 0.2.0 con `statusline` y `--actualizar` (conserva la versión anterior para las sesiones de Claude Code ya abiertas). README nuevo en español en lugar de la documentación heredada. Revisión independiente de las reglas de esperas y del detector, con correcciones |
 
 ## Cómo levantar
 
@@ -403,6 +404,93 @@ Un subagente revisó el monitor, el instalador, el hook y el backend (seguridad 
 
 Contra el backend de desarrollo (8100) con `VISUALIZADOR_AUTH=activado`, una base de acceso temporal y un token de prueba de la máquina `prueba-pc`, con el instalador empaquetado en una carpeta de usuario simulada (copias de los `settings.json`, tarea "Visualizador monitor (prueba)", puerto 8766): los eventos llegan con la máquina `prueba-pc`; con el servidor cortado la cola guardó 5 eventos y al volver los mandó en orden, una vez cada uno (un reenvío con el mismo id respondió "duplicado"); un permiso aprobado desde la oficina llegó al hook en 0,4 s; con el servidor caído el hook terminó sin decisión en 1,2 s; la API local respondió 403 sin la clave o desde un navegador; tras matar el monitor, la tarea lo volvió a arrancar con los 4 pendientes y los entregó; tokens y contexto leídos por el monitor aparecen en el panel; en modo Auto un `claude -p` real con `rm -rf` quedó rechazado por el hook y la carpeta siguió intacta. La desinstalación dejó los `settings.json` simulados idénticos byte a byte. La configuración real de Washington no se tocó.
 
+## Ver bien: datos (etapa 2.1)
+
+Solo datos y API; la ficha del agente y "Dónde quedamos" se diseñan aparte (Prompts 27 y 28). Para comprobarlos, `/datos` los muestra en bruto.
+
+**Esperas específicas** (`backend/app/core/esperas.py`). Describen la tarea en curso de cada agente en una frase con el tiempo transcurrido.
+- **Ejemplos:** "Instalando dependencias (npm), 40 s", "Corriendo pruebas (pytest), 3 min", "Unity: compilando scripts, 2 min", "Blender: render, 10 min", "Esperando tu permiso, 1 min", "Esperando tu respuesta", "Subagente: Revisar el código", "Navegador: navigate".
+- **Sujeto que se compara:**
+  - Bash/PowerShell: el comando, sin los mensajes de commit ni los cuerpos de heredoc.
+  - MCP: `mcp:servidor:herramienta`; los plugins `plugin_<p>_<s>` quedan como `<s>`.
+  - Subagente: su descripción.
+  - Otras herramientas: `herramienta:nombre:detalle`.
+- **Posición de comando:** las reglas de comandos solo coinciden donde empieza un comando, con prefijos como `npx`, `uv run`, `python -m`, `sudo` o la ruta del ejecutable. Así `grep pytest docs/` no cuenta como pruebas.
+- **Sin regla:** el ejecutable y el tiempo ("Ejecutando python informe.py, 2 min"). `cd` y `export` se saltan.
+- **Tabla de reglas:** patrón, texto y minutos razonables, el tiempo que usa el detector de atascos. Los servidores y `tail -f` no tienen límite.
+- **Tabla editable:** `esperas.txt` junto al registro del motor (en el VPS, `/var/lib/visualizador-agentes/datos/esperas.txt`; se crea con su explicación y ejemplos). Formato: `patrón ## texto ## minutos`. Sus reglas van antes que las de fábrica y se releen solas.
+
+**Historial por turno** (`historial.py`, `GET /api/v1/agents/{sesión}/historial?pagina=1&por_pagina=20`, del más reciente).
+- **Turno:** empieza con el pedido de Washington, resumido a una línea. Los mensajes de subagentes salen como "(mensaje de un subagente)".
+- **Contenido:** herramientas usadas, archivos editados, commits detectados con su mensaje (`-m`, `-am`, heredoc), errores, duración y tokens de salida.
+- **Cómo terminó:**
+  - `completado`;
+  - `esperando`: terminó preguntando, o espera permiso o respuesta;
+  - `interrumpido`: llegó otro pedido o se cerró sin `Stop`;
+  - `error`;
+  - `en_curso`.
+- **Sesiones viejas:** las que ya no están en memoria se arman desde el registro del motor (7 días).
+
+**Tokens y tiempo** (`consumo.py`, `GET /api/v1/consumo?dia=AAAA-MM-DD`, hasta 31 días atrás, días en `ZONA_HORARIA`=America/Guayaquil).
+- **Tokens:** de salida, acumulados por sesión. Las muestras ahora se guardan en el registro del motor (tabla `muestras_tokens`, con el modelo), así que sirven después de un reinicio. Los turnos anteriores al 2026-10-11 a las 15:19 UTC no tienen tokens.
+- **Tiempo de trabajo:** la suma de los turnos.
+- **Continuo:** el tramo actual de turnos seguidos, con pausas de hasta 5 min.
+- **Total del día:** sumando agentes y "con al menos un agente trabajando" (sin contar dos veces).
+- Separado por cuenta (personal y Demo Org) y por modelo. El agente también lleva su `modelo` y `trabajo_continuo_s` en `/agents/state`.
+
+**Límites de 5 h y semanal** (investigación en la documentación oficial, 2026-10-11).
+- **Lo único documentado y confiable:** el objeto `rate_limits` que Claude Code le pasa por la entrada estándar al comando de la barra de estado (https://code.claude.com/docs/en/statusline).
+  - Trae `rate_limits.five_hour.used_percentage` y `rate_limits.seven_day.used_percentage` (0 a 100) y `resets_at` (segundos Unix).
+  - Solo existe para Pro y Max y después de la primera respuesta de cada sesión; cada ventana puede faltar.
+- **Lo que no hay:**
+  - `/usage` es una pantalla interactiva, sin salida para programas.
+  - Los hooks no traen límites, ni tampoco OpenTelemetry (la documentación lo dice explícitamente).
+  - No hay una API documentada para los límites de la suscripción; la que usa `/usage` es interna y no se usa.
+- **Cómo se capturan:**
+  - El monitor 0.2.0 trae `"<monitor>" statusline`: lee ese JSON, pasa la cuenta (`CLAUDE_CONFIG_DIR` o la carpeta `.claude*` de la transcripción), las dos ventanas y el modelo, y escribe la línea de la barra: `Opus · 5 h: 23 % (15:45) · semana: 41 % (lun 00:00)`.
+  - El instalador la configura en cada cuenta solo si no tiene una barra propia (hoy ninguna de las dos tiene) y la quita al desinstalar.
+  - El monitor envía los límites al servidor (`POST /api/v1/maquinas/limites`; lectura: `GET /api/v1/limites`). Cada cuenta lleva "lo último visto", y una ventana cuyo reinicio ya pasó se marca como dato viejo.
+- **Alternativa si algún día no alcanza:** calcular solo tokens y tiempo propios (ya está) y mostrarlo como consumo, nunca como porcentaje del plan.
+
+**Detector de atascos** (`atascos.py`; corre solo en estados de trabajo). Marca cuatro casos:
+- **Una herramienta excede su tiempo razonable** (el de su regla de esperas). No cuentan las de segundo plano, las rápidas como Read o Edit (sería un evento perdido) ni la espera de tu permiso o tu respuesta.
+- **El mismo error se repite** 3 veces entre los últimos 8 resultados del turno, y la última herramienta sigue fallando. El mensaje se normaliza: sin "Exit code N", números, rutas ni ids, y por programa. Las interrupciones no cuentan.
+- **Trabaja 30 min sin avances.**
+  - Avance es editar archivos (también `Set-Content`, `sed -i`, redirecciones o ediciones por MCP de Unity y Blender) o hacer un commit.
+  - La ventana empieza después de la última herramienta larga.
+  - Con un turno de pura lectura o investigación, el umbral es 45 min.
+- **Trabajo después de un `Stop` sin pedido nuevo:** también se revisa (por ejemplo, cuando termina una tarea de fondo).
+
+Junto al motivo se guardan los últimos 3 intentos y el último error. Los umbrales se configuran con `ATASCO_ERRORES_REPETIDOS`, `ATASCO_VENTANA_ERRORES` y `ATASCO_SIN_AVANCE_MIN`; los tiempos por tipo, en la tabla de esperas.
+
+**"Dónde quedamos"** (`monitor/src/visualizador_monitor/proyecto_md.py`; `POST /api/v1/maquinas/proyectos`, lectura `GET /api/v1/proyectos`).
+- **Lectura:** el monitor lee el PROJECT.md de cada carpeta donde trabajó un agente en las últimas 24 h, con una lectura tolerante a formatos (español o inglés, listas, casillas, subtítulos).
+- **Contenido:** título, plan (hecho, en curso o pendiente), posición actual, siguiente paso, lo que espera decisión y el último commit (`git log`, o el registro del archivo).
+- **Envío:** solo si cambió o cada 10 min. Rutas de red rechazadas sin tocar el disco; archivos de hasta 1 MB.
+- El servidor le suma lo último que hizo un agente en esa carpeta (estado, espera y último turno). Si no hay PROJECT.md, se indica.
+
+**Documentación:**
+- El README es nuevo, corto y en español.
+- Se quitaron la documentación heredada (arquitectura, guías, referencias, auditorías, CONTRIBUTING, CHANGELOG) y los README de `backend`, `frontend` y `scripts`.
+- Se conservan `LICENSE` (MIT del proyecto original), `THIRD_PARTY_NOTICES.md`, `docs/proyecto`, `docs/research` y las capturas.
+
+**Revisión independiente (2026-10-11).** Un subagente revisó las reglas de esperas y el detector. Se corrigió todo lo que encontró:
+- todos los fallos de Bash se contaban como "el mismo error" (empiezan con "Exit code N");
+- esperar al usuario se marcaba como herramienta larga;
+- el turno no se revisaba después de un `Stop` sin pedido nuevo;
+- las interrupciones contaban como error;
+- palabras dentro de mensajes de commit, greps o rutas le ganaban al comando real (`git commit -m "push fix"` salía como "git push");
+- `echo ... git commit` contaba como commit;
+- faltaban escrituras por terminal y por MCP como avance;
+- la regla de "sin avances" se apagaba y prendía con cada herramienta corta;
+- el subagente sin descripción tenía 10 min;
+- unidades de `sleep`, plugins MCP, servidores y `tail -f` sin límite;
+- "Ejecutando cd";
+- tiempos razonables más holgados (commit y push, 10 min; descargas, 15; subagente, 60);
+- rendimiento: el tiempo continuo no recorre los tokens, y las horas de las muestras se arman una vez.
+
+Con datos reales, después aparecieron dos defectos más que también se corrigieron: los mensajes de subagentes como pedido y los "commits" detectados dentro del código de un heredoc.
+
 ## Limpieza de la web original (etapa 1.4)
 
 Decisión de Washington (2026-10-11): la web original de ClaudeOffice Visualizer ya no existe en el proyecto; solo queda lo construido aquí. Inventario hecho con un grafo de imports desde las rutas que se conservan (`/oficina`, `/oficina/3d`, `/datos`, `/entrar` y el layout raíz): 72 de 233 archivos del frontend las usan.
@@ -654,7 +742,12 @@ Decisión de Washington (2026-10-10).
 - **Función 52 (más adelante)**: instalador profesional del monitor con interfaz visual, vinculación desde la web sin escribir URL ni token (por ejemplo un código o enlace de un solo uso que la oficina genera para la máquina) y detección automática de cuentas de Claude Code.
 - **Etapa 1.3** (hecha el 2026-10-11): publicada en https://agents.example.com; nginx sirve el frontend estático y reenvía `/api` y `/ws` al backend (sección "VPS y despliegue").
 - **Etapa 1, publicar**: backend para varias máquinas con inicio de sesión y token por monitor; monitor e instalador de Windows (recibe los hooks, lee transcripts, cola sin conexión, arranque automático, recuperación tras reinicio, comandos peligrosos siempre con aprobación); despliegue en el VPS con nginx, https y respaldos diarios; pasar el uso diario al VPS. El monitor debe diseñarse para que más adelante pueda lanzar sesiones de Claude Code (`claude -p` con stream-json y `--resume`) en carpetas que se le indiquen.
-- **Etapa 2, ver bien**: ficha útil del agente (no chat): tarea actual, pasos, estimado contra real, tokens, commits, archivos, permisos y acciones; esperas específicas (por ejemplo "Unity: compilando scripts, 2 min"); historial preciso; tokens, tiempo de trabajo y límites de 5 h y semanal; detector de atascos.
+- **Etapa 2, ver bien**, en 4 prompts:
+  - 26: datos y API: esperas, historial, consumo, límites, atascos, "Dónde quedamos" (hecho el 2026-10-11).
+  - 27: bocetos de la ficha del agente y de "Dónde quedamos", hechos en Claude.ai para su aprobación.
+  - 28: ficha del agente y "Dónde quedamos" en la oficina.
+  - 29: avisos resumidos con un agente auxiliar.
+  - Alcance: ficha útil del agente (no chat): tarea actual, pasos, estimado contra real, tokens, commits, archivos, permisos y acciones; esperas específicas (por ejemplo "Unity: compilando scripts, 2 min"); historial preciso; tokens, tiempo de trabajo y límites de 5 h y semanal; detector de atascos.
 - **Etapa 3, app iOS**: bocetos para aprobación, base que consume el VPS, push de tres alertas (permiso pendiente, pregunta del orquestador, tarea terminada), bandeja de decisiones, bandeja de ideas, widget, Live Activity y Apple Watch.
 - **Etapa 4, proyectos y orquestador**: crear proyecto desde la web o la app en la ruta base de cada máquina (`E:\Agents` en la Alienware) eligiendo máquina, cuenta (personal o Demo Org), personaje, modelo y esfuerzo (low a max); rol orquestador (planifica, conversa con Washington, puede ejecutar comandos en PowerShell y Git Bash, instalar skills y conectores MCP y controlar programas como Blender) con uno o varios agentes de código enlazados, cada uno en su carpeta y con subagentes; todo pasa por el orquestador salvo los permisos; Washington aprueba cada orden del orquestador al agente (luego interruptor automático por proyecto); chat propio con cada agente; reglas de la casa heredadas por todos los orquestadores; plantillas de proyecto; entrevista inicial; bóveda de secretos.
 - **Etapa 5, pipeline y aprendizaje**: proyecto como bloques y subbloques al estilo GitHub Actions (cada uno se abre como consola), imprevistos como bloques nuevos, estimación total y por bloque con fechas reales, resumen por paso y modo auditoría; estimaciones del orquestador y del agente comparadas con lo real, con explicación de desvíos para aprender; revisor independiente; puntos de control con etiqueta git; retrospectiva; integración con GitHub (commits y Actions); galería (imágenes, videos, capturas automáticas; archivos no visualizables como APK solo como ícono); relevo de agentes cuando el contexto se llena.
@@ -676,5 +769,7 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Etapa 2, ver bien: ficha útil del agente (tarea actual, pasos, estimado contra real, tokens, commits, archivos, permisos y acciones), esperas específicas, historial preciso, tokens y tiempo de trabajo con los límites de 5 h y semanal, detector de atascos.
-2. Vigilar el disco del VPS (85 % usado).
+1. Washington actualiza el monitor de la Alienware a la 0.2.0 (`instalar-visualizador-monitor.exe --actualizar`): trae la barra de estado con los límites y "Dónde quedamos".
+2. Prompt 27: bocetos de la ficha del agente y de "Dónde quedamos" en Claude.ai, para aprobar.
+3. Prompt 28: ficha del agente y "Dónde quedamos" en la oficina, con los datos de la etapa 2.1.
+4. Vigilar el disco del VPS (85 % usado).

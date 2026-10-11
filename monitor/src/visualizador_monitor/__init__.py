@@ -11,4 +11,4 @@ try:
 
     VERSION = _version("visualizador-monitor")
 except Exception:  # empaquetado sin metadatos
-    VERSION = "0.1.0"
+    VERSION = "0.2.0"

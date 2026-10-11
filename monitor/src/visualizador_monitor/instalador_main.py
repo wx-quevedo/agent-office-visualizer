@@ -2,6 +2,7 @@
 
     instalar-visualizador-monitor.exe                 # instala (pide servidor y token)
     instalar-visualizador-monitor.exe --desinstalar   # deja todo como estaba
+    instalar-visualizador-monitor.exe --actualizar    # versión nueva, mismo token y servidor
 
 Opciones para pruebas (no tocan la configuración real): --inicio (carpeta de
 usuario simulada), --destino, --sin-tarea, --servidor, --token-archivo.
@@ -36,6 +37,11 @@ def _origen_empaquetado(tmp: Path) -> Path:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="instalar-visualizador-monitor")
     p.add_argument("--desinstalar", action="store_true")
+    p.add_argument(
+        "--actualizar",
+        action="store_true",
+        help="versión nueva conservando servidor, token y puerto de la instalación actual",
+    )
     p.add_argument("--servidor")
     p.add_argument("--token-archivo", help="archivo con el token (si no, se pide sin eco)")
     p.add_argument("--puerto", type=int, default=config.PUERTO_POR_DEFECTO)
@@ -69,14 +75,26 @@ def main(argv: list[str] | None = None) -> int:
         print("Listo: monitor desinstalado.")
         return 0
 
-    servidor = (
-        a.servidor or input("Dirección del servidor (https://agents.example.com): ")
-    ).strip()
-    servidor = servidor or "https://agents.example.com"
-    if a.token_archivo:
-        token = Path(a.token_archivo).read_text(encoding="utf-8").strip()
+    puerto = a.puerto
+    if a.actualizar:
+        actual = config.cargar(inicio / ".visualizador-monitor")
+        if not actual.servidor or not actual.token:
+            print(
+                "No hay una instalación con servidor y token en esta cuenta:"
+                " instala sin --actualizar."
+            )
+            return 1
+        servidor, token, puerto = actual.servidor, actual.token, actual.puerto
+        print(f"Actualizando: se conservan el servidor {servidor}, el token y el puerto {puerto}.")
     else:
-        token = getpass.getpass("Token de esta máquina (vam_..., no se muestra): ").strip()
+        servidor = (
+            a.servidor or input("Dirección del servidor (https://agents.example.com): ")
+        ).strip()
+        servidor = servidor or "https://agents.example.com"
+        if a.token_archivo:
+            token = Path(a.token_archivo).read_text(encoding="utf-8").strip()
+        else:
+            token = getpass.getpass("Token de esta máquina (vam_..., no se muestra): ").strip()
     cuentas = config.cuentas_detectadas(inicio)
     print("Cuentas de Claude Code encontradas:")
     for c in cuentas:
@@ -95,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
                 origen=origen,
                 destino=destino,
                 inicio=inicio,
-                puerto=a.puerto,
+                puerto=puerto,
                 tarea=not a.sin_tarea,
                 nombre_tarea=a.nombre_tarea,
             )

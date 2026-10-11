@@ -21,8 +21,13 @@ import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, cast
 
+from app.core import atascos as _atascos
+from app.core import consumo as _consumo
+from app.core import esperas as _esperas
+from app.core import historial as _historial
 from app.core import token_tracker as _token_tracker
 from app.core.agent_event_store import AgentEventStore
 from app.core.transcript_tail import (
@@ -36,7 +41,7 @@ from app.core.transcript_tail import (
     turn_progress,
     user_text_near,
 )
-from app.models.events import AnyEvent, EventType
+from app.models.events import AnyEvent, EventAdapter, EventType
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +72,9 @@ STATE_NAMES: dict[int, str] = {
     20: "Regresa al trabajo",
     21: "Cerrado",
 }
+
+# States where the agent is working (the stuck detector runs only in these).
+_ESTADOS_DE_TRABAJO = frozenset({2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 16, 17, 20})
 
 # Waiting kind for each waiting state.
 WAIT_BY_STATE: dict[int, str] = {
@@ -267,6 +275,9 @@ class Record:
     # Claude Code process that owns the session (hook >= this project).
     claude_pid: int | None = None
     claude_pid_created: float | None = None
+    # Stage 2.1: what the tool is for (Bash description, subagent task) and the
+    # tool result error text (to detect the same error repeated).
+    descripcion: str | None = None
 
     @property
     def is_main(self) -> bool:
@@ -330,7 +341,17 @@ def record_from_event(event: AnyEvent, seq: int) -> Record:
         claude_pid=d.claude_pid,
         claude_pid_created=d.claude_pid_created,
         prompt_pending=bool(raw_prompt) and prompt is None,
+        descripcion=_descripcion(tool_input),
     )
+
+
+def _descripcion(tool_input: dict[str, Any]) -> str | None:
+    """Short purpose of a tool call: Bash "description" or the subagent's task."""
+    for clave in ("description", "subagent_type"):
+        valor = tool_input.get(clave)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip()[:200]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +644,8 @@ class SessionLog:
     token_problem: str | None = None
     context_tokens: int | None = None
     context_window: int = 200_000
+    # Stage 2.1: model of the session (from its monitor or the local transcript).
+    modelo: str | None = None
     token_file_size: int = -1
     # Set when the registered Claude Code process is found gone.
     closed_process_at: datetime | None = None
@@ -907,6 +930,9 @@ class AgentStateEngine:
         self._last_process_check: datetime | None = None
         self.sessions: dict[str, SessionLog] = {}
         self.started_at = self.clock()
+        # Stage 2.1: table of specific waits and thresholds of the stuck detector.
+        self.ruta_esperas: Path | None = None
+        self.umbrales_atasco = _atascos.Umbrales()
         self._seq = 0
         self._browsers = 0
         self._last_browser_seen: datetime | None = None
@@ -1019,6 +1045,7 @@ class AgentStateEngine:
             self._scan_totals(log, path, ts)
             model = usage.get("model")
             if isinstance(model, str):
+                log.modelo = model
                 log.context_window = _token_tracker._context_window_for_model(model)  # pyright: ignore[reportPrivateUsage]
         if total is None:
             return
@@ -1026,6 +1053,16 @@ class AgentStateEngine:
             log.token_samples.append((ts, total))
         log.context_tokens = total
         log.token_problem = None
+
+    def _muestra(self, log: SessionLog, ts: datetime, total: int) -> None:
+        """New accumulated output tokens of a session: in memory and, if it changed, in the log."""
+        anterior = log.totals_samples[-1][1] if log.totals_samples else None
+        log.totals_samples.append((ts, total))
+        if self.store is not None and total != anterior:
+            try:
+                self.store.append_muestra(log.session_id, ts, total, log.modelo)
+            except Exception:
+                logger.exception("Could not queue a token sample of %s", log.session_id)
 
     def _scan_totals(self, log: SessionLog, path: Any, ts: datetime) -> None:
         """Update the accumulated tokens of the transcript in a background thread.
@@ -1050,7 +1087,7 @@ class AgentStateEngine:
         def run() -> None:
             try:
                 value = totals.scan()
-                log.totals_samples.append((self.clock(), value))
+                self._muestra(log, self.clock(), value)
             except Exception:
                 logger.exception("Could not read token totals of %s", log.session_id)
             finally:
@@ -1248,7 +1285,7 @@ class AgentStateEngine:
                 log.totals = _TotalesRemotos(total)  # type: ignore[assignment]
                 log.totals_samples.clear()
             log.totals.total = total  # type: ignore[union-attr]
-            log.totals_samples.append((now, total))
+            self._muestra(log, now, total)
             del log.totals_samples[:-500]
             log.token_problem = None
         contexto = obs.get("contexto_tokens")
@@ -1259,6 +1296,7 @@ class AgentStateEngine:
             log.token_problem = None
         modelo = obs.get("modelo")
         if isinstance(modelo, str) and modelo:
+            log.modelo = modelo
             log.context_window = _token_tracker._context_window_for_model(modelo)  # pyright: ignore[reportPrivateUsage]
         texto = obs.get("ultimo_texto_asistente")
         if isinstance(texto, str) and texto:
@@ -1394,6 +1432,146 @@ class AgentStateEngine:
         }
         return self._snapshot
 
+    # -- Stage 2.1: specific waits, stuck detector, history, usage ------------
+
+    def _reglas_esperas(self) -> list[_esperas.Regla]:
+        return _esperas.cargar_reglas(self.ruta_esperas)
+
+    def _describir(self, rec: Record, now: datetime) -> dict[str, Any]:
+        segundos = (now - rec.ts).total_seconds()
+        if rec.event_type == EventType.SUBAGENT_START:
+            return _esperas.describir(
+                "Task", None, rec.descripcion or rec.text, segundos, self._reglas_esperas()
+            )
+        return _esperas.describir(
+            rec.tool_name, rec.command, rec.descripcion, segundos, self._reglas_esperas()
+        )
+
+    def _espera_detalle(
+        self, dv: _Derived, st: StateResult, now: datetime, subagents: dict[str, Record]
+    ) -> dict[str, Any] | None:
+        """The current wait or long task in one short sentence with its time."""
+        if st.number == 13:
+            return _esperas.espera_fija("Esperando tu permiso", (now - st.since).total_seconds())
+        if st.number == 14:
+            return _esperas.espera_fija("Esperando tu respuesta", (now - st.since).total_seconds())
+        current = _latest(dv.pending_tools)
+        if current is not None:
+            return self._describir(current, now)
+        if subagents:
+            return self._describir(max(subagents.values(), key=Record.sort_key), now)
+        return None
+
+    def _atasco(self, log: SessionLog, st: StateResult, now: datetime) -> dict[str, Any] | None:
+        # Only while working: a turn that ended (also by reconciliation with the
+        # transcript), an idle or resting agent, or a wait for the user is not stuck.
+        if st.number not in _ESTADOS_DE_TRABAJO:
+            return None
+        dv = log.derived
+
+        def limite(rec: Record) -> tuple[float | None, str]:
+            d = self._describir(rec, now)
+            limite_min = d["limite_min"]
+            return (
+                float(limite_min) if isinstance(limite_min, (int, float)) else None,
+                str(d["base"]),
+            )
+
+        return _atascos.detectar(
+            log.records,
+            list(dv.pending_tools.values()),
+            now,
+            st.number in (13, 14),
+            limite,
+            self.umbrales_atasco,
+        )
+
+    def _muestras(self, log: SessionLog) -> list[tuple[datetime, int]]:
+        if self.store is not None:
+            try:
+                guardadas = self.store.muestras_sesion(log.session_id)
+                if guardadas:
+                    return guardadas
+            except Exception:
+                logger.exception("Could not read the token samples of %s", log.session_id)
+        return sorted(log.totals_samples)
+
+    def historial(
+        self, session_id: str, pagina: int = 1, por_pagina: int = 20
+    ) -> dict[str, Any] | None:
+        """Turns of a session (newest first), from memory or from the event log."""
+        now = self.clock()
+        log = self.sessions.get(session_id)
+        if log is None and self.store is not None:
+            temporal = AgentStateEngine(lectura_local=False, clock=self.clock)
+            for payload, origin in self.store.eventos_sesion(session_id):
+                try:
+                    temporal.ingest(EventAdapter.validate_python(payload), origin)
+                except ValueError:
+                    continue
+            log = temporal.sessions.get(session_id)
+        if log is None:
+            return None
+        esperando = False
+        if self.sessions.get(session_id) is log and closure_of(log, now, self.th) is None:
+            st = self._state_with_memory(log, self.presence(now), now)
+            esperando = st.number in (13, 14)
+        lista = _historial.turnos(log.records, self._muestras(log), now, esperando)
+        return {
+            "session_id": session_id,
+            "proyecto": log.project,
+            "cuenta": account_for_transcript(log.transcript_path),
+            "modelo": log.modelo,
+            "maquina": log.machine_id,
+            **_historial.pagina(lista, pagina, por_pagina),
+        }
+
+    def consumo(self, desde: datetime, hasta: datetime) -> dict[str, Any]:
+        """Tokens and work time of a day (``desde``-``hasta``), by session, account and model."""
+        now = self.clock()
+        logs: dict[str, SessionLog] = {}
+        if self.store is not None and desde < now - timedelta(hours=self._horas_cargadas()):
+            temporal = AgentStateEngine(lectura_local=False, clock=self.clock)
+            for payload, origin in self.store.eventos_de_sesiones(desde, hasta):
+                try:
+                    temporal.ingest(EventAdapter.validate_python(payload), origin)
+                except ValueError:
+                    continue
+            logs = temporal.sessions
+        else:
+            logs = self.sessions
+        muestras: dict[str, list[tuple[datetime, int]]] = {}
+        modelos: dict[str, str] = {}
+        if self.store is not None:
+            try:
+                muestras, modelos = self.store.muestras(desde, hasta)
+            except Exception:
+                logger.exception("Could not read the token samples")
+        presence = self.presence(now)
+        sesiones: list[dict[str, Any]] = []
+        for sid, log in logs.items():
+            esperando = False
+            if logs is self.sessions and closure_of(log, now, self.th) is None:
+                esperando = self._state_with_memory(log, presence, now).number in (13, 14)
+            sesiones.append(
+                {
+                    "session_id": sid,
+                    "proyecto": log.project,
+                    "cuenta": account_for_transcript(log.transcript_path),
+                    "modelo": log.modelo or modelos.get(sid),
+                    "maquina": log.machine_id,
+                    "records": log.records,
+                    "muestras": muestras.get(sid) or sorted(log.totals_samples),
+                    "esperando": esperando,
+                }
+            )
+        return _consumo.del_dia(sesiones, desde, hasta, now)
+
+    def _horas_cargadas(self) -> float:
+        from app.config import get_settings
+
+        return float(get_settings().STATE_EVENT_LOG_LOAD_HOURS)
+
     def snapshot(self) -> dict[str, Any]:
         return self.tick()
 
@@ -1478,13 +1656,29 @@ class AgentStateEngine:
             current_tool = None
             subagents = {}
         last = dv.last_record
+        # Stage 2.1: the wait or long task in one sentence, the stuck detector
+        # and the current stretch of continuous work.
+        espera_detalle = None
+        atasco = None
+        continuo_s = 0
+        if closure is None:
+            espera_detalle = self._espera_detalle(dv, st, now, subagents)
+            atasco = self._atasco(log, st, now)
+            continuo_s = _consumo.continuo(
+                _historial.turnos(log.records, [], now, st.number in (13, 14)),
+                now,
+            )
         return {
             "agente": {
                 "session_id": log.session_id,
                 "proyecto": log.project,
                 "cuenta": account_for_transcript(log.transcript_path),
                 "maquina": log.machine_id,
+                "modelo": log.modelo,
             },
+            "espera_detalle": espera_detalle,
+            "atasco": atasco,
+            "trabajo_continuo_s": continuo_s,
             "estado": {
                 "numero": st.number,
                 "nombre": STATE_NAMES[st.number],
@@ -1673,6 +1867,15 @@ def get_state_engine() -> AgentStateEngine:
             store=store,
             lectura_local=s.LECTURA_LOCAL,
             maquina_local=s.MAQUINA_LOCAL_ID,
+        )
+        _engine.ruta_esperas = (
+            Path(s.ESPERAS_PATH) if s.ESPERAS_PATH else default_store_path().parent / "esperas.txt"
+        )
+        _esperas.crear_archivo(_engine.ruta_esperas)
+        _engine.umbrales_atasco = _atascos.Umbrales(
+            errores_repetidos=s.ATASCO_ERRORES_REPETIDOS,
+            ventana_errores=s.ATASCO_VENTANA_ERRORES,
+            sin_avance_min=s.ATASCO_SIN_AVANCE_MIN,
         )
     return _engine
 

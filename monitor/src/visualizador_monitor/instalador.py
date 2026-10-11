@@ -116,10 +116,55 @@ def cambiar_hooks(settings: dict[str, Any], exe: Path) -> list[dict[str, Any]]:
     return cambios
 
 
+def comando_statusline(exe: Path) -> str:
+    return f'"{exe.as_posix()}" statusline'
+
+
+def _es_statusline_nuestra(comando: object) -> bool:
+    return (
+        isinstance(comando, str) and "visualizador-monitor" in comando and "statusline" in comando
+    )
+
+
+def cambiar_statusline(settings: dict[str, Any], exe: Path) -> dict[str, Any] | None:
+    """Barra de estado del monitor (límites de 5 h y semanal) solo si la cuenta no
+    tiene una propia; si ya es la del monitor, la apunta a la versión nueva."""
+    actual = settings.get("statusLine")
+    despues = comando_statusline(exe)
+    if actual is None:
+        settings["statusLine"] = {"type": "command", "command": despues, "padding": 0}
+        antes = None
+    elif isinstance(actual, dict) and _es_statusline_nuestra(actual.get("command")):
+        antes = str(actual["command"])
+        if antes == despues:
+            return None
+        actual["command"] = despues
+    else:
+        return None  # la barra de estado de Washington no se toca
+    return {
+        "tipo": "statusLine",
+        "evento": "statusline",
+        "antes": antes,
+        "despues": despues,
+        "timeout_antes": None,
+        "timeout_despues": None,
+    }
+
+
 def revertir_hooks(settings: dict[str, Any], cambios: list[dict[str, Any]]) -> int:
     """Vuelve cada entrada cambiada a su texto y timeout originales."""
     n = 0
-    pendientes = list(cambios)
+    pendientes = [c for c in cambios if c.get("tipo") != "statusLine"]
+    for c in cambios:
+        if c.get("tipo") != "statusLine":
+            continue
+        actual = settings.get("statusLine")
+        if isinstance(actual, dict) and actual.get("command") == c["despues"]:
+            if c["antes"] is None:
+                settings.pop("statusLine", None)
+            else:
+                actual["command"] = c["antes"]
+            n += 1
     for grupos in (settings.get("hooks") or {}).values():
         if not isinstance(grupos, list):
             continue
@@ -282,10 +327,15 @@ def _leer_settings(cuentas: list[str]) -> dict[Path, dict[str, Any]]:
 
 
 def _borrar_versiones_viejas(destino: Path, actual: Path) -> None:
-    """Las versiones anteriores, si ningún hook en curso las tiene abiertas."""
-    for d in destino.glob("v*"):
-        if d.is_dir() and d != actual:
-            shutil.rmtree(d, ignore_errors=True)
+    """Borra las versiones viejas, pero conserva la actual y la anterior: las sesiones
+    de Claude Code ya abiertas siguen llamando a la anterior hasta que se reinician."""
+    otras = sorted(
+        (d for d in destino.glob("v*") if d.is_dir() and d != actual),
+        key=lambda d: d.stat().st_mtime,
+        reverse=True,
+    )
+    for d in otras[1:]:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def instalar(
@@ -359,6 +409,9 @@ def instalar(
     sello = ahora.strftime("%Y%m%d-%H%M%S-%f")
     for ruta, datos in leidos.items():
         cambios = cambiar_hooks(datos, exe)
+        barra = cambiar_statusline(datos, exe)
+        if barra is not None:
+            cambios.append(barra)
         if not cambios:
             continue
         previo = previos.get(str(ruta))

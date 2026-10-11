@@ -509,6 +509,7 @@ def test_agent_view_fields(engine: AgentStateEngine, clock: FakeClock) -> None:
         "proyecto": "E:/proyecto",
         "cuenta": "demo",
         "maquina": None,  # set by the events route (machine token or local machine)
+        "modelo": None,  # stage 2.1: from the monitor or the local transcript
     }
     assert agent["ultimo_evento"]["tipo"] == "post_tool_use"
     ind = agent["indicadores"]

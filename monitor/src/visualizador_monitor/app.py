@@ -62,6 +62,10 @@ class Monitor:
     def esperar_permiso(self, id_: str, espera: float) -> dict[str, Any]:
         return esperar_permiso(self.servidor, id_, espera)
 
+    def recibir_limites(self, datos: dict[str, Any]) -> dict[str, Any]:
+        self.lector.recibir_limites(datos)
+        return {"estado": "recibido"}
+
     def estado(self) -> dict[str, Any]:
         """Para el comando estado: nunca incluye el token."""
         return {
@@ -75,6 +79,8 @@ class Monitor:
             "cola": self.cola.resumen(),
             "ultimo_envio_observaciones": self.lector.ultimo_envio,
             "sesiones_vistas": len(self.lector.sesiones),
+            "ultimo_envio_proyectos": self.lector.ultimo_envio_proyectos,
+            "limites": self.lector.limites,
             "cuentas": self.cfg.cuentas,
         }
 
@@ -112,6 +118,14 @@ class Monitor:
                     self.lector.ciclo()
                 except Exception:
                     logger.exception("Error leyendo transcripciones y procesos")
+                try:
+                    self.lector.proyectos()
+                except Exception:
+                    logger.exception("Error leyendo los PROJECT.md")
+            try:
+                self.lector.enviar_limites()
+            except Exception:
+                logger.exception("Error enviando los límites")
             self.parar.wait(1.0)
 
     def detener(self) -> None:
