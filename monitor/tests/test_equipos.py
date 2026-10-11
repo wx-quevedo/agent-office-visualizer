@@ -282,10 +282,14 @@ def test_crear_pausar_reanudar_y_retomar(tmp_path: Path) -> None:
         # El monitor se reinicia: otro gestor con el mismo estado retoma el equipo activo.
         g.detener_todo()
         g2 = _gestor(tmp_path, registro)
+        mensajes_antes = sum(e["evento"] == "mensaje" for e in _eventos(registro))
         assert g2.retomar() == 1
         assert {m["estado"] for m in g2.estado_equipos()[0]["miembros"]} == {"activo"}
         retomados = [e for e in _eventos(registro) if e["evento"] == "inicio"][4:]
         assert len(retomados) == 2 and all("--resume" in e["args"] for e in retomados)
+        # Al retomar tras un reinicio no se manda saludo: quedan "En espera".
+        time.sleep(0.5)
+        assert sum(e["evento"] == "mensaje" for e in _eventos(registro)) == mensajes_antes
         g2.detener_todo()
         assert ajeno.poll() is None
     finally:

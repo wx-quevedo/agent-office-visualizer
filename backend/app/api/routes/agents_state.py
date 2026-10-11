@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from app.core.agent_state_engine import get_state_engine
 from app.core.bandejas import get_bandejas, pendientes
 from app.core.permisos import get_registro
-from app.core.proyectos_equipo import get_proyectos_equipo
+from app.core.proyectos_equipo import get_proyectos_equipo, vista_lanzada
 from app.core.resumenes import avisos_del_agente, get_resumenes
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -26,18 +26,7 @@ def agentes_con_extras(snap: dict[str, Any] | None = None) -> list[dict[str, Any
     agentes: list[dict[str, Any]] = []
     for a in snap["agentes"]:
         permiso = permisos.get(a["agente"]["session_id"])
-        lanzada = lanzadas.get(a["agente"]["session_id"])
-        if lanzada is not None:
-            a = {
-                **a,
-                "agente": {
-                    **a["agente"],
-                    "modelo": a["agente"].get("modelo") or lanzada["modelo"],
-                    "esfuerzo": lanzada["esfuerzo"],
-                    "rol": lanzada["rol"],
-                    "proyecto_equipo": lanzada["proyecto_id"],
-                },
-            }
+        a = vista_lanzada(a, lanzadas.get(a["agente"]["session_id"]))
         agentes.append(
             {
                 **a,

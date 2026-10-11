@@ -241,6 +241,9 @@ export function haciendoDe(
       return "Reanudando el equipo…";
     case "pausado":
       return "En pausa";
+    case "activo":
+      // Nadie trabaja: el equipo espera que alguien le escriba.
+      return "En espera";
     default:
       return "Sin actividad";
   }

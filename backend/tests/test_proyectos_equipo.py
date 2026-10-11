@@ -344,3 +344,36 @@ def test_las_rutas_de_maquina_son_de_ingesta() -> None:
     assert es_ingesta("POST", "/api/v1/maquinas/equipos")
     assert not es_ingesta("POST", "/api/v1/proyectos-creados")
     assert not es_ingesta("POST", "/api/v1/maquinas/encargos/../x")
+
+
+def test_en_espera_al_retomar_sin_mensaje() -> None:
+    """El monitor se reinició y retomó la sesión sin escribirle: la oficina la vio
+    terminar, pero el monitor la informa viva. Se muestra "En espera", sin cierre."""
+    from app.core.proyectos_equipo import vista_lanzada
+
+    a = {
+        "agente": {"session_id": "s1", "proyecto": "E:/Agents/p", "modelo": None},
+        "estado": {"numero": 21, "nombre": "Cerrado", "desde": "2026-10-12T15:00:00+00:00"},
+        "cierre": {"motivo": "session_end", "desde": "2026-10-12T15:00:00+00:00"},
+    }
+    lanzada = {
+        "modelo": "haiku",
+        "esfuerzo": "low",
+        "rol": "agente",
+        "proyecto_id": "p1",
+        "estado": "activo",
+        "actualizado": "2026-10-12T15:05:00+00:00",
+    }
+    v = vista_lanzada(a, lanzada)
+    assert v["estado"] == {
+        "numero": 18,
+        "nombre": "En espera",
+        "desde": "2026-10-12T15:05:00+00:00",
+    }
+    assert v["cierre"] is None and v["en_espera"] is True
+    assert v["agente"]["modelo"] == "haiku" and v["agente"]["rol"] == "agente"
+    # Pausada: sigue cerrada. Trabajando: no se toca. Sin lanzar: igual que siempre.
+    assert vista_lanzada(a, {**lanzada, "estado": "pausado"})["estado"]["numero"] == 21
+    trabajando = {**a, "estado": {"numero": 5, "nombre": "Escribiendo código", "desde": "x"}}
+    assert vista_lanzada(trabajando, lanzada)["estado"]["numero"] == 5
+    assert vista_lanzada(a, None) is a

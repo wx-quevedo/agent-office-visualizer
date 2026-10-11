@@ -28,6 +28,7 @@ from app.core.proyectos_equipo import (
     MAX_AGENTES,
     ProyectoError,
     get_proyectos_equipo,
+    vista_lanzada,
 )
 
 router = APIRouter(tags=["proyectos con equipo"])
@@ -50,7 +51,11 @@ def maquinas_vista() -> list[dict[str, Any]]:
 
 def con_estado(p: dict[str, Any]) -> dict[str, Any]:
     """El proyecto con lo que muestra la oficina de cada miembro (estado y espera)."""
-    agentes = {a["agente"]["session_id"]: a for a in get_state_engine().snapshot()["agentes"]}
+    lanzadas = get_proyectos_equipo().sesiones_lanzadas()
+    agentes = {
+        a["agente"]["session_id"]: vista_lanzada(a, lanzadas.get(a["agente"]["session_id"]))
+        for a in get_state_engine().snapshot()["agentes"]
+    }
     haciendo: str | None = None
     equipo: list[dict[str, Any]] = []
     for m in p["equipo"]:

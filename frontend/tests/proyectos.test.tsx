@@ -231,7 +231,7 @@ describe("lógica de proyectos", () => {
     expect(h({ haciendo: "Agente 1: Editando" })).toBe("Agente 1: Editando");
     expect(h({ estado: "creando" })).toBe("Creando la carpeta y el equipo…");
     expect(h({ estado: "pausado" })).toBe("En pausa");
-    expect(h({ estado: "activo" })).toBe("Sin actividad");
+    expect(h({ estado: "activo" })).toBe("En espera");
     expect(h({ estado: "error", error: "Falló git init", haciendo: "x" })).toBe(
       "Falló git init",
     );

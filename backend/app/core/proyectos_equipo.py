@@ -459,11 +459,42 @@ class ProyectosEquipo:
         """session_id -> modelo, esfuerzo, rol y proyecto (para la oficina)."""
         with self._db() as db:
             filas = db.execute(
-                """SELECT m.session_id, m.modelo, m.esfuerzo, m.rol, m.nombre, p.nombre AS proyecto,
-                    p.id AS proyecto_id FROM miembros m JOIN proyectos p ON p.id = m.proyecto_id
+                """SELECT m.session_id, m.modelo, m.esfuerzo, m.rol, m.nombre, m.estado,
+                    m.actualizado, p.nombre AS proyecto, p.id AS proyecto_id
+                FROM miembros m JOIN proyectos p ON p.id = m.proyecto_id
                 WHERE m.session_id IS NOT NULL"""
             ).fetchall()
         return {f["session_id"]: dict(f) for f in filas}
+
+
+# Estados de la oficina de una sesión que terminó (o se está yendo).
+_TERMINADA = (12, 21)
+EN_ESPERA = {"numero": 18, "nombre": "En espera"}
+
+
+def vista_lanzada(a: dict[str, Any], lanzada: dict[str, Any] | None) -> dict[str, Any]:
+    """La vista de la oficina de una sesión lanzada por un monitor: con su modelo,
+    esfuerzo y rol (en -p la oficina no los recibe) y, si el monitor la tiene viva
+    pero la oficina la vio terminar (se reanudó o el monitor se reinició y la retomó
+    sin escribirle), "En espera" en vez de cerrada hasta que alguien le escriba."""
+    if lanzada is None:
+        return a
+    salida = {
+        **a,
+        "agente": {
+            **a["agente"],
+            "modelo": a["agente"].get("modelo") or lanzada["modelo"],
+            "esfuerzo": lanzada["esfuerzo"],
+            "rol": lanzada["rol"],
+            "proyecto_equipo": lanzada["proyecto_id"],
+        },
+    }
+    if lanzada.get("estado") == "activo" and a["estado"]["numero"] in _TERMINADA:
+        desde = max(str(a["estado"]["desde"]), str(lanzada.get("actualizado") or ""))
+        salida["estado"] = {**EN_ESPERA, "desde": desde}
+        salida["cierre"] = None
+        salida["en_espera"] = True
+    return salida
 
 
 _registro: ProyectosEquipo | None = None
