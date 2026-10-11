@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Oficina</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; background: #F4F5F7; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; color: #1F2329; display: flex; flex-direction: column; overflow: hidden">
+  <div style="padding: 58px 16px 10px; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; justify-content: space-between; align-items: center">
+      <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.01em">Oficina</div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); background: #E4E7EB; border-radius: 9px; padding: 2px; width: 120px">
+        <a href="Main.dc.html" style="height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; background: #FFFFFF; color: #1F2329; text-decoration: none">Lista</a>
+        <a href="Oficina3D.dc.html" style="height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #2B2F36; text-decoration: none">3D</a>
+      </div>
+    </div>
+    <div style="font-size: 15px; color: #4A505C">5 trabajando · 2 te esperan · 1 atascado</div>
+  </div>
+  <div style="padding: 6px 16px 10px">
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: #E4E7EB; border-radius: 9px; padding: 2px">
+      <button style="height: 32px; border: none; border-radius: 7px; background: #FFFFFF; font-family: inherit; font-size: 13px; font-weight: 600; color: #1F2329">Todas</button>
+      <button style="height: 32px; border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 13px; color: #2B2F36">Personal</button>
+      <button style="height: 32px; border: none; border-radius: 7px; background: transparent; font-family: inherit; font-size: 13px; color: #2B2F36">Demo Org</button>
+    </div>
+  </div>
+  <div style="margin: 0 16px; background: #FFFFFF; border: 1px solid #9DB8EE; border-radius: 14px; overflow: hidden">
+    <div style="padding: 12px 14px 6px; font-size: 13px; font-weight: 600; color: #1D4FAF">TE ESPERAN · 2</div>
+    <a href="Ficha.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 44px; text-decoration: none; color: #1F2329">
+      <span style="width: 10px; height: 10px; border-radius: 5px; background: #1D4FAF; flex-shrink: 0"></span>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 15px; font-weight: 600">SkyNest pide permiso</span>
+        <span style="font-size: 13px; color: #4A505C">Borrar la carpeta de compilación · hace 40 s</span>
+      </span>
+      <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true"><path d="M1 1l6 6-6 6" stroke="#9AA0AA" stroke-width="1.8" fill="none"></path></svg>
+    </a>
+    <a href="Decisiones.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 10px 14px 12px; min-height: 44px; text-decoration: none; color: #1F2329; border-top: 1px solid #EEF0F3">
+      <span style="width: 10px; height: 10px; border-radius: 5px; background: #8A3E0E; flex-shrink: 0"></span>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 15px; font-weight: 600">visualizador-agentes pregunta</span>
+        <span style="font-size: 13px; color: #4A505C">Elegir entre dos opciones · hace 6 min</span>
+      </span>
+      <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true"><path d="M1 1l6 6-6 6" stroke="#9AA0AA" stroke-width="1.8" fill="none"></path></svg>
+    </a>
+  </div>
+  <div style="padding: 18px 16px 8px; font-size: 13px; font-weight: 600; color: #4A505C">AGENTES</div>
+  <div style="flex: 1; padding: 0 16px; display: flex; flex-direction: column; gap: 8px; overflow: hidden">
+    <sc-for list="{{agentes}}" as="a" hint-placeholder-count="5">
+      <a href="Ficha.dc.html" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #FFFFFF; border: 1px solid {{a.bd}}; border-radius: 12px; text-decoration: none; color: #1F2329">
+        <span style="width: 40px; height: 40px; border-radius: 20px; background: #2B2F36; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0">{{a.ini}}</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+          <span style="display: flex; justify-content: space-between; gap: 8px">
+            <span style="font-size: 16px; font-weight: 600">{{a.nombre}}</span>
+            <span style="font-size: 12px; color: #4A505C">{{a.cuenta}}</span>
+          </span>
+          <span style="font-size: 14px; color: #2B2F36; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.ahora}}</span>
+          <span style="font-size: 12px; font-weight: 600; color: {{a.color}}">{{a.estado}}</span>
+        </span>
+      </a>
+    </sc-for>
+  </div>
+  <nav aria-label="Secciones" style="position: absolute; left: 16px; right: 16px; bottom: 26px; height: 64px; border-radius: 32px; background: rgba(255,255,255,0.62); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); border: 1px solid rgba(255,255,255,0.85); box-shadow: 0 10px 30px rgba(31,35,41,0.14), inset 0 1px 0 rgba(255,255,255,0.9); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 4px; box-sizing: border-box; z-index: 3">
+    <a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #1D4FAF; font-size: 11px; font-weight: 600; border-radius: 28px; background: rgba(29,79,175,0.12)">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7" fill="none"></rect><path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.7"></path></svg>Oficina</a>
+    <a href="Decisiones.dc.html" style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="1.7" fill="none"></path></svg>Decisiones
+      <span style="position: absolute; top: 4px; left: 56%; min-width: 18px; height: 18px; border-radius: 9px; background: #9B2C1E; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">2</span></a>
+    <a href="Donde.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21z" stroke="currentColor" stroke-width="1.7" fill="none"></path><circle cx="12" cy="9.5" r="2.5" stroke="currentColor" stroke-width="1.7" fill="none"></circle></svg>Dónde quedamos</a>
+    <a href="Ideas.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9V16h7v-2.1A6 6 0 0012 3z" stroke="currentColor" stroke-width="1.7" fill="none"></path></svg>Ideas</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const n = '#E4E7EB';
+    return {
+      agentes: [
+        { ini: 'SK', nombre: 'SkyNest', cuenta: 'Personal', ahora: 'Unity: compilando scripts · 2 min', estado: 'Te pide permiso', color: '#1D4FAF', bd: '#9DB8EE' },
+        { ini: 'VA', nombre: 'visualizador-agentes', cuenta: 'Personal', ahora: 'Espera tu respuesta a una pregunta', estado: 'Espera tu decisión', color: '#8A3E0E', bd: '#E8B98F' },
+        { ini: 'VB', nombre: 'vive-demo', cuenta: 'Demo Org', ahora: 'npm run build falló 3 veces igual', estado: 'Parece atascado · 18 min', color: '#9B2C1E', bd: '#E4A69C' },
+        { ini: 'MV', nombre: 'server-monitor', cuenta: 'Personal', ahora: 'Investigando la documentación de nginx', estado: 'Trabajando · 12 min', color: '#2F5C45', bd: n },
+        { ini: 'BZ', nombre: 'Buscapez', cuenta: 'Demo Org', ahora: 'Terminó: pruebas de la búsqueda', estado: 'Listo', color: '#4A505C', bd: n }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

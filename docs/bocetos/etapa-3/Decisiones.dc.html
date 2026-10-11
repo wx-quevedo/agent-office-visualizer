@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Decisiones</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; background: #F4F5F7; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; color: #1F2329; display: flex; flex-direction: column; overflow: hidden">
+  <div style="padding: 58px 16px 4px; display: flex; flex-direction: column; gap: 4px">
+    <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.01em">Decisiones</div>
+    <div style="font-size: 15px; color: #4A505C">Todo lo que espera por ti, lo más urgente arriba.</div>
+  </div>
+  <div style="flex: 1; padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+    <div style="background: #FFFFFF; border: 2px solid #1D4FAF; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between; font-size: 13px">
+        <span style="font-weight: 700; color: #1D4FAF">PERMISO · SkyNest</span>
+        <span style="color: #4A505C">40 s</span>
+      </div>
+      <div style="font-size: 15px; line-height: 1.4">Borrar la carpeta de compilación de Unity para recompilar desde cero.</div>
+      <div style="display: flex; gap: 8px">
+        <button style="flex: 1; height: 44px; border: none; border-radius: 10px; background: #1D4FAF; color: #FFFFFF; font-family: inherit; font-size: 16px; font-weight: 600">Aprobar</button>
+        <button style="flex: 1; height: 44px; border: 1px solid #9AA0AA; border-radius: 10px; background: #FFFFFF; color: #1F2329; font-family: inherit; font-size: 16px; font-weight: 600">Rechazar</button>
+      </div>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E8B98F; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between; font-size: 13px">
+        <span style="font-weight: 700; color: #8A3E0E">PREGUNTA · visualizador-agentes</span>
+        <span style="color: #4A505C">6 min</span>
+      </div>
+      <div style="font-size: 15px; line-height: 1.4">¿Las notificaciones push van por el servidor propio o por un servicio externo?</div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <button style="min-height: 44px; text-align: left; padding: 8px 12px; border: 1px solid #D5D9DF; border-radius: 10px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #1F2329">1. Directo desde el VPS a Apple (recomendado)</button>
+        <button style="min-height: 44px; text-align: left; padding: 8px 12px; border: 1px solid #D5D9DF; border-radius: 10px; background: #FFFFFF; font-family: inherit; font-size: 14px; color: #1F2329">2. Con un servicio externo</button>
+      </div>
+      <a href="#" style="font-size: 14px; font-weight: 500">Responder con mis palabras</a>
+    </div>
+    <div style="background: #FFFFFF; border: 1px solid #E4A69C; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between; font-size: 13px">
+        <span style="font-weight: 700; color: #9B2C1E">ATASCADO · vive-demo</span>
+        <span style="color: #4A505C">18 min</span>
+      </div>
+      <div style="font-size: 15px; line-height: 1.4">Repitió 3 veces el mismo error: falta la variable de entorno de la base de datos.</div>
+      <div style="display: flex; gap: 8px">
+        <a href="Ficha.dc.html" style="flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: #2B2F36; color: #FFFFFF; text-decoration: none; font-size: 15px; font-weight: 600">Ver qué intentó</a>
+        <button style="flex: 1; height: 44px; border: 1px solid #9AA0AA; border-radius: 10px; background: #FFFFFF; color: #1F2329; font-family: inherit; font-size: 15px; font-weight: 600">Ya lo vi</button>
+      </div>
+    </div>
+    <div style="padding: 6px 2px 0; font-size: 13px; font-weight: 600; color: #4A505C">RESUELTAS HOY · 7</div>
+    <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <sc-for list="{{hechas}}" as="h" hint-placeholder-count="2">
+        <div style="display: flex; gap: 10px; padding: 10px 14px; border-top: 1px solid #EEF0F3; font-size: 14px">
+          <span style="font-family: ui-monospace, 'SF Mono', monospace; font-size: 12px; color: #4A505C; width: 40px">{{h.hora}}</span>
+          <span style="flex: 1">{{h.texto}}</span>
+          <span style="font-size: 12px; font-weight: 600; color: {{h.color}}">{{h.fin}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <nav aria-label="Secciones" style="position: absolute; left: 16px; right: 16px; bottom: 26px; height: 64px; border-radius: 32px; background: rgba(255,255,255,0.62); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); border: 1px solid rgba(255,255,255,0.85); box-shadow: 0 10px 30px rgba(31,35,41,0.14), inset 0 1px 0 rgba(255,255,255,0.9); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 4px; box-sizing: border-box; z-index: 3">
+    <a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7" fill="none"></rect><path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.7"></path></svg>Oficina</a>
+    <a href="Decisiones.dc.html" style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #1D4FAF; font-size: 11px; font-weight: 600; border-radius: 28px; background: rgba(29,79,175,0.12)">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="1.7" fill="none"></path></svg>Decisiones
+      <span style="position: absolute; top: 4px; left: 56%; min-width: 18px; height: 18px; border-radius: 9px; background: #9B2C1E; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">3</span></a>
+    <a href="Donde.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21z" stroke="currentColor" stroke-width="1.7" fill="none"></path><circle cx="12" cy="9.5" r="2.5" stroke="currentColor" stroke-width="1.7" fill="none"></circle></svg>Dónde quedamos</a>
+    <a href="Ideas.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9V16h7v-2.1A6 6 0 0012 3z" stroke="currentColor" stroke-width="1.7" fill="none"></path></svg>Ideas</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      hechas: [
+        { hora: '15:48', texto: 'server-monitor · reiniciar nginx', fin: 'Aprobado', color: '#2F5C45' },
+        { hora: '14:10', texto: 'Buscapez · push a main', fin: 'Rechazado', color: '#9B2C1E' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
