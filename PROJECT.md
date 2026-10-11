@@ -86,6 +86,8 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-12 | Las preguntas del agente (AskUserQuestion) se muestran en la bandeja de Decisiones solo para leer, con su resumen y sus opciones, y se responden en la PC | Claude Code documenta que un hook PreToolUse puede contestarlas, pero en esta instalación no es confiable: el hook PreToolUse del visualizador tiene 2 s de límite y lo pone el instalador del monitor, hay otros hooks PreToolUse para AskUserQuestion, mientras el hook espera VS Code no muestra la pregunta, y en una prueba aislada con `claude -p` la herramienta ni siquiera se ofreció (ver la sección de la etapa 3, Prompt 33) |
 | 2026-10-12 | Etapa 4 con la arquitectura A: el monitor lanza y mantiene vivas sesiones `claude -p` con stream-json; el orquestador dará órdenes con la mensajería oficial entre sesiones (Prompt 38) y solo a los agentes de su proyecto; se acepta que estas sesiones no salgan en el selector de `--resume` | Es la única probada de punta a punta en la Alienware, con la suscripción y sin dependencias nuevas (`docs/etapa-4/investigacion.md`) |
 | 2026-10-12 | Hasta el Prompt 38, el orquestador arranca con `SendMessage` y `ListAgents` bloqueados; los agentes aceptan mensajes de otras sesiones (`crossSessionInbound: accept`). El id de sesión de cada miembro lo decide el servidor | `ListAgents` ve todas las sesiones de la máquina; el hook que limita los destinos llega con las órdenes. Con el id decidido antes de lanzar, la oficina reconoce la sesión desde su primer evento |
+| 2026-10-12 | Al reiniciar el monitor, las sesiones retomadas no reciben saludo: la oficina las muestra "En espera" hasta que alguien les escriba | Evita gastar tokens en cada reinicio; el servidor sabe por el monitor que siguen vivas aunque la oficina las haya visto terminar |
+| 2026-10-12 | Solo habrá "Detener" (cierra las sesiones y deja la carpeta intacta), en el Prompt 38; borrar carpetas desde la web no se hará | Un borrado remoto de carpetas es demasiado riesgo para lo que aporta |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -139,7 +141,16 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-12 | Etapa 3 (Prompt 33), parte B, backend de las bandejas: `GET /decisiones` (permisos, preguntas y atascos por urgencia, con la frase del auxiliar, el detalle técnico, proyecto, cuenta, máquina y hace cuánto, más las resueltas de hoy con quién, cómo y cuándo), "Ya lo vi" para atascos, ideas (guardar, listar, cambiar el proyecto, archivar) en `bandejas.db` con versión de esquema, las opciones de cada pregunta en `/agents/state` (`pregunta_opciones`) y el conteo `decisiones_pendientes` para la insignia de la app; las decisiones de la app quedan como "app iOS". Parte A: las preguntas quedan de solo lectura (decisión de esta fecha) |
 | 2026-10-12 | Arreglo: las resueltas de hoy de Decisiones muestran el nombre del proyecto (no el de la carpeta de transcripciones, `e--Test-SkyNest`). Commit `7664a22` |
 | 2026-10-12 | Etapa 4 iniciada (investigación): documentación oficial revisada y dos pruebas reales en carpetas temporales con Haiku: un programa lanza `claude -p` con stream-json y le manda dos mensajes en la misma sesión, que la oficina ve con los hooks actuales; y un orquestador le manda una orden a un agente con `ListAgents` y `SendMessage`, que el agente cumple en 1 s. Informe y tres arquitecturas en `docs/etapa-4/investigacion.md`; se recomienda la A (procesos `-p` del monitor y mensajería entre sesiones, con un hook propio que aprueba cada orden) |
-| 2026-10-12 | Etapa 4 (Prompt 37), proyectos con equipo: backend con registro de proyectos y equipos en `proyectos.db`, encargos para el monitor y ruta base por máquina (commit `c3c8d48`); monitor 0.4.0 que crea la carpeta en la ruta base, aplica la plantilla y lanza, pausa, reanuda y retoma el orquestador y los agentes con `claude -p` (commit `d960e83`); web con la pestaña Proyectos, Nuevo proyecto y la página de cada proyecto con Chat (llega en el Prompt 38), Equipo y Dónde quedamos. Falta la prueba real de punta a punta (prueba-37) después del despliegue |
+| 2026-10-12 | Etapa 4 (Prompt 37), proyectos con equipo: backend con registro de proyectos y equipos en `proyectos.db`, encargos para el monitor y ruta base por máquina (commit `c3c8d48`); monitor 0.4.0 que crea la carpeta en la ruta base, aplica la plantilla y lanza, pausa, reanuda y retoma el orquestador y los agentes con `claude -p` (commit `d960e83`); web con la pestaña Proyectos, Nuevo proyecto y la página de cada proyecto con Chat (llega en el Prompt 38), Equipo y Dónde quedamos. Commits `3b15261` (web) y `ef2f960` (documentación) |
+| 2026-10-12 | Prueba real del Prompt 37 (desplegado `ef2f960`, monitor 0.4.0).
+Se creó prueba-37 desde la web (cuenta personal, Haiku y esfuerzo bajo para los dos, plantilla Vacía). El monitor tomó el encargo en unos segundos: `E:\Agents\prueba-37` quedó con `.git` y PROJECT.md (sin `.gitignore`, por ser Vacía).
+Las dos sesiones aparecieron en la oficina con modelo `claude-haiku-5-5`, esfuerzo bajo, su rol y la carpeta, y respondieron el saludo.
+Pausar cerró sus dos procesos y reanudar los retomó con las mismas sesiones (`Session started (resume)`).
+Los 73 procesos de Claude Code y VS Code que había antes siguieron vivos, y las otras 8 sesiones de la oficina no cambiaron.
+Ajustes:
+- Una sesión lanzada que el monitor informa viva pero que la oficina vio terminar se muestra "En espera" (estado 18, sin cierre ni aviso).
+- Un equipo activo y quieto dice "En espera" en Proyectos.
+Capturas en `docs/capturas/etapa-4/` |
 
 ## Cómo levantar
 
@@ -1044,10 +1055,13 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington despliega el backend y la web (`bash despliegue/desplegar.sh`) y actualiza el monitor de la Alienware a la 0.4.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`).
-2. Prueba real del Prompt 37: crear desde la web prueba-37 (cuenta personal, Haiku y esfuerzo bajo para los dos, plantilla Vacía), comprobar la carpeta, las dos sesiones en la oficina con su modelo, pausar y reanudar, y que no se tocó ninguna otra sesión. Capturas 37-proyectos.png, 37-nuevo.png y 37-equipo.png.
-3. Etapa 4, Prompt 38: chat con el orquestador en la web y la app, órdenes al agente con `SendMessage` y un hook que aprueba cada orden y limita los destinos a los agentes del proyecto, y el interruptor automático por proyecto.
-4. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
-5. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
-6. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
-7. Vigilar el disco del VPS (85 % usado).
+1. Washington despliega el ajuste "En espera" (`bash despliegue/desplegar.sh`). No hace falta actualizar el monitor: la 0.4.0 ya retoma sin saludo. Para verlo: reiniciar el monitor con prueba-37 activo; las dos sesiones deben verse "En espera" en la oficina.
+2. Etapa 4, Prompt 38:
+   - chat con el orquestador en la web y la app;
+   - órdenes al agente con `SendMessage`, con un hook que aprueba cada orden y limita los destinos a los agentes del proyecto;
+   - el interruptor automático por proyecto;
+   - "Detener" (cierra las sesiones y deja la carpeta).
+3. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
+4. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
+5. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
+6. Vigilar el disco del VPS (85 % usado).
