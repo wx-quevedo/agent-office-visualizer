@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.core.agent_state_engine import get_state_engine
 from app.core.permisos import get_registro
+from app.core.resumenes import avisos_del_agente, get_resumenes
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -16,11 +17,22 @@ async def get_agents_state() -> dict[str, Any]:
     """Return each active agent's catalog state, wait, indicators and recent
     raw events, plus the user's global presence. Recomputed at request time.
     Each agent carries its permission request of the office (``permiso``:
-    pending, or just decided/expired), or null.
+    pending, or just decided/expired), or null, and the one-sentence summaries
+    of its current alerts (``resumenes``, stage 2.4).
     """
     snap = get_state_engine().snapshot()
     permisos = get_registro().vistas_por_sesion()
-    agentes = [{**a, "permiso": permisos.get(a["agente"]["session_id"])} for a in snap["agentes"]]
+    resumenes = get_resumenes()
+    agentes: list[dict[str, Any]] = []
+    for a in snap["agentes"]:
+        permiso = permisos.get(a["agente"]["session_id"])
+        agentes.append(
+            {
+                **a,
+                "permiso": permiso,
+                "resumenes": resumenes.vista(avisos_del_agente(a, permiso)),
+            }
+        )
     return {**snap, "agentes": agentes}
 
 

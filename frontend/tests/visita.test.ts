@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   CLAVE_VISITA,
+  almacenDisponible,
+  motivoApertura,
   debeAbrirDondeQuedamos,
   guardarVisita,
   leerUltimaVisita,
@@ -28,9 +30,18 @@ describe("regla de las 8 horas", () => {
     expect(debeAbrirDondeQuedamos(ahora - 2 * HORA, ahora)).toBe(false);
   });
 
-  it("primera visita del dispositivo o reloj atrasado: no abre", () => {
-    expect(debeAbrirDondeQuedamos(null, ahora)).toBe(false);
+  it("primera visita del dispositivo: abre; reloj atrasado: no abre", () => {
+    expect(debeAbrirDondeQuedamos(null, ahora)).toBe(true);
     expect(debeAbrirDondeQuedamos(ahora + HORA, ahora)).toBe(false);
+  });
+
+  it("motivo de apertura: nuevo, 8 horas o nada", () => {
+    expect(motivoApertura(null, ahora, true)).toBe("nuevo");
+    expect(motivoApertura(ahora - 9 * HORA, ahora, true)).toBe("oficina");
+    expect(motivoApertura(ahora - HORA, ahora, true)).toBeNull();
+    // Sin almacenamiento la "primera visita" se repetiría: no abre nunca.
+    expect(motivoApertura(null, ahora, false)).toBeNull();
+    expect(motivoApertura(ahora - 9 * HORA, ahora, false)).toBeNull();
   });
 
   it("guarda y lee la última visita por dispositivo", () => {
@@ -53,6 +64,9 @@ describe("regla de las 8 horas", () => {
       },
     };
     expect(() => guardarVisita(ahora, roto)).not.toThrow();
+    expect(almacenDisponible(roto)).toBe(false);
+    expect(almacenDisponible(null)).toBe(false);
+    expect(almacenDisponible(memoria())).toBe(true);
     expect(leerUltimaVisita(roto)).toBeNull();
     expect(leerUltimaVisita(null)).toBeNull();
   });

@@ -3,6 +3,8 @@ import {
   CONFIG_INICIAL,
   ColaVoz,
   DetectorAvisos,
+  EsperaResumenes,
+  construirAviso,
   elegirVoz,
   nombreAviso,
   textoParaLeer,
@@ -280,5 +282,108 @@ describe("cola de voz", () => {
     expect(dichos).toEqual(["uno", "dos", "tres"]);
     fines[2]();
     expect(cola.hablando).toBe(false);
+  });
+});
+
+// -- etapa 2.4: avisos resumidos por el agente auxiliar -----------------------------
+
+describe("avisos resumidos", () => {
+  const frase =
+    "vive-demo quiere subir los cambios al repositorio y necesita tu permiso.";
+  const conResumen = (estado: "listo" | "fallo" | "pendiente" | "apagado") =>
+    agente("r1", 13, {
+      espera: permiso().espera,
+      resumenes: {
+        permiso: {
+          clave: "r1:permiso:x",
+          estado,
+          texto: estado === "listo" ? frase : null,
+        },
+      },
+    });
+
+  it("con el resumen listo, la voz lo lee y la notificación lo pone primero", () => {
+    const d = new DetectorAvisos();
+    d.observar([agente("r1", 4)], T0, ACTIVOS);
+    const [aviso] = correr(d, [conResumen("listo")], 1000, 5000);
+    expect(aviso.voz).toBe(`${frase} Responde en VS Code.`);
+    expect(aviso.voz).not.toContain("git push");
+    expect(aviso.cuerpo.split("\n")[0]).toBe(frase);
+    expect(aviso.cuerpo).toContain("Bash: git push origin dev");
+    expect(aviso.esperaResumen).toBe(false);
+  });
+
+  it("espera el resumen hasta 8 s y después usa el texto de siempre", () => {
+    const d = new DetectorAvisos();
+    const espera = new EsperaResumenes();
+    d.observar([agente("r1", 4)], T0, ACTIVOS);
+    const [aviso] = correr(d, [conResumen("pendiente")], 1000, 5000);
+    expect(aviso.esperaResumen).toBe(true);
+    espera.agregar(aviso, T0 + 5000);
+    expect(
+      espera.listos([conResumen("pendiente")], T0 + 9000, ACTIVOS),
+    ).toEqual([]);
+    // Llega el resumen: sale con la frase.
+    const [listo] = espera.listos([conResumen("listo")], T0 + 10000, ACTIVOS);
+    expect(listo.voz.startsWith(frase)).toBe(true);
+    expect(espera.enEspera).toBe(0);
+    // Sin resumen en 8 s: sale el texto técnico, sin esperar más.
+    espera.agregar(aviso, T0 + 20000);
+    const [tarde] = espera.listos(
+      [conResumen("pendiente")],
+      T0 + 28000,
+      ACTIVOS,
+    );
+    expect(tarde.voz).toContain("git push origin dev");
+  });
+
+  it("si el auxiliar falla, los resúmenes están apagados o el agente se fue, no espera", () => {
+    const espera = new EsperaResumenes();
+    const d = new DetectorAvisos();
+    d.observar([agente("r1", 4)], T0, ACTIVOS);
+    const [aviso] = correr(d, [conResumen("pendiente")], 1000, 5000);
+    for (const lista of [[conResumen("fallo")], [conResumen("apagado")], []]) {
+      espera.agregar(aviso, T0 + 5000);
+      const [salio] = espera.listos(lista, T0 + 5100, ACTIVOS);
+      expect(salio.voz).toContain("git push origin dev");
+    }
+    const sinCampo = construirAviso("permiso", permiso(), [permiso()], ACTIVOS);
+    expect(sinCampo.esperaResumen).toBe(false);
+  });
+
+  it("un atasco nuevo avisa una vez, con su resumen", () => {
+    const d = new DetectorAvisos();
+    const trabajando = agente("r1", 4);
+    d.observar([trabajando], T0, ACTIVOS);
+    const atascado = agente("r1", 4, {
+      atasco: {
+        tipo: "error_repetido",
+        motivo: "Repite el mismo error 3 veces (Bash)",
+        desde: new Date(T0).toISOString(),
+        ultimos_intentos: [],
+        ultimo_error: null,
+      },
+      resumenes: {
+        atasco: {
+          clave: "r1:atasco:x",
+          estado: "listo",
+          texto:
+            "vive-demo parece atascado: repite el mismo error al compilar.",
+        },
+      },
+    });
+    const avisos = correr(d, [atascado], 1000, 60000);
+    expect(avisos.map((a) => a.tipo)).toEqual(["atasco"]);
+    expect(avisos[0].voz).toBe(
+      "vive-demo parece atascado: repite el mismo error al compilar.",
+    );
+    expect(avisos[0].titulo).toBe("vive-demo parece atascado");
+    const apagado = new DetectorAvisos();
+    apagado.observar([trabajando], T0, ACTIVOS);
+    const sinAtasco = {
+      ...ACTIVOS,
+      eventos: { ...ACTIVOS.eventos, atasco: false },
+    };
+    expect(correr(apagado, [atascado], 1000, 5000, sinAtasco)).toEqual([]);
   });
 });

@@ -366,3 +366,15 @@ def test_el_token_no_va_a_los_destinos_extra(tmp_path: Path) -> None:
     finally:
         principal.shutdown()
         extra_srv.shutdown()
+
+
+def test_el_auxiliar_del_monitor_no_manda_nada(backend: int, tmp_path: Path) -> None:
+    """Etapa 2.4: si un hook corriera dentro del auxiliar de los avisos, no envía nada."""
+    os.environ["VISUALIZADOR_AUXILIAR"] = "1"
+    try:
+        r = correr_hook(backend, tmp_path)
+    finally:
+        del os.environ["VISUALIZADOR_AUXILIAR"]
+    assert r.returncode == 0
+    assert r.stdout == ""
+    assert Backend.recibidos == []

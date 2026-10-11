@@ -28,6 +28,7 @@ from app.core import atascos as _atascos
 from app.core import consumo as _consumo
 from app.core import esperas as _esperas
 from app.core import historial as _historial
+from app.core import resumenes as _resumenes
 from app.core import token_tracker as _token_tracker
 from app.core.agent_event_store import AgentEventStore
 from app.core.transcript_tail import (
@@ -946,6 +947,10 @@ class AgentStateEngine:
         Called in arrival order. A failed save is logged and the engine keeps
         working in memory; ingestion errors never propagate to the caller.
         """
+        if _resumenes.es_auxiliar(
+            event.data.project_dir, event.data.working_dir, event.data.transcript_path
+        ):
+            return  # the summaries' helper never enters the office
         if self.store is not None:
             try:
                 self.store.append(event, origin)
@@ -962,6 +967,9 @@ class AgentStateEngine:
 
     def ingest(self, event: AnyEvent, origin: str = "hook") -> None:
         """Add one event to its session log (memory only)."""
+        d = event.data
+        if _resumenes.es_auxiliar(d.project_dir, d.working_dir, d.transcript_path):
+            return
         self._seq += 1
         rec = record_from_event(event, self._seq)
         rec.origin = origin

@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.core.agent_state_engine import get_state_engine
 from app.core.datos_maquinas import get_datos_maquinas
 from app.core.historial import una_linea
+from app.core.resumenes import get_resumenes
 
 router = APIRouter(tags=["ver bien"])
 
@@ -58,7 +59,9 @@ async def consumo(dia: date | None = None) -> dict[str, Any]:
     desde = datetime.combine(dia, time.min, zona).astimezone(UTC)
     hasta = min(desde + timedelta(days=1), datetime.now(UTC))
     datos = get_state_engine().consumo(desde, hasta)
-    return {"dia": dia.isoformat(), "zona": str(zona), **datos}
+    # El auxiliar de los avisos, aparte: no se mezcla con los agentes.
+    auxiliar = get_resumenes().consumo(desde, hasta)
+    return {"dia": dia.isoformat(), "zona": str(zona), **datos, "auxiliar": auxiliar}
 
 
 @router.get("/limites")

@@ -344,3 +344,92 @@ describe("ficha del agente", () => {
     expect(t).toContain("estado 11");
   });
 });
+
+describe("ficha con avisos resumidos (etapa 2.4)", () => {
+  it("el resumen va primero y el detalle técnico debajo", async () => {
+    const permiso: Permiso = {
+      id: "abc12345",
+      session_id: "prueba-ficha",
+      herramienta: "PowerShell",
+      detalle: "Remove-Item -Recurse Library\ScriptAssemblies",
+      cuenta: "personal",
+      proyecto: "SkyNest",
+      creada: "2026-10-11T14:59:20Z",
+      esperando: true,
+      vence: "2026-10-11T15:01:00Z",
+      segundos_restantes: 60,
+      estado: "pendiente",
+      motivo: null,
+      dispositivo: null,
+      decidida: null,
+    };
+    const frase =
+      "SkyNest quiere borrar una carpeta de compilación de Unity y necesita tu permiso.";
+    const el = await montar(
+      agente(13, {
+        permiso,
+        resumenes: {
+          permiso: { clave: "k", estado: "listo", texto: frase },
+        },
+      }),
+    );
+    const parrafo = [...el.querySelectorAll("p")].find((p) =>
+      p.textContent?.includes("SkyNest quiere"),
+    );
+    expect(parrafo?.textContent).toBe(frase);
+    expect(el.textContent).not.toContain("Quiere borrar archivos o carpetas.");
+    expect(el.querySelector("pre")?.textContent).toContain("Remove-Item");
+  });
+
+  it("pregunta y atasco: frase arriba, texto original debajo", async () => {
+    const el = await montar(
+      agente(14, {
+        pregunta_pendiente: "¿Publico la versión 2.3 en producción?",
+        atasco: {
+          tipo: "error_repetido",
+          motivo: "Repite el mismo error 3 veces (Bash)",
+          desde: "2026-10-11T14:42:00Z",
+          ultimos_intentos: [],
+          ultimo_error: null,
+        },
+        resumenes: {
+          pregunta: {
+            clave: "p",
+            estado: "listo",
+            texto: "SkyNest te pregunta si publica la versión nueva.",
+          },
+          atasco: { clave: "a", estado: "fallo", texto: null },
+        },
+      }),
+    );
+    const t = texto(el);
+    expect(t.indexOf("SkyNest te pregunta si publica")).toBeLessThan(
+      t.indexOf("¿Publico la versión 2.3"),
+    );
+    // Atasco sin resumen (falló): el motivo como siempre.
+    expect(t).toContain("Repite el mismo error 3 veces (Bash)");
+  });
+});
+
+describe("permiso sin solicitud registrada (etapa 2.4)", () => {
+  it("muestra el resumen y Responde en VS Code", async () => {
+    const el = await montar(
+      agente(13, {
+        permiso: null,
+        resumenes: {
+          permiso: {
+            clave: "k",
+            estado: "listo",
+            texto: "SkyNest te pregunta cómo sigue con la clave rechazada.",
+          },
+        },
+      }),
+    );
+    const t = texto(el);
+    expect(t).toContain("Te pide permiso");
+    expect(t).toContain(
+      "SkyNest te pregunta cómo sigue con la clave rechazada.",
+    );
+    expect(t).toContain("Responde en VS Code.");
+  });
+});

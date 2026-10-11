@@ -49,6 +49,15 @@ export interface Atasco {
   ultimo_error: string | null;
 }
 
+/** One-sentence summary of an alert by the helper agent (stage 2.4). */
+export interface ResumenAviso {
+  clave: string;
+  estado: "listo" | "fallo" | "pendiente" | "apagado";
+  texto: string | null;
+}
+
+export type TipoResumen = "permiso" | "pregunta" | "termino" | "atasco";
+
 export interface Agente {
   agente: {
     session_id: string;
@@ -72,6 +81,8 @@ export interface Agente {
   eventos_recientes: EventoReciente[];
   /** Permission request registered by the hook (13), answered from the office. */
   permiso?: Permiso | null;
+  /** Summaries of its current alerts, by alert type (stage 2.4). */
+  resumenes?: Partial<Record<TipoResumen, ResumenAviso>>;
 }
 
 export interface Presencia {

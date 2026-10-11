@@ -18,7 +18,7 @@ from rich.logging import RichHandler
 
 from app.api.acceso_middleware import AccesoMiddleware
 from app.api.middleware import ApiKeyMiddleware, LocalhostOnlyMiddleware
-from app.api.routes import acceso, agents_state, events, oficina3d, permisos, ver_bien
+from app.api.routes import acceso, agents_state, avisos, events, oficina3d, permisos, ver_bien
 from app.config import get_settings
 from app.core.acceso import exigir_secreto
 from app.core.agent_state_engine import bootstrap, get_state_engine, run_tick_loop
@@ -97,6 +97,7 @@ app.include_router(oficina3d.router, prefix=f"{settings.API_V1_STR}/oficina3d")
 app.include_router(permisos.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(events.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(ver_bien.router, prefix=f"{settings.API_V1_STR}")
+app.include_router(avisos.router, prefix=f"{settings.API_V1_STR}")
 
 
 @app.exception_handler(Exception)

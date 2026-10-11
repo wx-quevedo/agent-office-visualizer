@@ -10,6 +10,9 @@
  * - Cooldown of `enfriamientoMs` (30 s) per agent and alert type.
  * - While an agent stays in 13 or 14, a reminder every N minutes.
  * - Sessions whose id starts with "prueba-" never alert.
+ * - Stage 2.4: an agent that starts looking stuck alerts once per stuck
+ *   episode, and every alert uses the one-sentence summary of the helper
+ *   agent when it is ready (EsperaResumenes waits for it up to 8 s).
  */
 
 import {
@@ -27,7 +30,8 @@ export function dondeResponder(a: Agente): string {
     : "Responde en VS Code.";
 }
 
-export type TipoAviso = "permiso" | "pregunta" | "termino" | "cerrado";
+export type TipoAviso =
+  "permiso" | "pregunta" | "termino" | "cerrado" | "atasco";
 
 export interface ConfigAvisos {
   /** Master switch ("Activar avisos"). */
@@ -38,6 +42,7 @@ export interface ConfigAvisos {
     termino: boolean;
     recordatorio: boolean;
     cerrado: boolean;
+    atasco: boolean;
   };
   /** Minutes between reminders while in 13/14; 0 = never. */
   recordatorioMin: 0 | 2 | 5 | 10;
@@ -64,6 +69,7 @@ export const CONFIG_INICIAL: ConfigAvisos = {
     termino: true,
     recordatorio: true,
     cerrado: false,
+    atasco: true,
   },
   recordatorioMin: 5,
   leerPermiso: true,
@@ -89,6 +95,20 @@ export interface Aviso {
   tag: string;
   /** Whether to show a Windows notification (voice is always given). */
   notificar: boolean;
+  /** The helper agent is still writing its summary (stage 2.4). */
+  esperaResumen: boolean;
+}
+
+/** Summary of the helper agent for this alert, when ready. */
+export function resumenListo(a: Agente, tipo: TipoAviso): string | null {
+  if (tipo === "cerrado") return null;
+  const r = a.resumenes?.[tipo];
+  return r && r.estado === "listo" && r.texto ? r.texto : null;
+}
+
+function resumenPendiente(a: Agente, tipo: TipoAviso): boolean {
+  if (tipo === "cerrado") return false;
+  return a.resumenes?.[tipo]?.estado === "pendiente";
 }
 
 export const ESTABILIDAD_MS = 3000;
@@ -176,6 +196,13 @@ export function construirAviso(
     notificar: tipo !== "termino" || config.notificarTermino,
   };
   const prefijo = recordatorio ? "Sigue esperando: " : "";
+  // Stage 2.4: the helper agent's sentence replaces the technical text in the
+  // voice and leads the notification; the technical detail stays below it.
+  const resumen = resumenListo(a, tipo);
+  const conResumen = {
+    ...base,
+    esperaResumen: !resumen && resumenPendiente(a, tipo),
+  };
   if (tipo === "permiso") {
     const pide = loQuePide(a)?.texto ?? "";
     const titulo = `${quien} te pide permiso`;
@@ -183,10 +210,14 @@ export function construirAviso(
       config.leerPermiso && pide ? `. ${textoParaLeer(pide, 120)}` : "";
     const donde = dondeResponder(a);
     return {
-      ...base,
+      ...conResumen,
       titulo: prefijo + titulo,
-      voz: `${prefijo}${titulo}${leido}. ${donde}`,
-      cuerpo: [recortar(pide, 120), donde, cuenta].filter(Boolean).join("\n"),
+      voz: resumen
+        ? `${prefijo}${resumen} ${donde}`
+        : `${prefijo}${titulo}${leido}. ${donde}`,
+      cuerpo: [resumen, recortar(pide, 120), donde, cuenta]
+        .filter(Boolean)
+        .join("\n"),
     };
   }
   if (tipo === "pregunta") {
@@ -194,20 +225,38 @@ export function construirAviso(
     const titulo = `${quien} te hizo una pregunta`;
     const leido = config.leerPregunta && q ? `. ${textoParaLeer(q, 200)}` : "";
     return {
-      ...base,
+      ...conResumen,
       titulo: prefijo + titulo,
-      voz: `${prefijo}${titulo}${leido}`,
-      cuerpo: [recortar(q, 200), cuenta].filter(Boolean).join("\n"),
+      voz: resumen ? `${prefijo}${resumen}` : `${prefijo}${titulo}${leido}`,
+      cuerpo: [resumen, recortar(q, 200), cuenta].filter(Boolean).join("\n"),
     };
   }
   if (tipo === "termino") {
     const titulo = `${quien} terminó`;
-    return { ...base, titulo, voz: titulo, cuerpo: cuenta };
+    return {
+      ...conResumen,
+      titulo,
+      voz: resumen ?? titulo,
+      cuerpo: [resumen, cuenta].filter(Boolean).join("\n"),
+    };
+  }
+  if (tipo === "atasco") {
+    const motivo = a.atasco?.motivo ?? "";
+    const titulo = `${quien} parece atascado`;
+    return {
+      ...conResumen,
+      titulo,
+      voz: resumen ?? `${titulo}. ${textoParaLeer(motivo, 120)}`,
+      cuerpo: [resumen, recortar(motivo, 160), cuenta]
+        .filter(Boolean)
+        .join("\n"),
+    };
   }
   const q = a.pregunta_pendiente ?? "";
   const titulo = `${quien} se cerró con una pregunta pendiente`;
   return {
     ...base,
+    esperaResumen: false,
     titulo,
     voz: titulo,
     cuerpo: [recortar(q, 200), cuenta].filter(Boolean).join("\n"),
@@ -222,6 +271,12 @@ interface Registro {
   ultimo: Partial<Record<TipoAviso, number>>;
   /** Base time of the next reminder. */
   baseRecordatorio: number;
+  /** Stuck episode already seen (type and start), to alert once per episode. */
+  atasco: string | null;
+}
+
+function claveAtasco(a: Agente): string | null {
+  return a.atasco ? `${a.atasco.tipo}:${a.atasco.desde}` : null;
 }
 
 export class DetectorAvisos {
@@ -252,6 +307,7 @@ export class DetectorAvisos {
           candidato: null,
           ultimo: {},
           baseRecordatorio: ahora,
+          atasco: claveAtasco(a),
         });
       }
       this.iniciado = true;
@@ -270,8 +326,22 @@ export class DetectorAvisos {
           candidato: null,
           ultimo: {},
           baseRecordatorio: ahora,
+          atasco: null,
         };
         this.registros.set(id, r);
+      }
+
+      // A new stuck episode alerts once (the state itself may not change).
+      const atasco = claveAtasco(a);
+      if (atasco !== r.atasco) {
+        r.atasco = atasco;
+        if (atasco && config.activos && config.eventos.atasco) {
+          const previo = r.ultimo.atasco;
+          if (previo === undefined || ahora - previo >= this.enfriamientoMs) {
+            avisos.push(construirAviso("atasco", a, reales, config));
+            r.ultimo.atasco = ahora;
+          }
+        }
       }
       const n = a.estado.numero;
       if (n === r.estable) {
@@ -318,6 +388,62 @@ export class DetectorAvisos {
       if (!vistos.has(id)) this.registros.delete(id);
     }
     return avisos;
+  }
+}
+
+/** Longest wait for the helper agent's summary (stage 2.4). */
+export const ESPERA_RESUMEN_MS = 8000;
+
+interface Pendiente {
+  aviso: Aviso;
+  desde: number;
+}
+
+/**
+ * Alerts waiting for the helper agent's sentence. An alert is given as soon as
+ * its summary is ready, or with the technical text when the summary failed,
+ * the summaries are off, the agent left, or `ESPERA_RESUMEN_MS` passed: an
+ * alert is never held longer than that.
+ */
+export class EsperaResumenes {
+  private pendientes: Pendiente[] = [];
+
+  constructor(private readonly esperaMs = ESPERA_RESUMEN_MS) {}
+
+  get enEspera(): number {
+    return this.pendientes.length;
+  }
+
+  agregar(aviso: Aviso, ahora: number): void {
+    this.pendientes.push({ aviso, desde: ahora });
+  }
+
+  listos(agentes: Agente[], ahora: number, config: ConfigAvisos): Aviso[] {
+    const salida: Aviso[] = [];
+    const quedan: Pendiente[] = [];
+    for (const p of this.pendientes) {
+      const { aviso } = p;
+      const a = agentes.find((x) => x.agente.session_id === aviso.sessionId);
+      if (a && resumenListo(a, aviso.tipo)) {
+        salida.push(
+          construirAviso(aviso.tipo, a, agentes, config, aviso.recordatorio),
+        );
+      } else if (
+        a &&
+        resumenPendiente(a, aviso.tipo) &&
+        ahora - p.desde < this.esperaMs
+      ) {
+        quedan.push(p);
+      } else {
+        salida.push(aviso);
+      }
+    }
+    this.pendientes = quedan;
+    return salida;
+  }
+
+  vaciar(): void {
+    this.pendientes = [];
   }
 }
 

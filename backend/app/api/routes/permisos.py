@@ -29,6 +29,7 @@ from app.core.permisos import (
     get_registro,
     validar_config,
 )
+from app.core.resumenes import es_auxiliar
 
 router = APIRouter(prefix="/permisos", tags=["permisos"])
 
@@ -59,6 +60,9 @@ def _maquina(request: Request) -> str | None:
 @router.post("/solicitudes")
 async def crear_solicitud(request: Request, body: NuevaSolicitud) -> dict[str, Any]:
     """Register a PermissionRequest. ``esperar``: the hook waits for a decision."""
+    if es_auxiliar(body.proyecto):
+        # El auxiliar de los avisos no tiene herramientas; si igual pidiera, no entra.
+        return {"esperar": False, "esperando": False, "segundos_restantes": 0, "estado": "ignorada"}
     registro = get_registro()
     existente = registro.obtener(body.id)
     if existente is not None and existente.machine_id != _maquina(request):

@@ -126,7 +126,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-11 | Etapa 1.3 cerrada en el VPS: Washington ejecutó la instalación del sistema, fijó la contraseña de la oficina y corrió el respaldo con restauración en una copia y la prueba de caída (`kill -9`): todo correcto (detalle en "Resultado de los comandos de Washington"). Commit `53c1976` |
 | 2026-10-11 | Etapa 1.4 cerrada: Washington creó el token de la Alienware e instaló el monitor el 2026-10-11 a las 08:30 (hora de Ecuador); primera conexión correcta con https://agents.example.com y cola en 0. Se quitó la web original de ClaudeOffice Visualizer (frontend, pipeline clásico del backend, dependencias y pruebas): `/` abre la oficina 3D y el sitio se llama "Oficina de agentes". CSP más estricta (sin wasm, workers ni WebSocket). La diaria local quedó detenida y sin arranque automático (carpeta y datos conservados como respaldo). El export copia las cargas RSC con el nombre plano que pide Next 16 (`frontend/scripts/rsc-planos.mjs`): sin 404 al precargar ni recarga completa con `router.replace`. Capturas en `docs/capturas/etapa-1-4/` (PC 1440 y celular 390, con y sin sesión). Commits `f2842d5`, `7dabd9b` y `1d686fb` (en GitHub) |
 | 2026-10-11 | Etapa 2.1 (Prompt 26), datos para ver bien: esperas específicas con tabla editable, historial por turno (endpoint paginado), tokens y tiempo por turno, sesión y día (por cuenta y modelo, con trabajo continuo), límites de 5 h y semanal desde la barra de estado de Claude Code, detector de atascos y "Dónde quedamos" (el monitor lee el PROJECT.md de cada proyecto). Todo visible en `/datos` sin rediseño. Monitor 0.2.0 con `statusline` y `--actualizar` (conserva la versión anterior para las sesiones de Claude Code ya abiertas). README nuevo en español en lugar de la documentación heredada. Revisión independiente de las reglas de esperas y del detector, con correcciones. Commit `ac740e2` |
-| 2026-10-11 | Etapa 2.3 (Prompt 28), ficha del agente y "Dónde quedamos" según los bocetos aprobados (`docs/bocetos/etapa-2/`): ficha en panel derecho de 460 px sobre la oficina 3D y en hoja inferior en celular, también desde `/oficina`; historial completo paginado en `/historial`; `/donde-quedamos` con plan por etapas, prompts de la etapa, lo último, lo siguiente, lo que espera decisión y el consumo de hoy; regla de las 8 horas al entrar a la oficina. Prompts de la etapa desde el PROJECT.md (monitor 0.2.1) y desde los pedidos "Prompt N" de los agentes. La vista de prompts se reemplazará por el sistema de prompts de Washington. Revisión independiente de accesibilidad y celular, con correcciones |
+| 2026-10-11 | Etapa 2.3 (Prompt 28), ficha del agente y "Dónde quedamos" según los bocetos aprobados (`docs/bocetos/etapa-2/`): ficha en panel derecho de 460 px sobre la oficina 3D y en hoja inferior en celular, también desde `/oficina`; historial completo paginado en `/historial`; `/donde-quedamos` con plan por etapas, prompts de la etapa, lo último, lo siguiente, lo que espera decisión y el consumo de hoy; regla de las 8 horas al entrar a la oficina. Prompts de la etapa desde el PROJECT.md (monitor 0.2.1) y desde los pedidos "Prompt N" de los agentes. La vista de prompts se reemplazará por el sistema de prompts de Washington. Revisión independiente de accesibilidad y celular, con correcciones. Commit `830171e` |
+| 2026-10-11 | Etapa 2.4 (Prompt 29), avisos resumidos con agente auxiliar: el monitor 0.3.0 resume cada aviso (permiso, pregunta, tarea terminada y atasco) con `claude -p`, Haiku y la cuenta del agente, totalmente aislado; la voz, las notificaciones y la ficha usan la frase, con el detalle técnico debajo. Interruptor en Avisos (encendido), consumo del auxiliar aparte, aviso nuevo de atasco y "Dónde quedamos" también en la primera visita de cada dispositivo. Pruebas reales con las cuentas personal y Demo Org. Revisión independiente del aislamiento y del enmascarado, con correcciones. Cierra la etapa 2 |
 
 ## Cómo levantar
 
@@ -492,6 +493,90 @@ Junto al motivo se guardan los últimos 3 intentos y el último error. Los umbra
 
 Con datos reales, después aparecieron dos defectos más que también se corrigieron: los mensajes de subagentes como pedido y los "commits" detectados dentro del código de un heredoc.
 
+## Avisos resumidos con agente auxiliar (etapa 2.4)
+
+Los avisos (voz, notificaciones de Windows y ficha) dicen una frase clara en lugar del texto técnico. Ejemplo real: en vez de leer `Remove-Item -Recurse Library\ScriptAssemblies`, la voz dice "SkyNest quiere borrar la carpeta de ensamblados de scripts de Unity y necesita tu permiso para continuar".
+
+**Cómo funciona.**
+1. El backend sabe qué avisos están vigentes por agente (permiso pendiente, pregunta, tarea terminada en los últimos 3 min y atasco), cada uno con una clave estable (`backend/app/core/resumenes.py`).
+2. El monitor de cada máquina pide los suyos cada 1,5 s mientras hay sesiones activas (`GET /api/v1/maquinas/avisos`, token de máquina; solo sesiones de esa máquina).
+3. El monitor los resume con el auxiliar (`monitor/src/visualizador_monitor/auxiliar.py`, dos a la vez como máximo) y manda la frase o el fallo con su consumo (`POST /api/v1/maquinas/resumenes`).
+4. `/agents/state` trae en cada agente `resumenes` por tipo de aviso: `listo` con la frase, `pendiente`, `fallo` o `apagado`.
+5. La oficina espera la frase hasta 8 s. Si llega, la usa; si falla, está apagada o pasan los 8 s, usa el texto de siempre. Un aviso nunca se retrasa más que eso.
+
+**El auxiliar.**
+- **Cuándo:** solo para avisos, nunca para cada evento.
+- **Modelo y cuenta:** `claude -p` con Haiku y esfuerzo bajo, con la cuenta del agente que generó el aviso.
+  - Se elige por la carpeta de su transcripción. Demo Org usa `CLAUDE_CONFIG_DIR=C:\Users\<user>\.claude-demo`; la personal, la carpeta por defecto, sin la variable.
+  - Sin transcripción, se elige por la cuenta que informa el servidor. Una ruta de red o fuera de las cuentas no elige ninguna.
+  - Un aviso de Demo Org nunca pasa por la cuenta personal ni al revés.
+- **Entrada:** proyecto, tipo de aviso y los datos del aviso (herramienta y comando, pregunta, pedido, motivo, último intento y último error).
+  - Cada campo se recorta y se enmascaran los secretos (`secretos.py`, archivo idéntico en el monitor y en el backend, que lo aplica antes de mandar los avisos al monitor):
+    - tokens con prefijos conocidos, JWT, encabezados de autorización y cookies, webhooks y firmas en URL;
+    - credenciales en URL y contraseñas en opciones de programas (`mysql -p`, `sqlcmd -P`, `sshpass -p`, `docker login -p`, `redis-cli -a`, `curl -u`, `net user`, `ConvertTo-SecureString`, `echo … | sudo -S`...);
+    - `nombre=valor` y `--password valor`, claves privadas y cadenas largas al azar.
+    - No toca rutas, SHA de git ni UUID.
+  - En la prosa las rutas quedan con su último nombre. Todo va por la entrada estándar, nunca en la línea de comandos. La ruta de la transcripción no viaja: solo la cuenta.
+- **Salida:** una frase de hasta 25 palabras en español latino neutro, que empieza por el proyecto (con su nombre exacto). Las rutas se acortan. Se descarta si trae código, URL, algo con forma de secreto o de clave al azar, o repite un dato raro de la entrada (letras y números juntos o símbolos).
+- **Tope y límites:**
+  - 8 s por llamada, con el árbol de procesos detenido al vencer.
+  - 6 llamadas por minuto.
+  - Caché por aviso y por texto (los recordatorios no vuelven a llamar).
+- **Si falla:** sin cuenta, sin `claude`, por tiempo agotado, error o salida inválida, la oficina usa el texto actual.
+
+**Aislamiento** (opciones verificadas en la documentación oficial de Claude Code, https://code.claude.com/docs/en/cli-reference y /headless, con la CLI 2.1.296):
+- `--safe-mode`: no carga CLAUDE.md (tampoco de las carpetas padre), skills, plugins, hooks, MCP, comandos y agentes propios ni la memoria automática, y mantiene la sesión de la suscripción.
+  - `--bare` no sirve: según la documentación nunca lee la sesión OAuth y exige una clave de API.
+- `--setting-sources ""`: ningún archivo de configuración (usuario, proyecto ni local).
+- `--settings '{"disableAllHooks":true}'`: segunda barrera contra los hooks.
+- `--tools ""`, `--disallowedTools "mcp__*"` y `--strict-mcp-config` sin `--mcp-config`: ninguna herramienta ni servidor MCP.
+- `--disable-slash-commands` y `--max-turns 1`.
+- `--system-prompt`: reemplaza todo el prompt del sistema por las instrucciones del resumen.
+- `--no-session-persistence`: la sesión no se guarda en disco ni se puede retomar.
+  - Además, `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` y `DISABLE_AUTOUPDATER=1`.
+  - Nunca se usa `--resume` ni `--continue`.
+- `--output-format json`: la frase, los tokens, el costo y el modelo.
+- **Entorno:** sin ninguna variable `CLAUDE*`, `ANTHROPIC*` u `OTEL_*` heredada, ni `NODE_OPTIONS`; así no entran las de una sesión de Claude Code (`CLAUDE_CODE_CHILD_SESSION`, `CLAUDECODE`) ni una clave de API.
+  - Con `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `DISABLE_TELEMETRY=1`, `DISABLE_ERROR_REPORTING=1` y `ENABLE_CLAUDEAI_MCP_SERVERS=false`: sin telemetría ni conectores de claude.ai, y arranca más rápido.
+  - Como refuerzo de `--safe-mode`: `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` y `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`.
+  - Y `VISUALIZADOR_AUXILIAR=1`: si algún hook corriera igual, el hook del visualizador sale sin enviar nada (tercera barrera).
+- **Carpeta:** `C:\Users\<user>\.visualizador-monitor\auxiliar`, vacía; la crea el monitor.
+- **Segunda barrera:** el monitor (`es_de_auxiliar`, con la ruta fija y con la carpeta real resuelta, por si `VISUALIZADOR_MONITOR_DIR` la mueve o aparece un nombre corto 8.3) y el backend (`accept` e `ingest` del motor) descartan cualquier evento cuya carpeta, directorio de trabajo o transcripción esté en esa carpeta. También las solicitudes de permiso, en el monitor y en `POST /permisos/solicitudes`.
+- `--effort low`: Haiku responde en 0,9 a 1,2 s con unos 50 tokens de salida (probado; sin la opción gastaba hasta 650).
+- **Procesos:** al detener el monitor se detienen los auxiliares que sigan corriendo.
+- **Riesgo residual (documentación oficial):** la configuración administrada sigue aplicando con `--safe-mode` y ninguna opción de la CLI la anula. La cuenta Demo Org es de tipo Team (`claude auth status`), así que la organización podría poner hooks o variables desde la consola de claude.ai, y esos hooks verían el texto enmascarado del aviso. En la máquina no hay configuración administrada local (`C:\Program Files\ClaudeCode` y `C:\ProgramData\ClaudeCode` no existen).
+
+**Interruptor:** "Resumir los avisos en una frase clara" en el panel de Avisos (encendido). Es una configuración del servidor (`GET/PUT /api/v1/avisos/config`, archivo `avisos.json` en los datos). Apagado, el monitor no recibe avisos y no gasta tokens.
+
+**Consumo:** cada llamada se anota aparte de los agentes (`auxiliar.jsonl` en los datos: cuenta, tokens de entrada y salida, segundos, costo y si falló). `GET /api/v1/consumo` lo trae en `auxiliar` (etiqueta "auxiliar", total y por cuenta). Se ve en `/datos` y en la línea de consumo de "Dónde quedamos".
+
+**Otros cambios:**
+- Aviso nuevo "Parece atascado", una vez por atasco.
+- "Dónde quedamos" se abre primero también en la primera visita desde un dispositivo nuevo, con su aviso. Con el almacenamiento del navegador bloqueado no se aplica, para no repetirse en cada entrada.
+
+**Pruebas reales en la Alienware (2026-10-11):**
+- **Cuenta personal:** un aviso de cada tipo. **Demo Org:** con la sesión activa de vive-demo.
+- **Tiempo:** de 1,9 a 2,2 s por resumen con la cuenta personal y 3,3 s con Demo Org (de 0,9 a 1,2 s de modelo; el resto es el arranque de la CLI). Unos 950 tokens de entrada, casi todos del prompt del sistema en caché, y unos 50 de salida.
+- **Sin rastro:** después de las llamadas no hubo carpetas nuevas en `projects` de ninguna cuenta, ni sesiones nuevas, ni cambios en `history.jsonl`, y la carpeta del auxiliar siguió vacía.
+- **Fuera de la oficina:** el auxiliar no apareció en la oficina, ni siquiera en el servidor anterior, que todavía no tenía el filtro.
+- **De punta a punta:** avisos reales del servidor, resumidos y guardados con la versión final, en 2,2 a 2,6 s en total. La ficha muestra la frase como texto principal (`docs/capturas/etapa-2-4/`).
+  - **Permiso, Demo Org (vive-demo).** Antes: "El servidor de pruebas rechazó la contraseña de carga-editor@… (401, admin.invalid-credentials) en un solo intento…". Después: "vive-demo pide permiso para usar la contraseña del servidor de pruebas; la clave fue rechazada y conviene revisarla antes de probar otra."
+  - **Pregunta (server-monitor).** Antes: "¿Apruebas borrar estas 129 imágenes (las 4 filas de la tabla: versiones anteriores a las 2 últimas de vive-demo-migrations, …), conservando las 14 listadas?". Después: "server-monitor pregunta si puedes borrar 129 imágenes antiguas de cuatro proyectos, conservando las 14 más recientes; ninguna está en uso."
+  - **Tarea terminada (SkyNest).** Antes: "SkyNest terminó". Después: "SkyNest terminó la tarea y está listo para tu revisión o el siguiente paso."
+- **Prueba simulada, permiso (SkyNest).** Antes: `PowerShell: Remove-Item -Recurse Library\ScriptAssemblies`. Después: "SkyNest necesita tu permiso para borrar la carpeta de recursos compilados de Unity; ¿lo autorizas?"
+
+**Revisión independiente (2026-10-11).** Un subagente revisó el aislamiento y el enmascarado (unos 90 casos de secretos). Se corrigió:
+- la frase del modelo no se validaba contra secretos, y acortar rutas podía dejar la cola de una clave;
+- se escapaban contraseñas de muchos comandos (lista arriba) y había falsos positivos ("basic authentication", `password_hash = ?`, rutas con un hexadecimal, SHA de git, UUID);
+- cualquier máquina podía escribir la frase de sesiones ajenas o reemplazar una lista; ahora solo la máquina de la sesión, solo para un aviso vigente y sin reemplazar;
+- el backend mandaba al monitor el texto sin enmascarar y la ruta de la transcripción;
+- faltaban variables de entorno (telemetría, conectores, `OTEL_*`, `NODE_OPTIONS`) y la tercera barrera en el hook;
+- el filtro dependía de una ruta fija, y las solicitudes de permiso no se filtraban;
+- `buscar_claude` podía elegir el script de npm sin extensión;
+- al detener el monitor podían quedar auxiliares corriendo.
+
+Separación de cuentas, sin cambios: la revisión la probó con mayúsculas, barras mezcladas, `.claude-demo2`, nombres cortos, `\\?\` y rutas de red, y falla cerrada.
+
 ## Ver bien: ficha y "Dónde quedamos" (etapa 2.3)
 
 Implementa los bocetos aprobados de `docs/bocetos/etapa-2/` (Main y FichaCelular para la ficha, DondeQuedamos y DondeCelular) con los componentes y estilos del proyecto: tema claro, IBM Plex Sans y Mono, sin emojis, botones de 44 px o más.
@@ -797,11 +882,11 @@ Decisión de Washington (2026-10-10).
 - **Función 52 (más adelante)**: instalador profesional del monitor con interfaz visual, vinculación desde la web sin escribir URL ni token (por ejemplo un código o enlace de un solo uso que la oficina genera para la máquina) y detección automática de cuentas de Claude Code.
 - **Etapa 1.3** (hecha el 2026-10-11): publicada en https://agents.example.com; nginx sirve el frontend estático y reenvía `/api` y `/ws` al backend (sección "VPS y despliegue").
 - **Etapa 1, publicar**: backend para varias máquinas con inicio de sesión y token por monitor; monitor e instalador de Windows (recibe los hooks, lee transcripts, cola sin conexión, arranque automático, recuperación tras reinicio, comandos peligrosos siempre con aprobación); despliegue en el VPS con nginx, https y respaldos diarios; pasar el uso diario al VPS. El monitor debe diseñarse para que más adelante pueda lanzar sesiones de Claude Code (`claude -p` con stream-json y `--resume`) en carpetas que se le indiquen.
-- **Etapa 2, ver bien**, en 4 prompts:
+- **Etapa 2, ver bien** (hecha el 2026-10-11), en 4 prompts:
   - 26: datos y API: esperas, historial, consumo, límites, atascos, "Dónde quedamos" (hecho el 2026-10-11).
   - 27: bocetos de la ficha del agente y de "Dónde quedamos", hechos en Claude.ai para su aprobación (hecho el 2026-10-11).
   - 28: ficha del agente y "Dónde quedamos" en la oficina (hecho el 2026-10-11).
-  - 29: avisos resumidos con un agente auxiliar.
+  - 29: avisos resumidos con un agente auxiliar (hecho el 2026-10-11).
   - Alcance: ficha útil del agente (no chat): tarea actual, pasos, estimado contra real, tokens, commits, archivos, permisos y acciones; esperas específicas (por ejemplo "Unity: compilando scripts, 2 min"); historial preciso; tokens, tiempo de trabajo y límites de 5 h y semanal; detector de atascos.
 - **Etapa 3, app iOS**: bocetos para aprobación, base que consume el VPS, push de tres alertas (permiso pendiente, pregunta del orquestador, tarea terminada), bandeja de decisiones, bandeja de ideas, widget, Live Activity y Apple Watch.
 - **Etapa 4, proyectos y orquestador**: crear proyecto desde la web o la app en la ruta base de cada máquina (`E:\Agents` en la Alienware) eligiendo máquina, cuenta (personal o Demo Org), personaje, modelo y esfuerzo (low a max); rol orquestador (planifica, conversa con Washington, puede ejecutar comandos en PowerShell y Git Bash, instalar skills y conectores MCP y controlar programas como Blender) con uno o varios agentes de código enlazados, cada uno en su carpeta y con subagentes; todo pasa por el orquestador salvo los permisos; Washington aprueba cada orden del orquestador al agente (luego interruptor automático por proyecto); chat propio con cada agente; reglas de la casa heredadas por todos los orquestadores; plantillas de proyecto; entrevista inicial; bóveda de secretos.
@@ -824,8 +909,8 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington actualiza el monitor de la Alienware a la 0.2.1 (`instalar-visualizador-monitor.exe --actualizar`): manda los prompts de la etapa anotados en el PROJECT.md.
-2. Washington usa la ficha y "Dónde quedamos" y anota lo que hay que refinar.
-3. Prompt 29: avisos resumidos con un agente auxiliar.
+1. Washington actualiza el monitor de la Alienware a la 0.3.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`): trae el auxiliar de los avisos resumidos.
+2. Etapa 3, app iOS: bocetos para aprobación, base que consume el VPS y push de las tres alertas (los avisos resumidos ya sirven de texto).
+3. Washington usa la ficha, "Dónde quedamos" y los avisos resumidos, y anota lo que hay que refinar.
 4. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
 5. Vigilar el disco del VPS (85 % usado).

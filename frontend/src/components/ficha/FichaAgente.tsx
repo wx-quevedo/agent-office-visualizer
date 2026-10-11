@@ -19,7 +19,7 @@ import {
   type KeyboardEvent as TeclaReact,
   type RefObject,
 } from "react";
-import type { Agente } from "@/components/oficina/logica";
+import type { Agente, TipoResumen } from "@/components/oficina/logica";
 import PanelPermiso from "@/components/permisos/PanelPermiso";
 import { useLectura } from "@/utils/useLectura";
 import {
@@ -45,6 +45,12 @@ import {
 import s from "./ficha.module.css";
 
 const TURNOS_EN_FICHA = 6;
+
+/** The helper agent's sentence for this alert, when ready (stage 2.4). */
+function resumenDe(a: Agente, tipo: TipoResumen): string | null {
+  const r = a.resumenes?.[tipo];
+  return r?.estado === "listo" && r.texto ? r.texto : null;
+}
 const ENFOCABLES =
   'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -239,6 +245,7 @@ export function FichaVista({
                 permiso={a.permiso}
                 ahora={ahora}
                 variante="ficha"
+                resumen={resumenDe(a, "permiso")}
               />
             ) : (
               <section
@@ -246,6 +253,9 @@ export function FichaVista({
                 aria-label="Permiso solicitado"
               >
                 <h3 className={s.etiquetaAzul}>Te pide permiso</h3>
+                {resumenDe(a, "permiso") && (
+                  <p className={s.texto}>{resumenDe(a, "permiso")}</p>
+                )}
                 <p className={s.texto}>Responde en VS Code.</p>
               </section>
             )}
@@ -258,7 +268,14 @@ export function FichaVista({
               Parece atascado ·{" "}
               {haceTiempo(a.atasco.desde, ahora).replace("hace ", "")}
             </h3>
-            <p className={s.texto}>{a.atasco.motivo}</p>
+            {resumenDe(a, "atasco") ? (
+              <>
+                <p className={s.texto}>{resumenDe(a, "atasco")}</p>
+                <p className={s.secundario}>{a.atasco.motivo}</p>
+              </>
+            ) : (
+              <p className={s.texto}>{a.atasco.motivo}</p>
+            )}
             {a.atasco.ultimos_intentos.length > 0 && (
               <p className={s.secundario}>
                 Último intento:{" "}
@@ -282,7 +299,14 @@ export function FichaVista({
         {a?.pregunta_pendiente && (
           <section className={s.tarjetaAzul} aria-label="Te pregunta">
             <h3 className={s.etiquetaAzul}>Te pregunta</h3>
-            <p className={s.texto}>{a.pregunta_pendiente}</p>
+            {resumenDe(a, "pregunta") ? (
+              <>
+                <p className={s.texto}>{resumenDe(a, "pregunta")}</p>
+                <p className={s.secundario}>{a.pregunta_pendiente}</p>
+              </>
+            ) : (
+              <p className={s.texto}>{a.pregunta_pendiente}</p>
+            )}
             <p className={s.secundario}>Responde en VS Code.</p>
           </section>
         )}

@@ -215,6 +215,11 @@ try:
                 real_stdout.flush()
             sys.exit(0)
 
+        # The summaries' helper agent of the monitor (stage 2.4) never reaches the
+        # office: it runs without hooks, and if one ran anyway it sends nothing.
+        if os.environ.get("VISUALIZADOR_AUXILIAR"):
+            sys.exit(0)
+
         parser = argparse.ArgumentParser(description="Claude Office hook event handler")
         parser.add_argument(
             "event_type",

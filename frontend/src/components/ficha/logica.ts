@@ -40,8 +40,28 @@ export interface Historial {
   turnos: Turno[];
 }
 
+/** The summaries' helper agent, counted apart from the agents (stage 2.4). */
+export interface ConsumoAuxiliar {
+  etiqueta: string;
+  total: {
+    llamadas: number;
+    fallos: number;
+    tokens_entrada: number;
+    tokens_salida: number;
+    segundos: number;
+  };
+  por_cuenta: {
+    cuenta: string;
+    llamadas: number;
+    tokens_entrada: number;
+    tokens_salida: number;
+    segundos: number;
+  }[];
+}
+
 /** GET /consumo (only the parts the card and "Dónde quedamos" use). */
 export interface Consumo {
+  auxiliar?: ConsumoAuxiliar;
   dia: string;
   total: {
     sesiones: number;

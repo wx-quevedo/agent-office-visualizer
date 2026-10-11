@@ -43,11 +43,14 @@ export default function PanelPermiso({
   permiso,
   ahora,
   variante = "caja",
+  resumen = null,
 }: {
   permiso: Permiso;
   ahora: number;
   /** "ficha": the agent card's version (one clear sentence, blue card). */
   variante?: "caja" | "ficha";
+  /** Helper agent's sentence (stage 2.4): the main line of the card. */
+  resumen?: string | null;
 }) {
   const ficha = variante === "ficha";
   const disp = useDispositivo();
@@ -102,7 +105,7 @@ export default function PanelPermiso({
             {haceTiempo(actual.creada, ahora)}
           </h3>
           <p className={s.fichaFrase}>
-            {fraseDePermiso(actual.herramienta, actual.detalle)}
+            {resumen ?? fraseDePermiso(actual.herramienta, actual.detalle)}
           </p>
         </>
       ) : (

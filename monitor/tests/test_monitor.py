@@ -289,3 +289,21 @@ def test_permiso_espera_a_que_salgan_los_eventos_anteriores(arrancar: Any) -> No
     r = _pedir(m, "POST", "/api/v1/permisos/solicitudes", {"id": "p3"})
     assert r["esperar"] is False and r["estado"] == "cola_pendiente"
     assert time.monotonic() - t0 < 3
+
+
+def test_eventos_de_la_carpeta_del_auxiliar_no_salen(
+    servidor: ServidorFalso, arrancar: Callable[[str], Monitor]
+) -> None:
+    m = arrancar(servidor.url)
+    auxiliar = {
+        **_evento(0, "prueba-auxiliar"),
+        "data": {
+            "tool_name": "Bash",
+            "project_dir": str(Path.home() / ".visualizador-monitor" / "auxiliar"),
+        },
+    }
+    assert _pedir(m, "POST", "/api/v1/events", auxiliar)["status"] == "ignored"
+    assert _pedir(m, "POST", "/api/v1/events", _evento(1))["status"] == "accepted"
+    assert _esperar(lambda: len(servidor.eventos()) == 1)
+    assert servidor.eventos()[0]["session_id"] == "prueba-monitor-1"
+    assert "prueba-auxiliar" not in m.lector.sesiones

@@ -43,6 +43,7 @@ const EVENTOS: Array<[keyof ConfigAvisos["eventos"], string, string]> = [
     "Repite el aviso de 13 y 14",
   ],
   ["cerrado", "Se cerró con una pregunta pendiente (21)", "Voz y notificación"],
+  ["atasco", "Parece atascado", "Voz y notificación, una vez por atasco"],
 ];
 
 function textoPermiso(api: ApiAvisos): string | null {
@@ -156,6 +157,17 @@ export default function PanelAvisos({
 
         <fieldset className={s.grupo}>
           <legend>Qué lee y cómo notifica</legend>
+          <Interruptor
+            activo={api.resumenes ?? true}
+            onCambio={api.cambiarResumenes}
+            detalle={
+              api.resumenes === null
+                ? "Leyendo la configuración del servidor…"
+                : "Un agente auxiliar (Haiku, con la cuenta del agente) resume cada aviso en una frase. Si tarda más de 8 s, se lee el texto de siempre."
+            }
+          >
+            Resumir los avisos en una frase clara
+          </Interruptor>
           <Interruptor
             activo={c.leerPermiso}
             onCambio={(v) => api.cambiar({ leerPermiso: v })}

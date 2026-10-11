@@ -8,10 +8,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Agente } from "@/components/oficina/logica";
+import { apiFetch } from "@/utils/api";
 import {
   CONFIG_INICIAL,
   ColaVoz,
   DetectorAvisos,
+  EsperaResumenes,
   elegirVoz,
   vocesEspanol,
   type Aviso,
@@ -174,7 +176,12 @@ export interface ApiAvisos {
   voces: SpeechSynthesisVoice[];
   vozElegida: SpeechSynthesisVoice | null;
   vozDisponible: boolean;
+  /** Summaries by the helper agent (server setting; null while unknown). */
+  resumenes: boolean | null;
+  cambiarResumenes: (activos: boolean) => void;
 }
+
+const RUTA_CONFIG_AVISOS = "/api/v1/avisos/config";
 
 interface Opciones {
   /** Opens the agent detail when a notification is clicked. */
@@ -195,6 +202,8 @@ export function useAvisos(
   const agentesRef = useRef(agentes);
   const abrirRef = useRef(abrirAgente);
   const detector = useRef(new DetectorAvisos());
+  const espera = useRef(new EsperaResumenes());
+  const [resumenes, setResumenes] = useState<boolean | null>(null);
 
   useEffect(() => {
     configRef.current = config;
@@ -283,13 +292,24 @@ export function useAvisos(
   );
 
   // Check every second (the 3 s rule needs a clock, not only new data).
+  // An alert whose summary is still being written waits for it (at most
+  // ESPERA_RESUMEN_MS); the others are given right away.
   useEffect(() => {
     const id = setInterval(() => {
       const lista = agentesRef.current;
       if (!lista) return;
+      const ahora = Date.now();
       for (const aviso of detector.current.observar(
         lista,
-        Date.now(),
+        ahora,
+        configRef.current,
+      )) {
+        if (aviso.esperaResumen) espera.current.agregar(aviso, ahora);
+        else dar(aviso);
+      }
+      for (const aviso of espera.current.listos(
+        lista,
+        ahora,
         configRef.current,
       )) {
         dar(aviso);
@@ -297,6 +317,35 @@ export function useAvisos(
     }, REVISION_MS);
     return () => clearInterval(id);
   }, [dar]);
+
+  // Summaries switch: a server setting (the monitors read it too).
+  useEffect(() => {
+    let vivo = true;
+    apiFetch(RUTA_CONFIG_AVISOS)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { resumenes?: boolean } | null) => {
+        if (vivo && d && typeof d.resumenes === "boolean")
+          setResumenes(d.resumenes);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const cambiarResumenes = useCallback((activos: boolean) => {
+    setResumenes(activos);
+    apiFetch(RUTA_CONFIG_AVISOS, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resumenes: activos }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { resumenes?: boolean } | null) => {
+        if (d && typeof d.resumenes === "boolean") setResumenes(d.resumenes);
+      })
+      .catch(() => setResumenes(!activos));
+  }, []);
 
   const cambiar = useCallback((cambio: Partial<ConfigAvisos>) => {
     setConfig((prev) => {
@@ -336,6 +385,7 @@ export function useAvisos(
   }, [cambiar]);
 
   const desactivar = useCallback(() => {
+    espera.current.vaciar();
     colaVoz.vaciar();
     window.speechSynthesis?.cancel();
     cambiar({ activos: false });
@@ -358,6 +408,7 @@ export function useAvisos(
       cuerpo: "Bash: git status\nAviso de prueba",
       tag: "aviso-de-prueba",
       notificar: true,
+      esperaResumen: false,
     });
   }, [dar]);
 
@@ -375,5 +426,7 @@ export function useAvisos(
     voces,
     vozElegida: elegirVoz(voces, config.voz),
     vozDisponible: typeof window !== "undefined" && "speechSynthesis" in window,
+    resumenes,
+    cambiarResumenes,
   };
 }

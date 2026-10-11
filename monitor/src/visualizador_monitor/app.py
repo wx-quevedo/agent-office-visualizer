@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import threading
@@ -11,12 +12,14 @@ from pathlib import Path
 from typing import Any
 
 from visualizador_monitor import VERSION, config
+from visualizador_monitor.auxiliar import Auxiliar, es_de_auxiliar
 from visualizador_monitor.cliente import Servidor
 from visualizador_monitor.cola import Cola
 from visualizador_monitor.config import Configuracion
 from visualizador_monitor.lector import Lector
 from visualizador_monitor.reenvio import EstadoConexion, Reenviador
 from visualizador_monitor.registro import logger
+from visualizador_monitor.resumidor import Resumidor
 from visualizador_monitor.servidor_local import arrancar, esperar_permiso, reenviar_permiso
 from visualizador_monitor.sesiones import LanzadorNoDisponible
 
@@ -32,6 +35,10 @@ class Monitor:
         self.lector = Lector(self.servidor, cfg.cuentas, self.cola)
         self.reenviador = Reenviador(self.cola, self.servidor, self.conexion)
         self.lanzador = LanzadorNoDisponible()  # etapa 4
+        # Etapa 2.4: avisos resumidos por el auxiliar (solo con sesiones activas).
+        self.resumidor = Resumidor(
+            self.servidor, Auxiliar(cfg.cuentas, base), lambda: bool(self.lector.sesiones)
+        )
         self.inicio = datetime.now(UTC).isoformat()
         self.parar = threading.Event()
         self.http: Any = None
@@ -39,15 +46,26 @@ class Monitor:
     # -- API local (llamado desde servidor_local) ---------------------------------
 
     def recibir_evento(self, payload: dict[str, Any], cuerpo: bytes) -> dict[str, Any]:
+        if es_de_auxiliar(payload, self.resumidor.auxiliar.carpeta):
+            # El auxiliar corre sin hooks; si igual llegara algo suyo, no entra a la oficina.
+            return {"status": "ignored", "event_id": None, "visual_action": "none"}
         evento_id = self.cola.agregar("/api/v1/events", cuerpo)
         try:
             self.lector.vio_evento(payload)
         except Exception:
             logger.exception("No se pudo anotar la sesión del evento")
         self.reenviador.hay_nuevo.set()
+        self.resumidor.hay_nuevo.set()
         return {"status": "accepted", "event_id": evento_id, "visual_action": "queued"}
 
     def registrar_permiso(self, cuerpo: bytes) -> dict[str, Any]:
+        try:
+            datos = json.loads(cuerpo)
+        except ValueError:
+            datos = None
+        if isinstance(datos, dict) and es_de_auxiliar(datos, self.resumidor.auxiliar.carpeta):
+            # El auxiliar no tiene herramientas; si igual pidiera permiso, no va a la oficina.
+            return {"esperar": False, "segundos_restantes": 0, "estado": "ignorado"}
         # Los eventos anteriores de la sesión llegan primero: si no, el servidor
         # cerraría la solicitud nueva con un evento viejo. Si la cola no se vacía
         # en 1 s, el hook sigue sin decisión (el diálogo de VS Code).
@@ -82,6 +100,7 @@ class Monitor:
             "ultimo_envio_proyectos": self.lector.ultimo_envio_proyectos,
             "limites": self.lector.limites,
             "cuentas": self.cfg.cuentas,
+            "ultimo_resumen": self.resumidor.ultimo,
         }
 
     # -- en marcha -------------------------------------------------------------
@@ -90,6 +109,7 @@ class Monitor:
         """Abre el puerto local (falla si otro monitor ya lo usa) y arranca los hilos."""
         self.http, _ = arrancar(self, self.cfg.puerto)
         self.reenviador.start()
+        self.resumidor.start()
         (self.base / "monitor.pid").write_text(str(os.getpid()), encoding="ascii")
         logger.info(
             "Monitor %s escuchando en 127.0.0.1:%s; servidor %s; cuentas %s",
@@ -131,6 +151,8 @@ class Monitor:
     def detener(self) -> None:
         self.parar.set()
         self.reenviador.parar.set()
+        self.resumidor.parar.set()
+        self.resumidor.hay_nuevo.set()
         self.reenviador.hay_nuevo.set()
         if self.http is not None:
             self.http.shutdown()

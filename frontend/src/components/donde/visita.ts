@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Rule of the 8 hours: if more than 8 h passed since your last visit to the
- * office on this device, entering the office opens "Dónde quedamos" first.
+ * Rule of the 8 hours: on the first visit from a device, or if more than 8 h
+ * passed since your last visit to the office on it, entering the office opens
+ * "Dónde quedamos" first.
  * The time of the last visit lives in this browser only (localStorage); with
  * blocked storage nothing is remembered and the office opens as always.
  */
@@ -51,14 +52,42 @@ export function guardarVisita(
 }
 
 /**
- * True when "Dónde quedamos" should open first: a known last visit more than
- * 8 h ago. Never on the first visit of a device or with a clock in the past.
+ * Whether this browser can remember the visit. With blocked storage the rule
+ * never applies: "first visit" would repeat on every entry.
+ */
+export function almacenDisponible(
+  almacen: Almacen | null = almacenLocal(),
+): boolean {
+  try {
+    if (!almacen) return false;
+    const prueba = `${CLAVE_VISITA}-prueba`;
+    almacen.setItem(prueba, "1");
+    return almacen.getItem(prueba) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Why "Dónde quedamos" opens first: "nuevo" (first visit), "oficina" (8 h) or null. */
+export function motivoApertura(
+  ultima: number | null,
+  ahora: number,
+  disponible: boolean,
+): "nuevo" | "oficina" | null {
+  if (!disponible || !debeAbrirDondeQuedamos(ultima, ahora)) return null;
+  return ultima === null ? "nuevo" : "oficina";
+}
+
+/**
+ * True when "Dónde quedamos" should open first: the first visit from this
+ * device (stage 2.4), or a last visit more than 8 h ago. Never with a clock
+ * in the past.
  */
 export function debeAbrirDondeQuedamos(
   ultima: number | null,
   ahora: number,
 ): boolean {
-  if (ultima === null) return false;
+  if (ultima === null) return true;
   return ahora - ultima > LIMITE_MS;
 }
 
@@ -71,11 +100,12 @@ export function useVisitaOficina(conAgente: boolean): void {
   const router = useRouter();
   useEffect(() => {
     const ahora = Date.now();
-    const abrir =
-      !conAgente && debeAbrirDondeQuedamos(leerUltimaVisita(), ahora);
+    const motivo = conAgente
+      ? null
+      : motivoApertura(leerUltimaVisita(), ahora, almacenDisponible());
     guardarVisita(ahora);
-    if (abrir) {
-      router.replace("/donde-quedamos?desde=oficina");
+    if (motivo) {
+      router.replace(`/donde-quedamos?desde=${motivo}`);
       return;
     }
     const id = setInterval(() => guardarVisita(Date.now()), CADA_MS);

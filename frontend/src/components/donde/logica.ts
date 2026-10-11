@@ -454,7 +454,11 @@ export function consumoDe(
 /** "Hoy: 4 h 35 min de agentes · 707 246 tokens". */
 export function lineaConsumo(consumo: Consumo | null): string | null {
   if (!consumo) return null;
-  return `Hoy: ${tiempoCorto(consumo.total.segundos_con_agentes)} de agentes · ${miles(consumo.total.tokens_salida)} tokens`;
+  const base = `Hoy: ${tiempoCorto(consumo.total.segundos_con_agentes)} de agentes · ${miles(consumo.total.tokens_salida)} tokens`;
+  const aux = consumo.auxiliar?.total;
+  // The summaries' helper, apart: it is not an agent's work.
+  if (!aux || aux.llamadas === 0) return base;
+  return `${base} · auxiliar: ${miles(aux.tokens_entrada + aux.tokens_salida)} tokens en ${aux.llamadas} ${aux.llamadas === 1 ? "resumen" : "resúmenes"}`;
 }
 
 export function textoUltima(p: ProyectoVista, ahora: number): string {

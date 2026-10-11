@@ -46,8 +46,8 @@ export interface PropsVista {
   ahora: number;
   /** Last turn of the agent when the project report does not bring it. */
   turnoExtra?: Turno | null;
-  /** Opened by the 8-hour rule on entering the office. */
-  desdeOficina?: boolean;
+  /** Opened first on entering the office: "oficina" (8 h) or "nuevo" (new device). */
+  desdeOficina?: boolean | "nuevo" | "oficina";
   error?: string | null;
 }
 
@@ -358,8 +358,9 @@ export function DondeVista({
         </div>
         {desdeOficina && (
           <p className={s.bienvenida} ref={aviso} tabIndex={-1}>
-            Pasaron más de 8 horas desde tu última visita: así quedaron tus
-            proyectos.{" "}
+            {desdeOficina === "nuevo"
+              ? "Primera visita desde este dispositivo: así van tus proyectos."
+              : "Pasaron más de 8 horas desde tu última visita: así quedaron tus proyectos."}{" "}
             <Link href="/oficina/3d" className={`${s.boton} ${s.botonAviso}`}>
               Seguir a la oficina
             </Link>
@@ -437,7 +438,8 @@ export function DondeVista({
 export default function DondeQuedamos() {
   const params = useSearchParams();
   const pedido = params.get("proyecto");
-  const desdeOficina = params.get("desde") === "oficina";
+  const desde = params.get("desde");
+  const desdeOficina = desde === "oficina" || desde === "nuevo" ? desde : false;
   const { datos: estado, ahora } = useEstadoOficina();
   const api = useLectura<{ proyectos: ProyectoApi[] }>(
     "/api/v1/proyectos",

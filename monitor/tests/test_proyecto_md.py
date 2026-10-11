@@ -32,16 +32,16 @@ def test_project_md_real() -> None:
     texto = (RAIZ / "PROJECT.md").read_text(encoding="utf-8")
     r = resumir(texto)
     assert r["titulo"] and "PROJECT.md" in r["titulo"]
-    for etapa in ("Etapa 0", "Etapa 1.1", "Etapa 1.2", "Etapa 1.3", "Etapa 1.4"):
+    for etapa in ("Etapa 0", "Etapa 1.1", "Etapa 1.2", "Etapa 1.3", "Etapa 1.4", "Etapa 2"):
         assert _que_empieza(r, etapa)["estado"] == "hecho", etapa
-    assert _que_empieza(r, "Etapa 2")["estado"] != "hecho"
+    assert _que_empieza(r, "Etapa 3")["estado"] != "hecho"
     # la posición es la primera etapa no hecha después de la última hecha
     nombres = [i["nombre"] for i in r["plan"]]
     ultimo_hecho = max(i for i, it in enumerate(r["plan"]) if it["estado"] == "hecho")
     siguiente = next(it for it in r["plan"][ultimo_hecho + 1 :] if it["estado"] != "hecho")
     assert r["posicion"] == siguiente["nombre"]
     assert r["posicion"] in nombres
-    assert r["posicion"].startswith("Etapa 2")
+    assert r["posicion"].startswith("Etapa 3")
     assert r["siguiente_paso"] is not None
     assert len(r["siguiente_paso"]) <= 300
     assert isinstance(r["espera_decision"], list)
@@ -344,6 +344,9 @@ def test_sin_prompts_lista_vacia() -> None:
 
 
 def test_prompts_del_project_md_real() -> None:
-    r = resumir((RAIZ / "PROJECT.md").read_text(encoding="utf-8"))
-    numeros = [p["numero"] for p in r["prompts"]]
-    assert numeros[:2] == [26, 27]
+    # La etapa 2 (cerrada) anota sus prompts 26 a 29 con el commit del registro.
+    doc = proyecto_md._Doc((RAIZ / "PROJECT.md").read_text(encoding="utf-8"))  # pyright: ignore[reportPrivateUsage]
+    prompts = proyecto_md._prompts(doc, "Etapa 2, ver bien")  # pyright: ignore[reportPrivateUsage]
+    assert [p["numero"] for p in prompts] == [26, 27, 28, 29]
+    assert all(p["estado"] == "hecho" for p in prompts)
+    assert prompts[0]["commits"] == ["ac740e2"]

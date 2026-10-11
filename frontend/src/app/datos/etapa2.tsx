@@ -199,6 +199,16 @@ interface Consumo {
     segundos_trabajo: number;
     continuo_s: number;
   }[];
+  auxiliar?: {
+    por_cuenta: {
+      cuenta: string;
+      llamadas: number;
+      fallos: number;
+      tokens_entrada: number;
+      tokens_salida: number;
+      segundos: number;
+    }[];
+  };
 }
 
 interface Ventana {
@@ -318,6 +328,25 @@ export function SeccionesEtapa2() {
               s.tokens_salida,
               duracion(s.segundos_trabajo),
               s.continuo_s ? duracion(s.continuo_s) : "—",
+            ])}
+          />
+          <h3>Auxiliar de avisos (aparte de los agentes)</h3>
+          <Tabla
+            titulos={[
+              "Cuenta",
+              "Resúmenes",
+              "Fallos",
+              "Tokens de entrada",
+              "Tokens de salida",
+              "Tiempo",
+            ]}
+            filas={(c.auxiliar?.por_cuenta ?? []).map((g) => [
+              g.cuenta,
+              g.llamadas,
+              g.fallos,
+              g.tokens_entrada,
+              g.tokens_salida,
+              `${g.segundos} s`,
             ])}
           />
         </>
