@@ -135,6 +135,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-11 | Etapa 2.4 (Prompt 29), avisos resumidos con agente auxiliar: el monitor 0.3.0 resume cada aviso (permiso, pregunta, tarea terminada y atasco) con `claude -p`, Haiku y la cuenta del agente, totalmente aislado; la voz, las notificaciones y la ficha usan la frase, con el detalle técnico debajo. Interruptor en Avisos (encendido), consumo del auxiliar aparte, aviso nuevo de atasco y "Dónde quedamos" también en la primera visita de cada dispositivo. Pruebas reales con las cuentas personal y Demo Org. Revisión independiente del aislamiento y del enmascarado, con correcciones. Cierra la etapa 2 |
 | 2026-10-11 | Etapa 3 (Prompt 31), app iOS base (`ios/VisualizadorAgentes`): Entrar (servidor y contraseña, sesión de 30 días en el Llavero, Face ID para abrir), TabView nativo con Liquid Glass (Oficina, Decisiones con insignia de pendientes reales, Dónde quedamos, Ideas; Decisiones e Ideas llegan en el Prompt 33), Oficina 3D en WKWebView (`/oficina/3d?app=ios`) con la tarjeta "Te esperan" nativa y el selector Lista o 3D, oficina en lista con filtro Todas, Personal o Demo Org, ficha nativa (ahora mismo, tiempo razonable, métricas, turnos de hoy, aprobar y rechazar con Face ID para comandos peligrosos) y Dónde quedamos con selector de proyectos. Web: modo `?app=ios` en la oficina 3D (sin barra ni ficha web; avisa a la app del agente tocado por el manejador de WebKit `oficina`). 27 pruebas unitarias del cliente, la decodificación y la lógica. Probada contra https://agents.example.com en el simulador. Capturas en `docs/capturas/etapa-3/`. Commits `797c025` (web, falta desplegar) y `156b707` (app) |
 | 2026-10-12 | Etapa 3 (Prompt 33), parte B, backend de las bandejas: `GET /decisiones` (permisos, preguntas y atascos por urgencia, con la frase del auxiliar, el detalle técnico, proyecto, cuenta, máquina y hace cuánto, más las resueltas de hoy con quién, cómo y cuándo), "Ya lo vi" para atascos, ideas (guardar, listar, cambiar el proyecto, archivar) en `bandejas.db` con versión de esquema, las opciones de cada pregunta en `/agents/state` (`pregunta_opciones`) y el conteo `decisiones_pendientes` para la insignia de la app; las decisiones de la app quedan como "app iOS". Parte A: las preguntas quedan de solo lectura (decisión de esta fecha) |
+| 2026-10-12 | Arreglo: las resueltas de hoy de Decisiones muestran el nombre del proyecto (no el de la carpeta de transcripciones, `e--Test-SkyNest`). Commit `7664a22` |
+| 2026-10-12 | Etapa 4 iniciada (investigación): documentación oficial revisada y dos pruebas reales en carpetas temporales con Haiku: un programa lanza `claude -p` con stream-json y le manda dos mensajes en la misma sesión, que la oficina ve con los hooks actuales; y un orquestador le manda una orden a un agente con `ListAgents` y `SendMessage`, que el agente cumple en 1 s. Informe y tres arquitecturas en `docs/etapa-4/investigacion.md`; se recomienda la A (procesos `-p` del monitor y mensajería entre sesiones, con un hook propio que aprueba cada orden) |
 
 ## Cómo levantar
 
@@ -499,6 +501,37 @@ Junto al motivo se guardan los últimos 3 intentos y el último error. Los umbra
 - rendimiento: el tiempo continuo no recorre los tokens, y las horas de las muestras se arman una vez.
 
 Con datos reales, después aparecieron dos defectos más que también se corrigieron: los mensajes de subagentes como pedido y los "commits" detectados dentro del código de un heredoc.
+
+## Proyectos y orquestador (etapa 4): investigación
+
+Informe completo, con fuentes y la salida real de las pruebas: `docs/etapa-4/investigacion.md`.
+
+**Hallazgos clave** (Claude Code 2.1.296, documentación oficial):
+- **Sesión controlada por un programa:**
+  - `claude -p --input-format stream-json --output-format stream-json` deja un proceso vivo que acepta varios mensajes seguidos en la misma sesión; cada turno termina con un mensaje `result`.
+  - Probado: dos mensajes, 7,6 s y 4,8 s, con Haiku y la suscripción (`apiKeySource: none`).
+- **La oficina las ve:** sin `--bare`, una sesión `-p` corre los hooks de `~/.claude/settings.json`. Probado: llegaron todos sus eventos. El modelo no se informa, porque en `-p` no corre la barra de estado.
+- **Permisos:** en `-p`, un permiso que nadie decide se deniega, pero el hook PermissionRequest corre y puede decidir; es el de siempre.
+- **AskUserQuestion:** en `-p` solo se ofrece con un permission host (`canUseTool` del SDK o `--permission-prompt-tool`).
+- **Mensajes entre sesiones:**
+  - La cross-session messaging viene activada en Windows desde la 2.1.234. Claude usa `ListAgents` y `SendMessage`, y una sesión `-p` recibe mensajes si arranca con `crossSessionInbound: accept`.
+  - Un mensaje no puede contestar un permiso.
+  - Probado: orden del orquestador al agente, cumplida 1 s después del envío.
+  - `ListAgents` muestra **todas** las sesiones de la máquina, también las reales; hay que limitar los destinos.
+- **Otras vías:**
+  - Remote Control solo se usa desde claude.ai/code, la app de Claude, VS Code y Desktop; no tiene una API para un cliente propio.
+  - Agent teams no funcionan con `-p`.
+  - El Agent SDK resuelve los permisos y `AskUserQuestion` con `canUseTool`, pero la documentación no permite ofrecer el inicio de sesión de claude.ai en productos de terceros, y el uso personal no está aclarado.
+- **Visibilidad:** las sesiones `-p` no aparecen en el selector de `--resume` ni en `--continue`, pero se retoman con su ID. Las sesiones `--bg` sí aparecen y se pueden abrir con `claude attach`.
+- **Al lanzar:** la cuenta va por `CLAUDE_CONFIG_DIR` (Demo Org), el modelo por `--model` y el esfuerzo por `--effort` (de low a max, según el modelo).
+- **Rastros:** con `--no-session-persistence`, una sesión `-p` solo deja dos carpetas vacías en `~/.claude` (`projects/<carpeta>/memory` y `session-env/<sesión>`), y ninguna transcripción ni historial.
+
+**Recomendación:** arquitectura A.
+- El monitor mantiene procesos `-p` con stream-json para el orquestador y los agentes, y lleva el chat entre la oficina y el orquestador.
+- El orquestador da órdenes con `SendMessage`.
+- Un hook `PreToolUse` propio, pasado con `--settings` solo al orquestador, registra cada orden, espera el botón de Washington y limita los destinos a los agentes del proyecto.
+- Los permisos van por el hook actual.
+- Las alternativas B (`--bg` y agent view) y C (Agent SDK) están en el informe.
 
 ## Bandejas de Decisiones e Ideas (etapa 3, Prompt 33)
 
@@ -959,10 +992,10 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington actualiza el monitor de la Alienware a la 0.3.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`): trae el auxiliar de los avisos resumidos.
-2. Washington despliega el frontend (commit `797c025`, modo `?app=ios` de la oficina 3D) e instala la app en su iPhone desde Xcode con su Personal Team.
-3. Etapa 3, Prompt 32: push de las tres alertas (permiso pendiente, pregunta, tarea terminada); los avisos resumidos ya sirven de texto. El push necesita la membresía de pago del programa de desarrolladores.
-4. Etapa 3, Prompt 33, parte C (en curso, app): Decisiones e Ideas construidas y probadas contra el servidor real (35 pruebas unitarias). Falta: guardar una idea y cambiar su proyecto en el simulador, el dictado (en el simulador el audio de entrada se cuelga, hay que probarlo en el iPhone), una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png. Las resueltas de hoy muestran proyectos como `e--visualizador-agentes` (nombre de carpeta de la transcripción, viene del backend).
-5. Washington usa la ficha, "Dónde quedamos" y los avisos resumidos, y anota lo que hay que refinar.
+1. Washington despliega el backend (`bash despliegue/desplegar.sh`, commits `fedda23` y `7664a22`): bandejas y nombre del proyecto en las resueltas de hoy.
+2. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
+3. Etapa 4: Washington elige la arquitectura (`docs/etapa-4/investigacion.md`, recomendación A) y decide cómo se limitan los destinos de las órdenes. Después: ruta base por máquina y crear proyecto, lanzador de sesiones en el monitor, chat con el orquestador en la web y la app, hook de aprobación de órdenes, agentes enlazados e interruptor automático por proyecto.
+4. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
+5. Washington actualiza el monitor de la Alienware a la 0.3.0 si todavía no lo hizo (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`).
 6. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
 7. Vigilar el disco del VPS (85 % usado).
