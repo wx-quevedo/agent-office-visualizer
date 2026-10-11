@@ -258,6 +258,12 @@ def _configurar(a: argparse.Namespace) -> int:
         cfg.token = getpass.getpass("Token de máquina (no se muestra): ").strip()
     if a.cuenta:
         cfg.cuentas = [str(Path(c)) for c in a.cuenta]
+    if a.ruta_proyectos:
+        ruta = Path(a.ruta_proyectos)
+        if not ruta.is_absolute() or str(ruta).startswith(("\\\\", "//")):
+            print("La ruta de proyectos tiene que ser absoluta y local (por ejemplo E:\\Agents).")
+            return 2
+        cfg.ruta_proyectos = str(ruta)
     ruta = config.guardar(cfg, base)
     print(f"Configuración guardada en {ruta}")
     print(json.dumps(cfg.vista(), ensure_ascii=False, indent=2))
@@ -299,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--token-archivo", help="archivo con el token (no se muestra)")
     c.add_argument("--pedir-token", action="store_true", help="pide el token sin eco")
     c.add_argument("--cuenta", action="append", help="carpeta de una cuenta (repetible)")
+    c.add_argument("--ruta-proyectos", help="carpeta donde se crean los proyectos (E:\\Agents)")
     c.set_defaults(f=_configurar)
     sub.add_parser("peligrosos", help="lista de comandos peligrosos").set_defaults(f=_peligrosos)
     a = p.parse_args(argv)

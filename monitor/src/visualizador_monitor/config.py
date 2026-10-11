@@ -54,6 +54,8 @@ class Configuracion:
     # Segundos entre lecturas de transcripciones y procesos, y entre latidos.
     intervalo_lectura: float = 15.0
     intervalo_latido: float = 30.0
+    # Etapa 4: carpeta donde se crean los proyectos ("" = la de siempre, ver ruta_proyectos).
+    ruta_proyectos: str = ""
 
     @property
     def url_servidor(self) -> str:
@@ -77,6 +79,16 @@ def mascara(texto: str, token: str = "") -> str:
     if token:
         texto = texto.replace(token, mascara_token(token))
     return _TOKEN.sub(lambda m: f"{m.group(1)}_…", texto)
+
+
+def ruta_proyectos(cfg: Configuracion) -> Path:
+    """Carpeta base de los proyectos: la configurada o, si no hay, E:/Agents en Windows
+    cuando existe la unidad E: (la Alienware) y ~/Agents en los demás casos."""
+    if cfg.ruta_proyectos.strip():
+        return Path(cfg.ruta_proyectos.strip())
+    if os.name == "nt" and Path("E:\\").is_dir():
+        return Path("E:\\Agents")
+    return Path.home() / "Agents"
 
 
 def ruta_config(base: Path | None = None) -> Path:

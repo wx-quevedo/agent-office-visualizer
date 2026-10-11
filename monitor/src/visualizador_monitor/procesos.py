@@ -63,3 +63,32 @@ def _vivo_windows(pid: int, creado: float | None) -> bool | None:
         return abs(inicio - creado) <= _TOLERANCIA_S
     finally:
         k32.CloseHandle(handle)
+
+
+def hora_creacion(pid: int) -> float | None:
+    """Hora de creación de un proceso (segundos Unix), para reconocerlo después:
+    con ``proceso_vivo(pid, hora)`` un PID reutilizado por otro programa no cuenta."""
+    if pid <= 0 or os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes as wt
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        k32.OpenProcess.restype = wt.HANDLE
+        k32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+        handle = k32.OpenProcess(0x1000, False, pid)
+        if not handle:
+            return None
+        try:
+            c, e, k, u = (wt.FILETIME() for _ in range(4))
+            if not k32.GetProcessTimes(
+                handle, ctypes.byref(c), ctypes.byref(e), ctypes.byref(k), ctypes.byref(u)
+            ):
+                return None
+            ft = (c.dwHighDateTime << 32) | c.dwLowDateTime
+            return (ft - _FILETIME_UNIX_EPOCH) / 10_000_000
+        finally:
+            k32.CloseHandle(handle)
+    except Exception:
+        return None

@@ -16,6 +16,7 @@ from visualizador_monitor.auxiliar import Auxiliar, es_de_auxiliar
 from visualizador_monitor.cliente import Servidor
 from visualizador_monitor.cola import Cola
 from visualizador_monitor.config import Configuracion
+from visualizador_monitor.equipos import Equipos, HiloEncargos
 from visualizador_monitor.lector import Lector
 from visualizador_monitor.reenvio import EstadoConexion, Reenviador
 from visualizador_monitor.registro import logger
@@ -39,6 +40,11 @@ class Monitor:
         self.resumidor = Resumidor(
             self.servidor, Auxiliar(cfg.cuentas, base), lambda: bool(self.lector.sesiones)
         )
+        # Etapa 4: proyectos con equipo (encargos del servidor: crear, pausar, reanudar).
+        ruta_proyectos = config.ruta_proyectos(cfg)
+        self.lector.ruta_proyectos = str(ruta_proyectos)
+        self.equipos = Equipos(base, ruta_proyectos, cfg.cuentas)
+        self.encargos = HiloEncargos(self.servidor, self.equipos)
         self.inicio = datetime.now(UTC).isoformat()
         self.parar = threading.Event()
         self.http: Any = None
@@ -101,6 +107,8 @@ class Monitor:
             "limites": self.lector.limites,
             "cuentas": self.cfg.cuentas,
             "ultimo_resumen": self.resumidor.ultimo,
+            "ruta_proyectos": self.lector.ruta_proyectos,
+            "equipos": self.equipos.estado_equipos(),
         }
 
     # -- en marcha -------------------------------------------------------------
@@ -110,6 +118,7 @@ class Monitor:
         self.http, _ = arrancar(self, self.cfg.puerto)
         self.reenviador.start()
         self.resumidor.start()
+        self.encargos.start()
         (self.base / "monitor.pid").write_text(str(os.getpid()), encoding="ascii")
         logger.info(
             "Monitor %s escuchando en 127.0.0.1:%s; servidor %s; cuentas %s",
@@ -152,8 +161,11 @@ class Monitor:
         self.parar.set()
         self.reenviador.parar.set()
         self.resumidor.parar.set()
+        self.encargos.parar.set()
         self.resumidor.hay_nuevo.set()
         self.reenviador.hay_nuevo.set()
         if self.http is not None:
             self.http.shutdown()
             self.http.server_close()
+        # Cierra las sesiones de proyectos que lanzó (al volver, las retoma).
+        self.equipos.detener_todo()

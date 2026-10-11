@@ -88,6 +88,8 @@ class Lector:
         self.limites: dict[str, dict[str, Any]] = {}
         self._limites_pendientes = False
         self.ultimo_envio_proyectos: str | None = None
+        # Etapa 4: la carpeta base de los proyectos que informa el latido.
+        self.ruta_proyectos: str | None = None
 
     # -- desde los hooks --------------------------------------------------------
 
@@ -259,6 +261,7 @@ class Lector:
                     "version_monitor": VERSION,
                     "hostname": socket.gethostname(),
                     "sistema": sistema(),
+                    "ruta_proyectos": self.ruta_proyectos,
                 },
                 timeout=5.0,
             )
