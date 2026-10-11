@@ -84,6 +84,8 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-11 | App iOS: datos en vivo con `GET /agents/state` cada 2 s (como la web), reintentos cada vez más espaciados hasta 15 s si se corta | La web ya no usa WebSocket (se quitó en la etapa 1.4) |
 | 2026-10-11 | App iOS: proyecto con XcodeGen (`ios/VisualizadorAgentes/project.yml`, el `.xcodeproj` no se versiona), iOS 26, solo iPhone, tema claro, sin capacidades que un Personal Team no permita; se compila y prueba con Xcode 26.6 (`DEVELOPER_DIR=/Applications/Xcode-26.6.0.app/Contents/Developer`) en el simulador iPhone 17 Pro Max con iOS 26.5 | El simulador de Xcode 27 se quedó trabado al arrancar |
 | 2026-10-12 | Las preguntas del agente (AskUserQuestion) se muestran en la bandeja de Decisiones solo para leer, con su resumen y sus opciones, y se responden en la PC | Claude Code documenta que un hook PreToolUse puede contestarlas, pero en esta instalación no es confiable: el hook PreToolUse del visualizador tiene 2 s de límite y lo pone el instalador del monitor, hay otros hooks PreToolUse para AskUserQuestion, mientras el hook espera VS Code no muestra la pregunta, y en una prueba aislada con `claude -p` la herramienta ni siquiera se ofreció (ver la sección de la etapa 3, Prompt 33) |
+| 2026-10-12 | Etapa 4 con la arquitectura A: el monitor lanza y mantiene vivas sesiones `claude -p` con stream-json; el orquestador dará órdenes con la mensajería oficial entre sesiones (Prompt 38) y solo a los agentes de su proyecto; se acepta que estas sesiones no salgan en el selector de `--resume` | Es la única probada de punta a punta en la Alienware, con la suscripción y sin dependencias nuevas (`docs/etapa-4/investigacion.md`) |
+| 2026-10-12 | Hasta el Prompt 38, el orquestador arranca con `SendMessage` y `ListAgents` bloqueados; los agentes aceptan mensajes de otras sesiones (`crossSessionInbound: accept`). El id de sesión de cada miembro lo decide el servidor | `ListAgents` ve todas las sesiones de la máquina; el hook que limita los destinos llega con las órdenes. Con el id decidido antes de lanzar, la oficina reconoce la sesión desde su primer evento |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -137,6 +139,7 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-12 | Etapa 3 (Prompt 33), parte B, backend de las bandejas: `GET /decisiones` (permisos, preguntas y atascos por urgencia, con la frase del auxiliar, el detalle técnico, proyecto, cuenta, máquina y hace cuánto, más las resueltas de hoy con quién, cómo y cuándo), "Ya lo vi" para atascos, ideas (guardar, listar, cambiar el proyecto, archivar) en `bandejas.db` con versión de esquema, las opciones de cada pregunta en `/agents/state` (`pregunta_opciones`) y el conteo `decisiones_pendientes` para la insignia de la app; las decisiones de la app quedan como "app iOS". Parte A: las preguntas quedan de solo lectura (decisión de esta fecha) |
 | 2026-10-12 | Arreglo: las resueltas de hoy de Decisiones muestran el nombre del proyecto (no el de la carpeta de transcripciones, `e--Test-SkyNest`). Commit `7664a22` |
 | 2026-10-12 | Etapa 4 iniciada (investigación): documentación oficial revisada y dos pruebas reales en carpetas temporales con Haiku: un programa lanza `claude -p` con stream-json y le manda dos mensajes en la misma sesión, que la oficina ve con los hooks actuales; y un orquestador le manda una orden a un agente con `ListAgents` y `SendMessage`, que el agente cumple en 1 s. Informe y tres arquitecturas en `docs/etapa-4/investigacion.md`; se recomienda la A (procesos `-p` del monitor y mensajería entre sesiones, con un hook propio que aprueba cada orden) |
+| 2026-10-12 | Etapa 4 (Prompt 37), proyectos con equipo: backend con registro de proyectos y equipos en `proyectos.db`, encargos para el monitor y ruta base por máquina (commit `c3c8d48`); monitor 0.4.0 que crea la carpeta en la ruta base, aplica la plantilla y lanza, pausa, reanuda y retoma el orquestador y los agentes con `claude -p` (commit `d960e83`); web con la pestaña Proyectos, Nuevo proyecto y la página de cada proyecto con Chat (llega en el Prompt 38), Equipo y Dónde quedamos. Falta la prueba real de punta a punta (prueba-37) después del despliegue |
 
 ## Cómo levantar
 
@@ -501,6 +504,55 @@ Junto al motivo se guardan los últimos 3 intentos y el último error. Los umbra
 - rendimiento: el tiempo continuo no recorre los tokens, y las horas de las muestras se arman una vez.
 
 Con datos reales, después aparecieron dos defectos más que también se corrigieron: los mensajes de subagentes como pedido y los "commits" detectados dentro del código de un heredoc.
+
+## Proyectos con equipo (etapa 4, Prompt 37)
+
+Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.md`).
+
+**Backend** (`backend/app/core/proyectos_equipo.py`, rutas en `backend/app/api/routes/proyectos_equipo.py`, datos en `proyectos.db` con versión de esquema):
+- **Proyecto:** nombre, máquina, cuenta (personal o demo), ruta, plantilla (web, unity, expo, vacía), estado, aprobación automática de órdenes (todavía sin efecto) y fecha.
+  - Estados: creando, activo, pausando, pausado, reanudando y error.
+- **Equipo:** el orquestador y de 1 a 4 agentes de código, cada uno con modelo, esfuerzo, id de sesión (lo decide el servidor) y estado (pendiente, activo, pausado, detenido o error).
+- **Nombre:**
+  - Solo minúsculas, números y guiones, sin empezar ni terminar con guion, hasta 50 caracteres.
+  - Sin puntos, barras ni nombres reservados de Windows.
+  - No se repite en la misma máquina. Que la carpeta no exista lo comprueba el monitor.
+- **Rutas de usuario:**
+  - `GET` y `POST /api/v1/proyectos-creados`, `GET /proyectos-creados/{id}`, `POST /proyectos-creados/{id}/pausar` y `/reanudar`.
+  - `GET /proyectos-creados/maquinas`: ruta base, si la máquina está encendida (latido en los últimos 90 s) y si su monitor sabe crear proyectos (0.4.0 o más).
+- **Rutas de máquina** (token de máquina):
+  - `GET /api/v1/maquinas/encargos`: sus encargos; quedan tomados y se vuelven a entregar si no informa en 3 min.
+  - `POST /maquinas/encargos/{id}`: el resultado de un encargo.
+  - `POST /maquinas/equipos`: el estado de sus sesiones.
+  - El latido trae `ruta_proyectos`.
+- **`/agents/state`:** pone modelo, esfuerzo y rol a las sesiones lanzadas, porque en `-p` la oficina no los recibe.
+
+**Monitor 0.4.0** (`monitor/src/visualizador_monitor/equipos.py`):
+- **Ruta base:** `E:\Agents` en Windows si existe la unidad E:, si no `~/Agents`. Se cambia con `visualizador-monitor configurar --ruta-proyectos <ruta>`.
+- **Crear:**
+  - Arma la carpeta solo justo dentro de la ruta base real (sin rutas de red y sin enlaces que la saquen) y no pisa una carpeta existente.
+  - Hace `git init` y deja un PROJECT.md con el nombre y la fecha.
+  - La plantilla Web, Unity o App Expo agrega su `.gitignore` y una línea en PROJECT.md; Vacía no agrega nada.
+- **Sesiones:** una `claude -p --input-format stream-json --output-format stream-json --verbose` por miembro, en la carpeta del proyecto, con:
+  - `--model`, `--effort`, `--permission-mode default` y `--name <proyecto>-<miembro>`;
+  - `--append-system-prompt` con su rol (orquestador: planifica con Washington y todavía no da órdenes; agente: espera órdenes);
+  - `--session-id` del servidor (al reanudar, `--resume`);
+  - la cuenta: `CLAUDE_CONFIG_DIR` solo para Demo Org, y sin variables `CLAUDE*` o `ANTHROPIC*` heredadas;
+  - el orquestador con `--disallowedTools SendMessage,ListAgents`; los agentes con `--settings {"crossSessionInbound":"accept"}`.
+  - Al crear, cada uno recibe un saludo corto para que arranque y la oficina lo vea por los hooks de siempre.
+- **Pausar y reanudar:** pausar cierra la entrada de los procesos que lanzó el monitor y, si no terminan en 20 s, los detiene (solo esos PID). Reanudar los vuelve a lanzar con `--resume`.
+- **Reinicio del monitor:** retoma los equipos que estaban activos. Si un proceso suyo anterior sigue vivo (mismo PID y hora de creación), lo detiene antes de relanzarlo.
+- **Estado guardado:** en `equipos.json`, en la carpeta del monitor.
+
+**Web:**
+- `/proyectos`: lista con nombre, cuenta, máquina, qué está haciendo, equipo y estado, con morado #5B3FA8 para órdenes por aprobar, y el botón Nuevo proyecto.
+- `/proyectos/nuevo`:
+  - nombre con la ruta que se va a crear;
+  - máquina con su estado (las apagadas o sin monitor 0.4.0 no se eligen), cuenta y plantilla;
+  - equipo con modelo y esfuerzo (Opus 5.5 alto y Sonnet 5.5 medio por defecto), más agentes de código;
+  - el interruptor de aprobación automática, todavía sin efecto.
+- `/proyectos/ver?id=`: Chat (llega en el Prompt 38), Equipo (miembros, estado, Pausar el equipo y Reanudar) y Dónde quedamos de ese proyecto.
+- Botón Proyectos en la oficina 3D y en la vista de cajas. La página `/donde-quedamos` sigue igual.
 
 ## Proyectos y orquestador (etapa 4): investigación
 
@@ -992,10 +1044,10 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington despliega el backend (`bash despliegue/desplegar.sh`, commits `fedda23` y `7664a22`): bandejas y nombre del proyecto en las resueltas de hoy.
-2. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
-3. Etapa 4: Washington elige la arquitectura (`docs/etapa-4/investigacion.md`, recomendación A) y decide cómo se limitan los destinos de las órdenes. Después: ruta base por máquina y crear proyecto, lanzador de sesiones en el monitor, chat con el orquestador en la web y la app, hook de aprobación de órdenes, agentes enlazados e interruptor automático por proyecto.
-4. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
-5. Washington actualiza el monitor de la Alienware a la 0.3.0 si todavía no lo hizo (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`).
+1. Washington despliega el backend y la web (`bash despliegue/desplegar.sh`) y actualiza el monitor de la Alienware a la 0.4.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`).
+2. Prueba real del Prompt 37: crear desde la web prueba-37 (cuenta personal, Haiku y esfuerzo bajo para los dos, plantilla Vacía), comprobar la carpeta, las dos sesiones en la oficina con su modelo, pausar y reanudar, y que no se tocó ninguna otra sesión. Capturas 37-proyectos.png, 37-nuevo.png y 37-equipo.png.
+3. Etapa 4, Prompt 38: chat con el orquestador en la web y la app, órdenes al agente con `SendMessage` y un hook que aprueba cada orden y limita los destinos a los agentes del proyecto, y el interruptor automático por proyecto.
+4. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
+5. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
 6. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
 7. Vigilar el disco del VPS (85 % usado).
