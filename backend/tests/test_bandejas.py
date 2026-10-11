@@ -386,3 +386,50 @@ def test_la_app_decide_como_app(entorno: tuple[TestClient, AgentStateEngine]) ->
         json={"decision": "aprobar", "dispositivo": "app"},
     )
     assert r.status_code == 200 and r.json()["dispositivo"] == "app"
+
+
+# -- nombre del proyecto en las resueltas de hoy -------------------------------------------
+
+
+def test_proyecto_legible() -> None:
+    from app.core.bandejas import proyecto_legible, slug_carpeta
+
+    assert slug_carpeta(r"E:\visualizador-agentes") == "e--visualizador-agentes"
+    assert slug_carpeta("e:/Test/SkyNest") == "e--test-skynest"
+    # La carpeta real de la sesión manda.
+    assert proyecto_legible("e--Test-SkyNest", "e:/Test/SkyNest") == "SkyNest"
+    # Sin sesión: una carpeta conocida con el mismo nombre de transcripciones.
+    carpetas = [r"E:\visualizador-agentes", "e:/Test/SkyNest"]
+    assert proyecto_legible("e--visualizador-agentes", None, carpetas) == "visualizador-agentes"
+    assert proyecto_legible("e--Test-SkyNest", None, carpetas) == "SkyNest"
+    # Sin datos: al menos sin el prefijo de la unidad.
+    assert proyecto_legible("e--vive-demo", None, []) == "vive-demo"
+    # Un nombre normal o una ruta quedan como el resto de la oficina.
+    assert proyecto_legible("server-monitor") == "server-monitor"
+    assert proyecto_legible("c:/xampp/htdocs/server-monitor") == "server-monitor"
+    assert proyecto_legible(None) is None
+
+
+def test_resueltas_de_hoy_con_el_nombre_del_proyecto(
+    entorno: tuple[TestClient, AgentStateEngine],
+) -> None:
+    c, motor = entorno
+    reg = permisos.get_registro()
+    reg.guardar_config(permisos.validar_config({"politica": "siempre"}))
+    # Una sesión que el motor conoce y otra que ya no está en memoria.
+    _evento(motor, "user_prompt_submit", 0, "prueba-conocida", prompt="hola")
+    log = motor.sessions["prueba-conocida"]
+    log.project = "e:/Test/SkyNest"
+    set_datos_maquinas(DatosMaquinas(Path(str(reg.ruta_db.parent))))
+    from app.core.datos_maquinas import get_datos_maquinas
+
+    get_datos_maquinas().registrar_proyectos("alienware", [{"carpeta": r"E:\visualizador-agentes"}])
+    for id_, sid, proyecto in (
+        ("p1", "prueba-conocida", "e--Test-SkyNest"),
+        ("p2", "prueba-ida", "e--visualizador-agentes"),
+        ("p3", "prueba-otra", "e--vive-demo"),
+    ):
+        reg.crear(id_, sid, "Bash", {"command": "ls"}, "personal", proyecto, "alienware")
+        reg.decidir(id_, True, None, "app")
+    nombres = {r["id"]: r["proyecto"] for r in c.get("/api/v1/decisiones").json()["resueltas_hoy"]}
+    assert nombres == {"p1": "SkyNest", "p2": "visualizador-agentes", "p3": "vive-demo"}

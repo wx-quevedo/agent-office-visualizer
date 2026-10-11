@@ -43,7 +43,7 @@ async def decisiones() -> dict[str, Any]:
     return {
         "pendientes": items,
         "conteo": {**conteo, "total": len(items)},
-        "resueltas_hoy": get_bandejas().resueltas_hoy(),
+        "resueltas_hoy": get_bandejas().resueltas_hoy(carpeta_de_sesion, carpetas_conocidas()),
     }
 
 
@@ -59,6 +59,18 @@ async def atasco_visto(body: Visto) -> dict[str, Any]:
     if item is None:
         raise HTTPException(status_code=404, detail="Ese atasco ya no está en la bandeja.")
     return get_bandejas().marcar_visto(item, body.dispositivo)
+
+
+def carpeta_de_sesion(session_id: str | None) -> str | None:
+    log = get_state_engine().sessions.get(session_id or "")
+    return log.project if log is not None else None
+
+
+def carpetas_conocidas() -> list[str]:
+    """Carpetas de proyectos: las que manda el monitor y las de las sesiones."""
+    carpetas = [str(p.get("carpeta") or "") for p in get_datos_maquinas().vista_proyectos()]
+    carpetas += [log.project or "" for log in get_state_engine().sessions.values()]
+    return [c for c in carpetas if c]
 
 
 # -- ideas ------------------------------------------------------------------------------

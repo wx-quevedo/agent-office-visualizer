@@ -23,6 +23,7 @@ copia cada ``.db``), con versión de esquema (``PRAGMA user_version``).
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 import threading
 import uuid
@@ -77,6 +78,35 @@ def nombre_proyecto(carpeta: str | None) -> str | None:
         return None
     partes = [p for p in carpeta.replace("\\", "/").split("/") if p]
     return partes[-1] if partes else carpeta
+
+
+def slug_carpeta(carpeta: str) -> str:
+    """Cómo nombra Claude Code la carpeta de transcripciones de un proyecto:
+    "E:\\visualizador-agentes" -> "e--visualizador-agentes" (en minúsculas para comparar)."""
+    return re.sub(r"[^A-Za-z0-9]", "-", carpeta.rstrip("\\/")).lower()
+
+
+_SLUG = re.compile(r"^[A-Za-z]--")
+
+
+def proyecto_legible(
+    proyecto: str | None,
+    carpeta_de_sesion: str | None = None,
+    carpetas: list[str] | None = None,
+) -> str | None:
+    """El nombre del proyecto, igual que en el resto de la oficina. Las solicitudes
+    de permiso traen el nombre de la carpeta de transcripciones ("e--Test-SkyNest"):
+    se usa la carpeta real de la sesión o una carpeta conocida con ese mismo nombre;
+    si no hay, se quita el prefijo de la unidad ("Test-SkyNest")."""
+    if carpeta_de_sesion:
+        return nombre_proyecto(carpeta_de_sesion)
+    if not proyecto or not _SLUG.match(proyecto):
+        return nombre_proyecto(proyecto) if proyecto else None
+    buscado = proyecto.lower()
+    for c in carpetas or []:
+        if c and slug_carpeta(c) == buscado:
+            return nombre_proyecto(c)
+    return proyecto[3:] or proyecto
 
 
 def _iso(ts: datetime) -> str:
@@ -331,7 +361,13 @@ class Bandejas:
 
     # -- resueltas de hoy -----------------------------------------------------------------
 
-    def resueltas_hoy(self) -> list[dict[str, Any]]:
+    def resueltas_hoy(
+        self,
+        carpeta_de: Callable[[str | None], str | None] | None = None,
+        carpetas: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """``carpeta_de(session_id)``: la carpeta real de una sesión (si el motor la
+        conoce); ``carpetas``: las carpetas de proyectos conocidas."""
         desde = _iso(self.inicio_de_hoy())
         salida: list[dict[str, Any]] = []
         with self._db() as db:
@@ -342,7 +378,11 @@ class Bandejas:
                     {
                         "tipo": "pregunta",
                         "id": r["clave"],
-                        "proyecto": r["proyecto"],
+                        "proyecto": proyecto_legible(
+                            r["proyecto"],
+                            carpeta_de(r["session_id"]) if carpeta_de else None,
+                            carpetas,
+                        ),
                         "cuenta": r["cuenta"],
                         "maquina": r["maquina"],
                         "texto": r["resumen"] or r["texto"],
@@ -358,7 +398,11 @@ class Bandejas:
                     {
                         "tipo": "atasco",
                         "id": r["clave"],
-                        "proyecto": r["proyecto"],
+                        "proyecto": proyecto_legible(
+                            r["proyecto"],
+                            carpeta_de(r["session_id"]) if carpeta_de else None,
+                            carpetas,
+                        ),
                         "cuenta": r["cuenta"],
                         "maquina": r["maquina"],
                         "texto": r["resumen"] or r["motivo"],
@@ -388,7 +432,11 @@ class Bandejas:
                     {
                         "tipo": "permiso",
                         "id": r["id"],
-                        "proyecto": r["proyecto"],
+                        "proyecto": proyecto_legible(
+                            r["proyecto"],
+                            carpeta_de(r["session_id"]) if carpeta_de else None,
+                            carpetas,
+                        ),
                         "cuenta": r["cuenta"],
                         "maquina": r["machine_id"],
                         "texto": f"{r['herramienta']}: {r['detalle']}"[:300],
