@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from app.config import get_settings
 from app.core.agent_state_engine import get_state_engine
 from app.core.event_processor import EventProcessor, get_event_processor
+from app.core.permisos import get_registro
 from app.models.events import AnyEvent
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,13 @@ async def receive_event(
     # Catalog state engine first, in arrival order: its own append-only log and
     # memory do not depend on the classic pipeline (which runs in background).
     get_state_engine().accept(event, origin="hook")
+    # A pending permission of the office ends when Claude Code goes on.
+    get_registro().resolver_sesion(
+        event.session_id,
+        str(event.event_type),
+        getattr(event.data, "tool_name", None),
+        getattr(event.data, "tool_input", None),
+    )
     background_tasks.add_task(ep.process_event, event)
     return {
         "status": "accepted",

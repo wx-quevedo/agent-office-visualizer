@@ -95,10 +95,12 @@ describe("detección de avisos", () => {
     expect(avisos).toHaveLength(1);
     expect(avisos[0].tipo).toBe("permiso");
     expect(avisos[0].voz).toBe(
-      "vive-demo te pide permiso. Bash: git push origin dev",
+      "vive-demo te pide permiso. Bash: git push origin dev. Responde en VS Code.",
     );
     expect(avisos[0].titulo).toBe("vive-demo te pide permiso");
-    expect(avisos[0].cuerpo).toBe("Bash: git push origin dev\nCuenta Demo Org");
+    expect(avisos[0].cuerpo).toBe(
+      "Bash: git push origin dev\nResponde en VS Code.\nCuenta Demo Org",
+    );
     expect(avisos[0].tag).toBe("agente-a1");
     expect(avisos[0].notificar).toBe(true);
   });

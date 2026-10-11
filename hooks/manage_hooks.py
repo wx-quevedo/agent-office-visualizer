@@ -93,7 +93,9 @@ def create_hook_config(hook_cmd: str, hook_type: str) -> dict[str, Any]:
     config = {
         "type": "command",
         "command": f"{hook_cmd} {event_type}",
-        "timeout": 2,  # Seconds
+        # Seconds. PermissionRequest may wait for a decision taken in the
+        # office (up to 540 s, see claude_office_hooks/permisos.py).
+        "timeout": 600 if hook_type == "PermissionRequest" else 2,
     }
 
     # Wrap in the structure expected by Claude Code

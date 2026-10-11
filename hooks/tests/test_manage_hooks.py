@@ -86,3 +86,12 @@ def test_save_settings_preserves_oldest_backup_across_runs(tmp_path: Path) -> No
 def test_load_settings_returns_empty_for_missing_file(tmp_path: Path) -> None:
     """A fresh install (no settings.json) is still allowed: returns {}."""
     assert manage_hooks.load_settings(_settings_path(tmp_path)) == {}
+
+
+def test_permission_request_waits_for_the_office() -> None:
+    """PermissionRequest gets 600 s (the office may answer); the rest stay at 2 s."""
+    perm = manage_hooks.create_hook_config("claude-office-hook", "PermissionRequest")
+    assert perm["hooks"][0]["timeout"] == 600
+    assert perm["hooks"][0]["command"] == "claude-office-hook permission_request"
+    pre = manage_hooks.create_hook_config("claude-office-hook", "PreToolUse")
+    assert pre["hooks"][0]["timeout"] == 2

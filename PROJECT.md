@@ -71,6 +71,7 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 | 2026-10-10 | Cuatro entornos para elegir viéndolos en 3D: Puente de mando, Cabinas por proyecto, Sala de control con mostrador y Estudio con jardín; el Original se conserva | El escritorio del agente es lo central y cada entorno resuelve de forma distinta el momento en que un agente te espera (13 y 14) |
 | 2026-10-10 | Cabinas: máximo 6 cabinas de proyecto más la Cabina general fija; Estudio: isla propia desde 2 agentes del proyecto, los de un solo agente comparten la Isla general, y se guardan 3 islas libres para ella | Así siempre hay lugar para quien llega y nadie se cambia de puesto mientras su proyecto tenga agentes |
 | 2026-10-10 | La diaria corre con el bucle Selector de asyncio (`--loop asyncio:SelectorEventLoop`) y se arranca a través de su tarea programada | En Windows el bucle Proactor cierra el puerto que escucha cuando un `accept` falla con WinError 64; el Selector solo registra el error y sigue |
+| 2026-10-10 | Permisos desde la oficina con la política "solo_fuera_de_la_pc" por defecto: la oficina espera tu decisión solo si no hay una página abierta en la PC (solo el celular, o nada); en la PC el hook devuelve de inmediato y responde VS Code, y la solicitud se ve igual en la oficina. "siempre" y "nunca" se eligen en el panel Permisos; espera por defecto 90 s (10 a 540) | En la PC el diálogo de VS Code es lo más rápido; desde el celular no hay otra forma de responder. Claude Code espera al hook antes de seguir, así que esperar en la PC solo demoraría |
 | 2026-10-10 | Voces: Washington usará las voces de Google en Chrome (no Edge) | En Edge y en Playwright solo aparecen voces de Microsoft de España; pendiente buscar mejores voces o un sistema de lectura |
 
 ## Ajustes heredados de la instalación diaria
@@ -107,7 +108,8 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Uso diario: copia `E:\visualizador-agentes-diario` en 3000/8000 (compilada, sin recarga, datos en `C:\Users\<user>\.visualizador-agentes\datos-diario`), servidor del frontend compilado (`backend/app/servidor_frontend.py`), scripts `scripts/diario/` (preparar, iniciar, detener, estado, actualizar, instalar y quitar arranque automático) y opción `CLAUDE_OFFICE_PRINCIPAL=visualizador` del hook. `<project path>` queda de respaldo, detenido. Capturas en `docs/capturas/diario-v1/`. Commit `2b60341` (Washington aprobó el hook con `CLAUDE_OFFICE_PRINCIPAL=visualizador`, lo reinstaló e instaló el arranque automático) |
 | 2026-10-10 | Editor de la oficina 3D (catálogo, agregar, arrastrar en cuadrícula de 0,5 m, rotar, borrar, deshacer y rehacer, guardar y cancelar, exportar e importar JSON) con aviso de muebles que tapan caminos o escritorios; 9 temas de piso y pared más el claro actual; distribución por copia en `GET/PUT /api/v1/oficina3d/distribucion`. Correcciones: el cierre de un proceso muerto conserva su hora tras reiniciar el backend; `/datos` ya no da el error #418 por Tailscale. Capturas en `docs/capturas/editor-v1/`. Commit `8cbc808` |
 | 2026-10-10 | Entornos intercambiables (selector "Entorno" en `/oficina/3d`, guardado por copia junto con la distribución de cada entorno): Original sin cambios, Puente de mando y Sala de control con mostrador. Tu puesto en todos los entornos (letrero "Tú", sentado si estás conectado). Capturas en `docs/capturas/entornos-v1/`. Commit `5fa222d` |
-| 2026-10-10 | Entornos Cabinas por proyecto y Estudio abierto con jardín (asignación de puestos por proyecto, Cabina general e Isla general), más decoración en Puente de mando y Sala de control. La diaria arranca a través de su tarea programada y con el bucle Selector de asyncio (su backend dejaba de aceptar conexiones). Capturas en `docs/capturas/entornos-v2/` (hash en el registro del commit siguiente) |
+| 2026-10-10 | Entornos Cabinas por proyecto y Estudio abierto con jardín (asignación de puestos por proyecto, Cabina general e Isla general), más decoración en Puente de mando y Sala de control. La diaria arranca a través de su tarea programada y con el bucle Selector de asyncio (su backend dejaba de aceptar conexiones). Capturas en `docs/capturas/entornos-v2/`. Commit `6a8f82b` |
+| 2026-10-10 | Aprobar o rechazar permisos (13) desde la oficina, el celular y la vista 3D: el hook registra cada PermissionRequest en el backend y espera la decisión según la política (por defecto, solo cuando no estás en la PC); rechazar admite un motivo que recibe Claude. Panel Permisos (política, espera, comandos que piden confirmación). Prueba real con dos sesiones de prueba de Claude Code (aprobada desde la PC, rechazada con motivo desde el celular). Capturas en `docs/capturas/permisos-v1/` (hash en el registro del commit siguiente) |
 
 ## Cómo levantar
 
@@ -259,6 +261,19 @@ Dos copias independientes: la **diaria** (la que Washington usa todo el día en 
 2. Quitar `CLAUDE_OFFICE_PRINCIPAL=visualizador` de `claude-office-config.env` (o dejarlo vacío): claude-office rechaza `post_tool_use_failure` con 422; sin la línea, el hook no se lo envía.
 3. Arrancar `<project path>` como antes (`make dev` en esa carpeta). El hook sigue enviando al 8000 y al 8100.
 
+## Permisos desde la oficina (estado 13)
+
+Cuando un agente pide permiso, el hook `claude-office-hook permission_request` (`hooks/src/claude_office_hooks/permisos.py`) registra la solicitud en el backend principal (`POST /api/v1/permisos/solicitudes`: id, sesión, herramienta, comando o archivo, cuenta, proyecto) y el backend decide si el hook espera:
+
+- Política (panel "Permisos" junto a Avisos, en `/oficina` y `/oficina/3d`; se guarda en `permisos.json` junto al registro del motor): `solo_fuera_de_la_pc` (por defecto: espera solo si ningún latido de PC está vigente, o si solo hay latidos de celular), `siempre` o `nunca`. Tiempo de espera por defecto 90 s, entre 10 y 540 s.
+- Mientras espera, el hook consulta con long-poll (`GET /api/v1/permisos/solicitudes/{id}?espera=20`, hasta su límite). Aprobada → imprime `{"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}}`; rechazada → `behavior: "deny"` con `message` ("El usuario rechazó este permiso desde la oficina. Motivo: ..."). Sin decisión, tiempo agotado, backend caído o lento (registro: 2 s; cada consulta: su espera + 2,5 s) → no imprime nada y sigue el diálogo normal. Todo error termina en "sin decisión"; el hook nunca pasa de 540 s.
+- Decisión (`POST /api/v1/permisos/solicitudes/{id}/decision`, solo localhost y Tailscale por el middleware): una sola vez (409 si ya se decidió o se respondió en VS Code), 410 si venció, 409 si la solicitud no espera a la oficina. Cada solicitud y decisión queda en `permisos.db` (junto al registro del motor; quién: PC o celular, cuándo, qué, con qué política); `GET /api/v1/permisos/historial`.
+- Respondida en VS Code: el siguiente evento de la sesión la marca `resuelta_fuera` (Stop, UserPromptSubmit, SessionEnd, PostToolUse de la misma herramienta y comando, o un PreToolUse que llega más de 3 s después: los paralelos no cuentan) y los botones desaparecen.
+- Interfaz (`frontend/src/components/permisos/`): en `/oficina`, debajo del escritorio de "Te esperan" y en el detalle, el comando completo, cuánto tiempo queda y los botones Aprobar y Rechazar (con motivo opcional); si la oficina no puede responder, "Responde en VS Code". En `/oficina/3d`, clic en el agente con la mano alzada (o `?agente=<id>`) abre el mismo panel. En el celular los botones miden 52 px y, antes de aprobar un comando de la lista (rm, del, git push, deploy...; configurable), pide confirmación. El aviso de permiso dice "Puedes responder desde la oficina." o "Responde en VS Code."; al hacer clic abre el detalle con los botones.
+- `/agents/state` lleva en cada agente su `permiso` (pendiente, o recién decidido o vencido), o null.
+- Documentación de Claude Code: https://code.claude.com/docs/en/hooks#permissionrequest (entrada, `decision`, timeout por defecto de 600 s y, si se agota, sigue el flujo normal). No está documentado si el diálogo de VS Code se muestra mientras el hook espera; con `claude -p` Claude Code esperó al hook antes de seguir.
+- Para que funcione en la diaria hace falta reinstalar el hook y subir su `timeout` de 2 a 600 s en las dos cuentas (comandos en "Hook compartido").
+
 ## Hook compartido (oficina diaria y desarrollo)
 
 El comando `claude-office-hook` se instala una sola vez desde `E:\visualizador-agentes\hooks` (`uv tool install --force -p 3.14 E:\visualizador-agentes\hooks`) y lo usan las dos cuentas (`~/.claude` y `~/.claude-demo`).
@@ -268,6 +283,11 @@ El comando `claude-office-hook` se instala una sola vez desde `E:\visualizador-a
 - Tipos nuevos (`post_tool_use_failure`) solo van a los destinos extra, salvo con `CLAUDE_OFFICE_PRINCIPAL=visualizador` (el principal es nuestro backend y también los recibe). claude-office los rechazaría con 422.
 - Campos nuevos (`tool_agent_id`, `tool_agent_type`, `error`, `is_interrupt`, `last_assistant_message`, `reports_tool_failures`, `claude_pid`, `claude_pid_created`): la oficina diaria los ignora (comprobado: guarda el evento sin esos campos).
 - Proceso de Claude Code (`hooks/src/claude_office_hooks/process_info.py`): el hook sube por sus ancestros con la API de Windows (`NtQueryInformationProcess` para el padre, `QueryFullProcessImageNameW` para el nombre, `GetProcessTimes` para la hora de creación) pasando por los intérpretes intermedios (`claude-office-hook.exe`, `bash`/`cmd`/`powershell`) hasta el primer `claude.exe` (instalación nativa) o `node.exe` (instalación por npm). Se detiene en `Code.exe`, `explorer.exe` o `WindowsTerminal.exe`, y si un padre es más nuevo que su hijo (PID reutilizado) devuelve `null`. Cuesta ~12 ms (importar ctypes) más ~0,5 ms.
+- Permisos desde la oficina (2026-10-10, requiere aprobación de Washington): reinstalar el hook y subir el `timeout` de `claude-office-hook permission_request` de 2 a 600 s en las dos cuentas (el instalador no cambia entradas que ya existen; `manage_hooks.py` ya registra 600 s en instalaciones nuevas). Comandos, desde `E:\visualizador-agentes` en PowerShell:
+  1. `uv tool install --force --reinstall -p 3.14 E:\visualizador-agentes\hooks`
+  2. `uv run --no-project python scripts\permisos\ajustar_timeout_permiso.py C:\Users\<user>\.claude\settings.json` (deja `settings.json.respaldo-AAAAMMDD-HHMMSS`; con `--probar` solo muestra el cambio)
+  3. `uv run --no-project python scripts\permisos\ajustar_timeout_permiso.py C:\Users\<user>\.claude-demo\settings.json`
+  4. Reiniciar las sesiones de Claude Code. Para volver atrás: copiar el respaldo sobre `settings.json` y reinstalar el hook del commit anterior.
 
 ### Cómo volver atrás
 
@@ -330,7 +350,7 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 ## Pendientes
 
 1. Escena propia: editor, temas y los cinco entornos (hechos el 2026-10-10); falta que Washington elija el de uso diario.
-2. Aprobar o rechazar permisos (estado 13) desde la oficina y el celular, con hook de PermissionRequest y tiempo límite.
+2. Permisos desde la oficina (hecho el 2026-10-10): falta que Washington reinstale el hook y suba su tiempo límite a 600 s en las dos cuentas.
 3. Chatear por completo con el agente desde la oficina: primero investigar las funciones oficiales de Claude Code para usarlo a distancia; luego decidir si integrar o construir.
 4. Mejores voces para los avisos (acento latino o ecuatoriano); por ahora, voces de Google en Chrome (no Edge).
 5. VPS con dominio propio y https, para verla desde internet.
@@ -342,5 +362,5 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 
 ## Próximos pasos
 
-1. Washington prueba los cinco entornos en la copia diaria y elige uno.
-2. Siguiente de la lista de Pendientes: aprobar o rechazar permisos (estado 13) desde la oficina y el celular.
+1. Washington reinstala el hook y sube el tiempo límite de PermissionRequest (comandos en "Hook compartido"), y prueba aprobar un permiso desde el celular.
+2. Siguiente de la lista de Pendientes: chatear con el agente desde la oficina (investigar primero las funciones oficiales).

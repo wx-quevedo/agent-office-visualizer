@@ -18,6 +18,8 @@ import {
   type ReactNode,
 } from "react";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
+import PanelConfigPermisos from "@/components/permisos/PanelConfigPermisos";
+import PanelPermiso from "@/components/permisos/PanelPermiso";
 import { useAvisos } from "@/components/avisos/useAvisos";
 import { LogoDemoOrg, MarcaCuenta } from "@/components/marca/Marca";
 import {
@@ -166,30 +168,48 @@ function Cabecera({ a }: { a: Agente }) {
 
 // -- desks of the urgency view ---------------------------------------------------
 
+/**
+ * 13: the request with Approve / Reject while the hook waits for the office;
+ * otherwise "Responde en VS Code". Outside the desk link (buttons inside a
+ * link would open the detail).
+ */
+function BloquePermiso({ a, ahora }: { a: Agente; ahora: number }) {
+  if (a.estado.numero !== 13) return null;
+  if (a.permiso) return <PanelPermiso permiso={a.permiso} ahora={ahora} />;
+  return <p className={s.respondeVsCode}>Responde en VS Code.</p>;
+}
+
 function EscritorioEspera({ a, ahora }: { a: Agente; ahora: number }) {
-  const pide = loQuePide(a);
+  // With a registered request the panel below shows the full command.
+  const pide = a.permiso ? null : loQuePide(a);
   return (
-    <Link href={enlace(a)} className={`${s.escritorio} ${s.escritorioEspera}`}>
-      <Avatar tam={88} />
-      <div className={s.cuerpo}>
-        <Cabecera a={a} />
-        <div className={s.etiquetas}>
-          <span className={`${s.etiqueta} ${s.etiquetaNegra}`}>
-            Espera a: ti ({tipoEspera(a)})
-          </span>
-          <span className={s.etiqueta}>
-            Desde hace {duracion(a.estado.desde, ahora)}
-          </span>
-        </div>
-        {pide && (
-          <div className={s.cajaGris}>
-            <small>{pide.titulo}</small>
-            {recortar(pide.texto, 400)}
+    <div className={s.celdaEspera}>
+      <Link
+        href={enlace(a)}
+        className={`${s.escritorio} ${s.escritorioEspera}`}
+      >
+        <Avatar tam={88} />
+        <div className={s.cuerpo}>
+          <Cabecera a={a} />
+          <div className={s.etiquetas}>
+            <span className={`${s.etiqueta} ${s.etiquetaNegra}`}>
+              Espera a: ti ({tipoEspera(a)})
+            </span>
+            <span className={s.etiqueta}>
+              Desde hace {duracion(a.estado.desde, ahora)}
+            </span>
           </div>
-        )}
-        <Indicadores a={a} ahora={ahora} />
-      </div>
-    </Link>
+          {pide && (
+            <div className={s.cajaGris}>
+              <small>{pide.titulo}</small>
+              {recortar(pide.texto, 400)}
+            </div>
+          )}
+          <Indicadores a={a} ahora={ahora} />
+        </div>
+      </Link>
+      <BloquePermiso a={a} ahora={ahora} />
+    </div>
   );
 }
 
@@ -408,7 +428,7 @@ function Detalle({
   ahora: number;
 }) {
   const g = grupoDe(a.estado.numero);
-  const pide = loQuePide(a);
+  const pide = a.permiso && a.estado.numero === 13 ? null : loQuePide(a);
   const i = a.indicadores;
   const datos: Array<[string, string]> = [
     ["Trabajó", numero(i.minutos_con_actividad, " min")],
@@ -471,13 +491,14 @@ function Detalle({
               </div>
             </div>
           </div>
+          <BloquePermiso a={a} ahora={ahora} />
           {pide && (
             <div className={s.cajaGris}>
               <small>{pide.titulo}</small>
               {pide.texto}
             </div>
           )}
-          {!pide && g !== "cerrados" && (
+          {!pide && !a.permiso && g !== "cerrados" && (
             <div className={s.cajaMono} title={detalleActual(a)}>
               {detalleActual(a)}
             </div>
@@ -527,6 +548,7 @@ export default function Oficina() {
   const router = useRouter();
   const agenteId = params.get("agente");
   const [panelAvisos, setPanelAvisos] = useState(false);
+  const [panelPermisos, setPanelPermisos] = useState(false);
   const { datos, error, recibido, ahora } = useEstadoOficina();
   const vista = useSyncExternalStore(
     suscribirVista,
@@ -587,6 +609,14 @@ export default function Oficina() {
               {avisos.config.activos ? "activos" : "apagados"}
             </span>
           </button>
+          <button
+            type="button"
+            className={s.botonAvisos}
+            aria-expanded={panelPermisos}
+            onClick={() => setPanelPermisos((v) => !v)}
+          >
+            Permisos
+          </button>
           {!agenteId && (
             <div
               className={s.selector}
@@ -614,6 +644,9 @@ export default function Oficina() {
 
       {panelAvisos && (
         <PanelAvisos api={avisos} onCerrar={() => setPanelAvisos(false)} />
+      )}
+      {panelPermisos && (
+        <PanelConfigPermisos onCerrar={() => setPanelPermisos(false)} />
       )}
 
       {error && (

@@ -10,6 +10,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
+import { nombreProyecto } from "@/components/oficina/logica";
+import PanelConfigPermisos from "@/components/permisos/PanelConfigPermisos";
+import PanelPermiso from "@/components/permisos/PanelPermiso";
 import { useAvisos } from "@/components/avisos/useAvisos";
 import {
   useEstadoOficina,
@@ -55,9 +58,19 @@ function leerEncuadre(search: string): {
 
 export default function Oficina3D() {
   const router = useRouter();
-  const { datos, error } = useEstadoOficina();
+  const { datos, error, ahora } = useEstadoOficina();
   useLatidoPresencia();
   const [panelAvisos, setPanelAvisos] = useState(false);
+  const [panelPermisos, setPanelPermisos] = useState(false);
+  // Agent with its hand up (13) whose request panel is open.
+  // ?agente=<id> opens it directly (links from other pages).
+  const [conPermiso, setConPermiso] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get("agente"),
+  );
+  const agentesRef = useRef(datos?.agentes ?? []);
+  useEffect(() => {
+    agentesRef.current = datos?.agentes ?? [];
+  }, [datos]);
   const editando = useEditor((st) => st.activo);
   const [angosta, setAngosta] = useState(false);
   const memoria = useRef<EstadoAdaptador>(estadoInicial());
@@ -75,10 +88,18 @@ export default function Oficina3D() {
   );
   const avisos = useAvisos(datos?.agentes ?? null, { abrirAgente });
 
-  // Clicking an agent or its desk opens the existing detail.
+  // Clicking an agent or its desk opens the existing detail; an agent that
+  // asks for permission (13) opens the panel with Approve / Reject instead.
   useEffect(() => {
-    setAbrir(abrirAgente);
+    setAbrir((id: string) => {
+      const a = agentesRef.current.find((x) => x.agente.session_id === id);
+      if (a?.estado.numero === 13) setConPermiso(id);
+      else abrirAgente(id);
+    });
   }, [abrirAgente, setAbrir]);
+  const agentePermiso = conPermiso
+    ? datos?.agentes.find((a) => a.agente.session_id === conPermiso)
+    : undefined;
 
   // Layout of this copy (environment, furniture, theme). Read again every
   // 30 s (not while editing) so the PC and the iPhone show the same environment.
@@ -207,12 +228,57 @@ export default function Oficina3D() {
                 : t("barra.avisosApagados")}
             </span>
           </button>
+          <button
+            type="button"
+            className={s.boton}
+            aria-expanded={panelPermisos}
+            onClick={() => setPanelPermisos((v) => !v)}
+          >
+            {t("barra.permisos")}
+          </button>
         </div>
       </header>
 
       {panelAvisos && (
         <div className={s.capaAvisos}>
           <PanelAvisos api={avisos} onCerrar={() => setPanelAvisos(false)} />
+        </div>
+      )}
+      {panelPermisos && (
+        <div className={s.capaAvisos}>
+          <PanelConfigPermisos onCerrar={() => setPanelPermisos(false)} />
+        </div>
+      )}
+      {agentePermiso && (
+        <div
+          className={s.capaPermiso}
+          role="dialog"
+          aria-label={`Permiso de ${nombreProyecto(agentePermiso)}`}
+        >
+          <div className={s.permisoCabeza}>
+            <b>{nombreProyecto(agentePermiso)}</b>
+            <span>
+              {agentePermiso.estado.numero} · {agentePermiso.estado.nombre}
+            </span>
+            <button
+              type="button"
+              className={s.boton}
+              onClick={() => setConPermiso(null)}
+            >
+              {t("permiso.cerrar")}
+            </button>
+          </div>
+          {agentePermiso.permiso ? (
+            <PanelPermiso permiso={agentePermiso.permiso} ahora={ahora} />
+          ) : (
+            <p className={s.permisoVsCode}>{t("permiso.vscode")}</p>
+          )}
+          <Link
+            href={`/oficina?agente=${encodeURIComponent(agentePermiso.agente.session_id)}`}
+            className={s.permisoEnlace}
+          >
+            {t("permiso.detalle")}
+          </Link>
         </div>
       )}
 

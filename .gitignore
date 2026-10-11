@@ -130,3 +130,7 @@ docs/superpowers
 /backend/agent_events.db-shm
 # Distribución de la oficina 3D guardada por la copia de desarrollo
 /backend/distribucion.json
+# Permisos desde la oficina de la copia de desarrollo (registro y configuración)
+/backend/permisos.db
+/backend/permisos.json
+/backend/permisos.tmp

@@ -3,6 +3,8 @@
  * the rule for closed agents. No React, no fetch: tested in tests/oficina.test.ts.
  */
 
+import type { Permiso } from "@/components/permisos/logica";
+
 export interface Espera {
   tipo: string;
   evidencia: Record<string, unknown> | null;
@@ -44,6 +46,8 @@ export interface Agente {
   proceso: { pid: number; creado: number | null } | null;
   indicadores: Indicadores;
   eventos_recientes: EventoReciente[];
+  /** Permission request registered by the hook (13), answered from the office. */
+  permiso?: Permiso | null;
 }
 
 export interface Presencia {

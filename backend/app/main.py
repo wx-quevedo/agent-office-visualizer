@@ -21,6 +21,7 @@ from app.api.routes import (
     events,
     floors,
     oficina3d,
+    permisos,
     preferences,
     sessions,
     websockets,
@@ -212,6 +213,7 @@ app.add_middleware(ApiKeyMiddleware)
 
 app.include_router(agents_state.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(oficina3d.router, prefix=f"{settings.API_V1_STR}/oficina3d")
+app.include_router(permisos.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(events.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(floors.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(preferences.router, prefix=f"{settings.API_V1_STR}")

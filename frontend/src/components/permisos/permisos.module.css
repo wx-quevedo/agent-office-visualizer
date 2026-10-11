@@ -1,0 +1,175 @@
+/* Permission requests: same boxes as /oficina (white, greys, black). */
+
+.permiso {
+  border: 2px solid var(--negro, #111);
+  background: var(--blanco, #fff);
+  color: var(--negro, #111);
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.titulo {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.titulo small {
+  display: block;
+  font-weight: 400;
+  color: var(--gris-oscuro, #555);
+  font-size: 13px;
+}
+
+.bloque {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--gris-fondo, #f4f4f4);
+  border: 1px solid var(--gris-borde, #b5b5b5);
+  font-family: var(--font-plex-mono), "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.restante {
+  font-size: 14px;
+  color: var(--gris-oscuro, #555);
+}
+
+.restante b {
+  color: var(--negro, #111);
+  font-family: var(--font-plex-mono), "Courier New", monospace;
+}
+
+.botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.boton {
+  min-height: 44px;
+  min-width: 120px;
+  padding: 0 18px;
+  border: 2px solid var(--negro, #111);
+  background: var(--blanco, #fff);
+  color: var(--negro, #111);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.aprobar {
+  background: var(--negro, #111);
+  color: var(--blanco, #fff);
+}
+
+.boton:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.boton:focus-visible,
+.campo input:focus-visible,
+.campo select:focus-visible,
+.campo textarea:focus-visible {
+  outline: 3px solid var(--negro, #111);
+  outline-offset: 2px;
+}
+
+.campo {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.campo small {
+  font-weight: 400;
+  color: var(--gris-oscuro, #555);
+}
+
+.campo input,
+.campo select,
+.campo textarea {
+  font: inherit;
+  font-weight: 400;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 2px solid var(--negro, #111);
+  background: var(--blanco, #fff);
+  color: var(--negro, #111);
+}
+
+.campo textarea {
+  min-height: 140px;
+  font-family: var(--font-plex-mono), "Courier New", monospace;
+  font-size: 13px;
+}
+
+.alerta {
+  border: 2px solid var(--negro, #111);
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.error {
+  border: 1px dashed var(--negro, #111);
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.vscode {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--gris, #8a8a8a);
+  color: var(--gris-oscuro, #555);
+  font-weight: 600;
+}
+
+/* configuration panel (next to Avisos) */
+.config {
+  border: 3px solid var(--negro, #111);
+  background: var(--blanco, #fff);
+  color: var(--negro, #111);
+  padding: 16px 20px 20px;
+  margin-bottom: 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.cabeza {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.cabeza h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.columnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 14px;
+}
+
+.nota {
+  margin: 0;
+  color: var(--gris-oscuro, #555);
+  font-size: 14px;
+}
+
+@media (max-width: 699px) {
+  .botones .boton {
+    flex: 1 1 140px;
+    min-height: 52px;
+    font-size: 17px;
+  }
+}

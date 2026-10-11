@@ -654,3 +654,18 @@
     width: 72px;
   }
 }
+
+/* 13 answered from the office: the desk and its request below it */
+.celdaEspera {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.respondeVsCode {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--gris);
+  color: var(--gris-oscuro);
+  font-weight: 600;
+}

@@ -3,7 +3,9 @@
 Claude Office Hooks - Event handler for Claude Code lifecycle events.
 
 CRITICAL: This hook must NEVER interfere with Claude Code:
-- Never print to stdout (would inject context into Claude's conversation)
+- Never print to stdout (would inject context into Claude's conversation),
+  except the decision JSON of a PermissionRequest answered from the office
+  (permisos.py), written to the real stdout
 - Never print to stderr (would show errors to user)
 - Always exit 0 (non-zero blocks Claude actions)
 
@@ -47,6 +49,7 @@ try:
     )
     from claude_office_hooks.debug_logger import debug_log
     from claude_office_hooks.event_mapper import NEW_EVENT_TYPES, map_event
+    from claude_office_hooks.permisos import pedir_decision
     from claude_office_hooks.process_info import find_claude_process
 
     # Derived from package metadata; fallback covers the uninstalled case (ARC-021).
@@ -126,6 +129,33 @@ try:
             # An extra destination that is turned off is expected: not an error.
             if not quiet:
                 log_error(exc, f"send_event to {url} failed")
+
+    def _json_request(
+        url: str, body: dict[str, Any] | None, timeout: float
+    ) -> dict[str, Any] | None:
+        """GET (body None) or POST JSON to the main backend; None on any error."""
+        try:
+            headers: dict[str, str] = {"Content-Type": "application/json"}
+            api_key = get_api_key()
+            if api_key:
+                headers["X-API-Key"] = api_key
+            data = json.dumps(body).encode("utf-8") if body is not None else None
+            req = urllib.request.Request(url, data=data, headers=headers)
+            with _open_request(req, url, timeout) as response:
+                if response.status >= 300:
+                    return None
+                result = json.loads(response.read().decode("utf-8"))
+                return cast(dict[str, Any], result) if isinstance(result, dict) else None
+        except Exception as exc:
+            log_error(exc, f"permisos: {url}")
+            return None
+
+    def write_decision(decision: dict[str, Any]) -> None:
+        """The only output of the hook: the PermissionRequest decision, on the real stdout."""
+        real_stdout = sys.__stdout__
+        if real_stdout is not None:
+            real_stdout.write(json.dumps(decision))
+            real_stdout.flush()
 
     def send_event(payload: dict[str, Any]) -> None:
         """POST *payload* to every destination in parallel.
@@ -258,6 +288,19 @@ try:
 
         debug_log(args.event_type, raw_data, payload, enabled=DEBUG)
         send_event(payload)
+
+        # Permission requests: the office may approve or reject them (the
+        # backend decides whether to wait, by policy and presence).
+        if args.event_type == "permission_request":
+            decision = pedir_decision(
+                raw_data,
+                payload,
+                API_URL,
+                post_json=lambda url, body, t: _json_request(url, body, t),
+                get_json=lambda url, t: _json_request(url, None, t),
+            )
+            if decision is not None:
+                write_decision(decision)
 
     if __name__ == "__main__":
         try:

@@ -19,6 +19,14 @@ import {
   type Agente,
 } from "@/components/oficina/logica";
 
+/** Where the permission (13) can be answered: the office while the hook waits for it. */
+export function dondeResponder(a: Agente): string {
+  const p = a.permiso;
+  return p && p.estado === "pendiente" && p.esperando
+    ? "Puedes responder desde la oficina."
+    : "Responde en VS Code.";
+}
+
 export type TipoAviso = "permiso" | "pregunta" | "termino" | "cerrado";
 
 export interface ConfigAvisos {
@@ -173,11 +181,12 @@ export function construirAviso(
     const titulo = `${quien} te pide permiso`;
     const leido =
       config.leerPermiso && pide ? `. ${textoParaLeer(pide, 120)}` : "";
+    const donde = dondeResponder(a);
     return {
       ...base,
       titulo: prefijo + titulo,
-      voz: `${prefijo}${titulo}${leido}`,
-      cuerpo: [recortar(pide, 120), cuenta].filter(Boolean).join("\n"),
+      voz: `${prefijo}${titulo}${leido}. ${donde}`,
+      cuerpo: [recortar(pide, 120), donde, cuenta].filter(Boolean).join("\n"),
     };
   }
   if (tipo === "pregunta") {

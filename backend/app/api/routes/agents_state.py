@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.core.agent_state_engine import get_state_engine
+from app.core.permisos import get_registro
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -14,8 +15,13 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 async def get_agents_state() -> dict[str, Any]:
     """Return each active agent's catalog state, wait, indicators and recent
     raw events, plus the user's global presence. Recomputed at request time.
+    Each agent carries its permission request of the office (``permiso``:
+    pending, or just decided/expired), or null.
     """
-    return get_state_engine().snapshot()
+    snap = get_state_engine().snapshot()
+    permisos = get_registro().vistas_por_sesion()
+    agentes = [{**a, "permiso": permisos.get(a["agente"]["session_id"])} for a in snap["agentes"]]
+    return {**snap, "agentes": agentes}
 
 
 class Heartbeat(BaseModel):
