@@ -789,6 +789,8 @@ class ProyectosEquipo:
                 "numero": o["numero"],
                 "agente": o["agente"],
                 "texto": o["texto_final"] or o["texto_propuesto"],
+                # Para que el orquestador sepa que el agente recibió otro texto.
+                "editada": o["texto_final"] is not None,
             },
         )
 

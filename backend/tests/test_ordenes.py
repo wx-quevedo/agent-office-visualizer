@@ -97,6 +97,7 @@ def test_orden_aprobada_con_cambios_y_su_avance(tmp_path: Path) -> None:
     [enc] = r.encargos_pendientes("alienware")
     assert enc["tipo"] == "orden" and enc["orden_id"] == o["id"] and enc["agente"] == "agente"
     assert enc["texto"] == "Crea hola.txt con: Prueba 38" and enc["numero"] == 1
+    assert enc["editada"] is True
     # Avance: en curso y terminada con su resumen (repetir no falla).
     assert r.informar_orden("alienware", o["id"], "en_curso", None) == {"estado": "en_curso"}
     assert r.informar_orden("alienware", o["id"], "en_curso", None) == {"estado": "en_curso"}
@@ -163,7 +164,7 @@ def test_aprobacion_automatica(tmp_path: Path) -> None:
     o = r.proponer_orden("alienware", pid, "orden-0002", "agente", "Sola")
     assert o["estado"] == "aprobada" and o["decidido_por"] == "automatico"
     [enc] = r.encargos_pendientes("alienware")
-    assert enc["tipo"] == "orden" and enc["orden_id"] == o["id"]
+    assert enc["tipo"] == "orden" and enc["orden_id"] == o["id"] and enc["editada"] is False
     # La que ya esperaba sigue esperando a Washington.
     assert r.orden(previa["id"])["estado"] == "por_aprobar"  # type: ignore[index]
     r.auto_aprobar(pid, False)
