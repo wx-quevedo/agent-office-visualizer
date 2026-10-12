@@ -1,16 +1,23 @@
-"""Proyectos con equipo (etapa 4, Prompt 37).
+"""Proyectos con equipo (etapa 4, Prompts 37 y 38).
 
 Usuario:
 - GET  /proyectos-creados: proyectos con su equipo y lo que está haciendo cada miembro.
 - GET  /proyectos-creados/maquinas: máquinas con su ruta base y si se pueden elegir.
 - POST /proyectos-creados: crea uno (deja un encargo para el monitor de la máquina).
 - GET  /proyectos-creados/{id}: un proyecto con su equipo.
-- POST /proyectos-creados/{id}/pausar y /reanudar.
+- POST /proyectos-creados/{id}/pausar, /reanudar y /detener.
+- POST /proyectos-creados/{id}/auto-aprobar: el interruptor de aprobación automática.
+- POST /proyectos-creados/{id}/agentes: agrega un agente de código.
+- GET  /proyectos-creados/{id}/chat: mensajes y órdenes; POST: un mensaje al orquestador.
+- GET  /ordenes (?estado=por_aprobar); POST /ordenes/{id}/aprobar y /rechazar.
 
 Máquina (token de máquina):
 - GET  /maquinas/encargos: sus encargos pendientes (quedan tomados).
 - POST /maquinas/encargos/{id}: resultado de un encargo.
 - POST /maquinas/equipos: estado de las sesiones que tiene lanzadas.
+- POST /maquinas/chat: una respuesta del orquestador.
+- POST /maquinas/ordenes: una orden que propuso el orquestador (queda por aprobar).
+- POST /maquinas/ordenes/{id}: en curso, terminada o fallida, con el resumen.
 """
 
 from __future__ import annotations
@@ -79,8 +86,7 @@ def con_estado(p: dict[str, Any]) -> dict[str, Any]:
         **p,
         "equipo": equipo,
         "haciendo": haciendo,
-        # Llegan con el Prompt 38 (órdenes del orquestador al agente).
-        "ordenes_por_aprobar": 0,
+        "ordenes_por_aprobar": get_proyectos_equipo().por_aprobar().get(p["id"], 0),
     }
 
 
@@ -158,6 +164,92 @@ async def reanudar(id_: str) -> dict[str, Any]:
         raise _error(e) from None
 
 
+@router.post("/proyectos-creados/{id_}/detener")
+async def detener(id_: str) -> dict[str, Any]:
+    try:
+        return con_estado(get_proyectos_equipo().detener(id_))
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+class Interruptor(BaseModel):
+    activo: bool
+
+
+@router.post("/proyectos-creados/{id_}/auto-aprobar")
+async def auto_aprobar(id_: str, body: Interruptor) -> dict[str, Any]:
+    try:
+        return con_estado(get_proyectos_equipo().auto_aprobar(id_, body.activo))
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+@router.post("/proyectos-creados/{id_}/agentes", status_code=201)
+async def agregar_agente(id_: str, body: Miembro) -> dict[str, Any]:
+    try:
+        return con_estado(get_proyectos_equipo().agregar_agente(id_, body.modelo, body.esfuerzo))
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+# -- chat y órdenes (Prompt 38) -----------------------------------------------------------
+
+
+@router.get("/proyectos-creados/{id_}/chat")
+async def chat(id_: str) -> dict[str, Any]:
+    reg = get_proyectos_equipo()
+    if reg.proyecto(id_) is None:
+        raise HTTPException(status_code=404, detail="No existe ese proyecto.")
+    return {"mensajes": reg.mensajes(id_), "ordenes": list(reversed(reg.ordenes(id_)))}
+
+
+class NuevoMensaje(BaseModel):
+    texto: str = Field(min_length=1, max_length=8000)
+
+
+@router.post("/proyectos-creados/{id_}/chat", status_code=201)
+async def escribir(id_: str, body: NuevoMensaje) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().escribir(id_, body.texto)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+EstadoOrden = Literal["por_aprobar", "aprobada", "rechazada", "en_curso", "terminada", "fallida"]
+Dispositivo = Literal["web", "app", "celular", "pc"]
+
+
+@router.get("/ordenes")
+async def ordenes(estado: EstadoOrden | None = None) -> dict[str, Any]:
+    return {"ordenes": get_proyectos_equipo().ordenes(estado=estado)}
+
+
+class Aprobacion(BaseModel):
+    texto: str | None = Field(default=None, max_length=20000)
+    dispositivo: Dispositivo = "web"
+
+
+@router.post("/ordenes/{id_}/aprobar")
+async def aprobar(id_: str, body: Aprobacion) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().aprobar(id_, body.texto, body.dispositivo)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+class Rechazo(BaseModel):
+    motivo: str = Field(min_length=1, max_length=500)
+    dispositivo: Dispositivo = "web"
+
+
+@router.post("/ordenes/{id_}/rechazar")
+async def rechazar(id_: str, body: Rechazo) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().rechazar(id_, body.motivo, body.dispositivo)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
 # -- el monitor -------------------------------------------------------------------------
 
 
@@ -208,3 +300,60 @@ async def equipos(request: Request, body: Equipos) -> dict[str, Any]:
         _maquina(request), [e.model_dump() for e in body.equipos]
     )
     return {"actualizados": n}
+
+
+class RespuestaOrquestador(BaseModel):
+    proyecto_id: str = Field(min_length=1, max_length=64)
+    origen_id: str = Field(min_length=8, max_length=64)
+    texto: str = Field(min_length=1, max_length=20000)
+
+
+@router.post("/maquinas/chat")
+async def respuesta_orquestador(request: Request, body: RespuestaOrquestador) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().respuesta_orquestador(
+            _maquina(request), body.proyecto_id, body.origen_id, body.texto
+        )
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+class OrdenPropuesta(BaseModel):
+    proyecto_id: str = Field(min_length=1, max_length=64)
+    origen_id: str = Field(min_length=8, max_length=64)
+    agente: str = Field(min_length=1, max_length=40)
+    texto: str = Field(min_length=1, max_length=20000)
+    estimado: str | None = Field(default=None, max_length=60)
+    dificultad: str | None = Field(default=None, max_length=60)
+
+
+@router.post("/maquinas/ordenes")
+async def proponer_orden(request: Request, body: OrdenPropuesta) -> dict[str, Any]:
+    try:
+        o = get_proyectos_equipo().proponer_orden(
+            _maquina(request),
+            body.proyecto_id,
+            body.origen_id,
+            body.agente,
+            body.texto,
+            body.estimado,
+            body.dificultad,
+        )
+    except ProyectoError as e:
+        raise _error(e) from None
+    return {"id": o["id"], "numero": o["numero"], "estado": o["estado"]}
+
+
+class AvanceOrden(BaseModel):
+    estado: Literal["en_curso", "terminada", "fallida"]
+    resumen: str | None = Field(default=None, max_length=4000)
+
+
+@router.post("/maquinas/ordenes/{id_}")
+async def avance_orden(request: Request, id_: str, body: AvanceOrden) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().informar_orden(
+            _maquina(request), id_, body.estado, body.resumen
+        )
+    except ProyectoError as e:
+        raise _error(e) from None

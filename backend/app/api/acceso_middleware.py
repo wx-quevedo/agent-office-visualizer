@@ -62,6 +62,11 @@ _INGESTA: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GET", re.compile(rf"{_API}/maquinas/encargos")),
     ("POST", re.compile(rf"{_API}/maquinas/encargos/[A-Za-z0-9]+")),
     ("POST", re.compile(rf"{_API}/maquinas/equipos")),
+    # Prompt 38: respuestas del orquestador, órdenes que propone (quedan por aprobar:
+    # la máquina nunca aprueba) y el avance de las aprobadas.
+    ("POST", re.compile(rf"{_API}/maquinas/chat")),
+    ("POST", re.compile(rf"{_API}/maquinas/ordenes")),
+    ("POST", re.compile(rf"{_API}/maquinas/ordenes/[A-Za-z0-9]+")),
 )
 # Guarded with access on: the API and its docs.
 _PROTEGIDAS = (f"{_API}/", "/docs", "/redoc", "/openapi.json")

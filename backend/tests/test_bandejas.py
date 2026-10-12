@@ -310,7 +310,7 @@ def test_ruta_de_decisiones_con_pregunta_real(entorno: tuple[TestClient, AgentSt
     assert agente["pregunta_opciones"][0]["opciones"][1]["etiqueta"] == "Con un servicio externo"
     assert estado["decisiones_pendientes"] == 1
     d = c.get("/api/v1/decisiones").json()
-    assert d["conteo"] == {"permiso": 0, "pregunta": 1, "atasco": 0, "total": 1}
+    assert d["conteo"] == {"orden": 0, "permiso": 0, "pregunta": 1, "atasco": 0, "total": 1}
     [item] = d["pendientes"]
     assert item["tipo"] == "pregunta" and item["proyecto"] == "prueba-pregunta"
     assert (

@@ -37,7 +37,8 @@ Tipo = Literal["permiso", "pregunta", "atasco"]
 EstadoIdea = Literal["nueva", "asignada", "archivada"]
 Origen = Literal["dictada", "escrita"]
 
-ORDEN: dict[str, int] = {"permiso": 0, "pregunta": 1, "atasco": 2}
+# Las órdenes por aprobar (etapa 4) las agrega la ruta antes de los permisos.
+ORDEN: dict[str, int] = {"orden": 0, "permiso": 1, "pregunta": 2, "atasco": 3}
 ESQUEMA = 1
 MAX_TEXTO_IDEA = 2000
 MAX_PROYECTO = 200

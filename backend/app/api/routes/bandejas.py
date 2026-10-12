@@ -1,7 +1,9 @@
 """Bandejas de Decisiones e Ideas (etapa 3, Prompt 33).
 
-- GET  /decisiones: pendientes (permisos, preguntas, atascos; lo más urgente arriba)
-  y resueltas de hoy. Los permisos se deciden con POST /permisos/solicitudes/{id}/decision.
+- GET  /decisiones: pendientes (órdenes por aprobar, permisos, preguntas, atascos; lo
+  más urgente arriba) y resueltas de hoy. Los permisos se deciden con
+  POST /permisos/solicitudes/{id}/decision; las órdenes, con POST /ordenes/{id}/aprobar
+  o /rechazar.
 - POST /decisiones/atascos/visto: "Ya lo vi" (lo saca de la bandeja, no toca al agente).
 - GET  /ideas, POST /ideas, PATCH /ideas/{id}, POST /ideas/{id}/archivar.
 """
@@ -23,23 +25,29 @@ from app.core.bandejas import (
     pendientes,
 )
 from app.core.datos_maquinas import get_datos_maquinas
+from app.core.proyectos_equipo import get_proyectos_equipo
 
 router = APIRouter(tags=["bandejas"])
 
 
 def bandeja_actual() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """(agentes, pendientes) con las preguntas ya anotadas."""
+    """(agentes, pendientes) con las preguntas ya anotadas. Las órdenes por aprobar de
+    los proyectos con equipo (Prompt 38) van primero."""
     agentes = agentes_con_extras()
     b = get_bandejas()
-    items = pendientes(agentes, b.vistos(), get_state_engine().clock())
+    ahora = get_state_engine().clock()
+    items = pendientes(agentes, b.vistos(), ahora)
     b.sincronizar(items, agentes)
-    return agentes, items
+    return agentes, get_proyectos_equipo().decisiones(ahora) + items
 
 
 @router.get("/decisiones")
 async def decisiones() -> dict[str, Any]:
     _, items = bandeja_actual()
-    conteo = {t: sum(1 for i in items if i["tipo"] == t) for t in ("permiso", "pregunta", "atasco")}
+    conteo = {
+        t: sum(1 for i in items if i["tipo"] == t)
+        for t in ("orden", "permiso", "pregunta", "atasco")
+    }
     return {
         "pendientes": items,
         "conteo": {**conteo, "total": len(items)},

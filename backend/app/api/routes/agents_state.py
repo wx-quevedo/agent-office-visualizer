@@ -55,7 +55,9 @@ async def get_agents_state() -> dict[str, Any]:
     ahora = leido if isinstance(leido, datetime) else datetime.now(UTC)
     items = pendientes(agentes, bandejas.vistos(), ahora)
     bandejas.sincronizar(items, agentes)
-    return {**snap, "agentes": agentes, "decisiones_pendientes": len(items)}
+    # Etapa 4: las órdenes por aprobar también esperan a Washington.
+    ordenes = sum(get_proyectos_equipo().por_aprobar().values())
+    return {**snap, "agentes": agentes, "decisiones_pendientes": len(items) + ordenes}
 
 
 class Heartbeat(BaseModel):
