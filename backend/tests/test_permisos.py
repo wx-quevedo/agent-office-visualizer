@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import permisos as rutas
 from app.core import permisos
-from app.core.permisos import Configuracion, PermisoError, RegistroPermisos
+from app.core.permisos import ESPERA_MAXIMA, Configuracion, PermisoError, RegistroPermisos
 
 
 class Reloj:
@@ -157,6 +157,9 @@ def test_sesion_de_equipo_siempre_espera(tmp_path: Path, politica: str) -> None:
     reg.guardar_config(Configuracion(politica=politica))  # type: ignore[arg-type]
     s = crear(reg, session_id="agente-38", herramienta="Write")
     assert s.esperando and s.vence is not None and s.politica == "equipo"
+    # El plazo más largo que admite el hook (unos 9 min), no los 90 s de siempre.
+    assert s.vence == s.creada + timedelta(seconds=ESPERA_MAXIMA)
+    assert reg.config.espera_seg == 90
     assert not crear(reg, "solicitud-2", session_id="otra").esperando
     assert reg.obtener("solicitud-1").esperando  # type: ignore[union-attr]
     assert reg.decidir("solicitud-1", True, None, "pc").estado == "aprobada"

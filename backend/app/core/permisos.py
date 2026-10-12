@@ -328,10 +328,13 @@ class RegistroPermisos:
                 equipo = self.sin_dialogo(session_id)
             except Exception:
                 equipo = False
+            espera_seg = cfg.espera_seg
             if equipo:
-                # Sin VS Code que pregunte: siempre se decide en la web o la app.
+                # Sin VS Code que pregunte: siempre se decide en la web o la app, con el
+                # plazo más largo que admite el hook (las sesiones normales, el configurado).
                 esperar = True
                 politica = "equipo"
+                espera_seg = ESPERA_MAXIMA
             elif cfg.politica == "siempre":
                 esperar = True
             elif cfg.politica == "solo_en_el_celular":
@@ -359,7 +362,7 @@ class RegistroPermisos:
                 proyecto=proyecto,
                 creada=now,
                 esperando=esperar,
-                vence=now + timedelta(seconds=cfg.espera_seg) if esperar else None,
+                vence=now + timedelta(seconds=espera_seg) if esperar else None,
                 politica=politica,
                 machine_id=machine_id,
             )
