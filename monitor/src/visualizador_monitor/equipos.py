@@ -125,6 +125,9 @@ SALUDO = {
 }
 ORDEN_AL_AGENTE = "Orden {numero} del orquestador, aprobada por Washington:\n\n{texto}"
 RESULTADO = "Resultado de la orden {numero} para {agente} ({estado}):\n{resumen}"
+EDITADA = (
+    "Washington editó esta orden antes de aprobarla. El agente recibió este texto:\n{texto}\n\n"
+)
 RECHAZO = "Washington rechazó la orden {numero} para {agente}. Motivo: {motivo}"
 INTERRUMPIDA = (
     "La orden {numero} para {agente} se interrumpió: {motivo}. Puede haber quedado a medias; "
@@ -718,7 +721,13 @@ class Equipos:
             raise EquipoError(f"{e.get('agente')} no es un agente de código de este proyecto.")
         if not self._ya_visto(p, f"orden:{oid}"):
             p.colas.setdefault(destino.nombre, []).append(
-                {"tipo": "orden", "orden_id": oid, "numero": numero, "texto": texto}
+                {
+                    "tipo": "orden",
+                    "orden_id": oid,
+                    "numero": numero,
+                    "texto": texto,
+                    "editada": e.get("editada") is True,
+                }
             )
             self._guardar()
         return p
@@ -830,12 +839,12 @@ class Equipos:
             {"estado": estado, "resumen": resumen},
             p,
         )
-        self._avisar_orquestador(
-            p,
-            RESULTADO.format(
-                numero=item.get("numero"), agente=m.nombre, estado=estado, resumen=resumen
-            ),
+        aviso = RESULTADO.format(
+            numero=item.get("numero"), agente=m.nombre, estado=estado, resumen=resumen
         )
+        if item.get("editada"):
+            aviso = EDITADA.format(texto=item.get("texto") or "") + aviso
+        self._avisar_orquestador(p, aviso)
 
     def _respuesta_orquestador(self, p: Proyecto, texto: str, avisar: bool = True) -> None:
         ordenes, limpio = extraer_ordenes(texto)

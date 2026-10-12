@@ -104,6 +104,7 @@ def _orden(texto: str, agente: str = "agente", numero: int = 1, **extra: Any) ->
         "numero": numero,
         "agente": agente,
         "texto": texto,
+        **extra,
     }
 
 
@@ -130,7 +131,7 @@ def test_orden_propuesta_aprobada_editada_y_rechazada(tmp_path: Path) -> None:
         assert len(_mensajes(registro, agente)) == 1
         # Aprobada con el texto editado: solo ese texto le llega al agente.
         oid = uuid.uuid4().hex
-        assert g.procesar(_orden("Crea hola.txt: Prueba 38", orden_id=oid))["ok"]
+        assert g.procesar(_orden("Crea hola.txt: Prueba 38", orden_id=oid, editada=True))["ok"]
         ruta = f"/api/v1/maquinas/ordenes/{oid}"
         assert _girar(g, srv, lambda: any(d["estado"] == "terminada" for d in srv.de(ruta)))
         recibidas = _mensajes(registro, agente)
@@ -143,6 +144,9 @@ def test_orden_propuesta_aprobada_editada_y_rechazada(tmp_path: Path) -> None:
         assert _girar(
             g, srv, lambda: any("Resultado de la orden 1" in t for t in _mensajes(registro, orq))
         )
+        # Y sabe que Washington la editó y con qué texto la recibió el agente.
+        [res] = [t for t in _mensajes(registro, orq) if "Resultado de la orden 1" in t]
+        assert res.startswith("Washington editó esta orden") and "Prueba 38" in res
         # Repetir el encargo (reentrega del servidor) no la vuelve a mandar.
         assert g.procesar(_orden("Crea hola.txt: Prueba 38", orden_id=oid))["ok"]
         time.sleep(0.3)
