@@ -156,9 +156,12 @@ SALUDO_AUTOSKILLS = (
 # Las reglas de la casa cambiaron con la sesión viva (o mientras estaba cerrada): se le
 # cuenta una vez; CLAUDE.md solo se lee al empezar.
 REGLAS_ACTUALIZADAS = (
-    "Se actualizaron las reglas de la casa de este proyecto (están en CLAUDE.md). Desde "
-    "ahora valen estas:\n{reglas}"
+    "Se actualizaron las reglas de la casa de este proyecto (están en CLAUDE.md).{cambios} "
+    "Desde ahora valen estas:\n{reglas}"
 )
+# Varios cambios de reglas seguidos se juntan en un solo aviso: el aviso espera estos
+# segundos desde el último cambio antes de escribirse a la sesión.
+DEMORA_REGLAS = 8.0
 ORDEN_AL_AGENTE = "Orden {numero} del orquestador, aprobada por Washington:\n\n{texto}"
 RESULTADO = "Resultado de la orden {numero} para {agente} ({estado}):\n{resumen}"
 EDITADA = (
@@ -228,6 +231,9 @@ SECCION_PLANTILLA: dict[str, str | None] = {
     "vacia": None,
     "web": (
         "## Plantilla Web (Next.js)\n\n"
+        "- La plantilla no crea el proyecto Next.js: lo crea la primera orden del orquestador "
+        "(por ejemplo con `npx create-next-app`). Hasta entonces solo hay PROJECT.md, CLAUDE.md "
+        "y .gitignore.\n"
         "- Next.js con TypeScript y el App Router.\n"
         "- Pruebas con `npm test`, build con `npm run build` y lint con `npm run lint`.\n"
         "- Nada de claves en el repositorio: `.env` fuera y un `.env.example` con los nombres."
@@ -240,6 +246,8 @@ SECCION_PLANTILLA: dict[str, str | None] = {
     ),
     "expo": (
         "## Plantilla App (Expo)\n\n"
+        "- La plantilla no crea la app: la crea la primera orden del orquestador (por ejemplo "
+        "con `npx create-expo-app`). Hasta entonces solo hay PROJECT.md, CLAUDE.md y .gitignore.\n"
         "- App con Expo y TypeScript; se prueba con `npx expo start`.\n"
         "- No se versionan `ios/` ni `android/` generados, ni claves de firma."
     ),
@@ -283,17 +291,35 @@ def escribir_reglas(carpeta: Path, reglas: list[str]) -> bool:
     return True
 
 
-def project_md(nombre: str, titulo: str, hoy: str) -> str:
+# Lo que la plantilla no crea y sale con la primera orden (Web y App).
+CREA_LA_PRIMERA_ORDEN: dict[str, str] = {
+    "web": "el proyecto Next.js",
+    "expo": "la app de Expo",
+}
+
+
+def project_md(nombre: str, titulo: str, hoy: str, plantilla: str = "vacia") -> str:
     """PROJECT.md con las secciones del estándar de Washington."""
+    falta = CREA_LA_PRIMERA_ORDEN.get(plantilla)
+    contexto = "Por definir en la entrevista inicial con el orquestador."
+    siguiente = "Entrevista inicial con el orquestador."
+    if falta:
+        contexto += (
+            f" La plantilla no crea {falta}: lo crea la primera orden del orquestador, "
+            "después de la entrevista."
+        )
+        siguiente = (
+            f"Entrevista inicial con el orquestador; después, la primera orden crea {falta}."
+        )
     return (
         f"# {nombre}\n\n"
         f"Proyecto creado el {hoy} desde la oficina de agentes. Plantilla: {titulo}.\n\n"
-        "## Contexto\n\nPor definir en la entrevista inicial con el orquestador.\n\n"
+        f"## Contexto\n\n{contexto}\n\n"
         "## Decisiones\n\n| Fecha | Decisión | Por qué |\n| --- | --- | --- |\n\n"
         f"## Registro de avance\n\n| Fecha | Avance |\n| --- | --- |\n"
         f"| {hoy} | Proyecto creado. |\n\n"
         "## Problemas y soluciones\n\n| Problema | Solución |\n| --- | --- |\n\n"
-        "## Siguiente paso\n\nEntrevista inicial con el orquestador.\n"
+        f"## Siguiente paso\n\n{siguiente}\n"
     )
 
 
@@ -314,7 +340,9 @@ def preparar_carpeta(
     (git or git_init)(carpeta)
     if gitignore is not None:
         (carpeta / ".gitignore").write_text(gitignore, encoding="utf-8")
-    (carpeta / "PROJECT.md").write_text(project_md(nombre, titulo, hoy), encoding="utf-8")
+    (carpeta / "PROJECT.md").write_text(
+        project_md(nombre, titulo, hoy, plantilla), encoding="utf-8"
+    )
     seccion = SECCION_PLANTILLA[plantilla]
     cabecera = f"# {nombre}\n\n" + (seccion + "\n" if seccion else "")
     (carpeta / "CLAUDE.md").write_text(cabecera, encoding="utf-8")
@@ -387,6 +415,8 @@ class Miembro:
     rol_huella: str | None = None
     # Huella de las reglas de la casa que conoce (CLAUDE.md se lee solo al empezar).
     reglas_huella: str | None = None
+    # Las reglas que conoce (para decirle qué cambió); None si es de un monitor anterior.
+    reglas_conocidas: list[str] | None = None
 
 
 @dataclass
@@ -552,6 +582,20 @@ def mensaje(texto: str) -> bytes:
     return (json.dumps(linea, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def texto_aviso_reglas(antes: list[str] | None, ahora: list[str]) -> str:
+    """El aviso de reglas: qué cambió desde lo que la sesión conocía (si se sabe) y la
+    lista completa vigente."""
+    lista = "\n".join(f"- {x}" for x in ahora) or "- (ninguna)"
+    cambios = ""
+    if antes is not None:
+        nuevas = [x for x in ahora if x not in antes]
+        quitadas = [x for x in antes if x not in ahora]
+        lineas = [f"- Se agregó: {x}" for x in nuevas] + [f"- Se quitó: {x}" for x in quitadas]
+        if lineas:
+            cambios = "\nCambios:\n" + "\n".join(lineas) + "\n"
+    return REGLAS_ACTUALIZADAS.format(cambios=cambios, reglas=lista)
+
+
 def reglas_de(e: dict[str, Any]) -> tuple[list[str] | None, list[str] | None, bool | None]:
     """Reglas activas, comandos seguros y autoskills de un encargo (None si no vienen)."""
     reglas = e.get("reglas")
@@ -696,6 +740,7 @@ class Equipos:
         git: Callable[[Path], None] | None = None,
         arranque: float = ARRANQUE,
         espera_cierre: float = ESPERA_CIERRE,
+        demora_reglas: float = DEMORA_REGLAS,
     ) -> None:
         self.archivo = base / "equipos.json"
         self.ruta_proyectos = ruta_proyectos
@@ -706,6 +751,7 @@ class Equipos:
         self.git = git
         self.arranque = arranque
         self.espera_cierre = espera_cierre
+        self.demora_reglas = demora_reglas
         self.proyectos: dict[str, Proyecto] = {}
         self.sesiones: dict[str, Sesion] = {}  # session_id -> proceso lanzado aquí
         # Lo que falta mandar al servidor (respuestas, órdenes propuestas, avances).
@@ -919,11 +965,26 @@ class Equipos:
             self._encolar_reglas(p, m)
 
     def _encolar_reglas(self, p: Proyecto, m: Miembro) -> None:
-        lista = "\n".join(f"- {x}" for x in p.reglas) or "- (ninguna)"
-        p.colas.setdefault(m.nombre, []).append(
-            {"tipo": "aviso", "texto": REGLAS_ACTUALIZADAS.format(reglas=lista), "clase": "reglas"}
+        """Un solo aviso de reglas en la cola de cada sesión: si ya había uno sin entregar,
+        se reemplaza por otro con todos los cambios desde lo que la sesión conocía."""
+        cola = p.colas.setdefault(m.nombre, [])
+        previo = next((i for i in cola if i.get("clase") == "reglas"), None)
+        if previo is not None:
+            base = previo.get("base")
+            cola.remove(previo)
+        else:
+            base = m.reglas_conocidas
+        cola.append(
+            {
+                "tipo": "aviso",
+                "texto": texto_aviso_reglas(base, p.reglas),
+                "clase": "reglas",
+                "base": base,
+                "listo_desde": time.time() + self.demora_reglas,
+            }
         )
         m.reglas_huella = huella("\n".join(p.reglas))
+        m.reglas_conocidas = list(p.reglas)
 
     def _relanzar_libres(self, p: Proyecto) -> int:
         """Relanza a los agentes marcados que no están trabajando, para que tomen los
@@ -1187,6 +1248,8 @@ class Equipos:
                     if not s.viva() or s.ocupada():
                         continue
                     item = cola[0]
+                    if float(item.get("listo_desde") or 0) > time.time():
+                        continue  # un aviso de reglas que todavía puede juntarse con otro
                     try:
                         self._entregar(p, m, s, item)
                     except (OSError, EquipoError):
@@ -1288,6 +1351,7 @@ class Equipos:
             reglas_h = huella("\n".join(p.reglas))
             if not retomar:
                 m.reglas_huella = reglas_h  # leyó CLAUDE.md al empezar
+                m.reglas_conocidas = list(p.reglas)
             elif p.reglas and m.reglas_huella != reglas_h:
                 self._encolar_reglas(p, m)
             # Saludo solo al nacer (o si se pide): retomada, queda "En espera".

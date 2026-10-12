@@ -146,7 +146,9 @@ def test_regla_apagada_aviso_y_comandos(tmp_path: Path) -> None:
             t for t in _mensajes(registro, sid) if t.startswith("Se actualizaron las reglas")
         ]
         assert _girar(g, srv, lambda: len(avisos(orq)) == 1 and len(avisos(agente)) == 1)
-        assert "Tema claro" not in avisos(orq)[0] and "- Sin emojis." in avisos(orq)[0]
+        vigentes = avisos(orq)[0].split("Desde ahora valen estas:")[1]
+        assert "- Se quitó: Tema claro por defecto." in avisos(orq)[0]
+        assert "Tema claro" not in vigentes and "- Sin emojis." in vigentes
         assert g.procesar(cambio)["ok"]  # reentrega: sin cambios, sin aviso nuevo
         time.sleep(0.3)
         g.atender()
@@ -195,3 +197,57 @@ def test_un_servidor_viejo_no_borra_las_reglas(tmp_path: Path) -> None:
         assert "- Sin emojis." in claude and g.proyectos[PID].comandos == COMANDOS
     finally:
         g.detener_todo()
+
+
+def test_varios_cambios_seguidos_un_solo_aviso(tmp_path: Path) -> None:
+    """Tres cambios de reglas en pocos segundos: cada sesión recibe un solo aviso, con
+    todos los cambios respecto de lo que conocía y la lista vigente."""
+    registro = tmp_path / "registro.jsonl"
+    g = _gestor(tmp_path, registro, demora_reglas=1.5)
+    enc = _encargo(
+        proyecto_id=PID, nombre="prueba-39", plantilla="web", reglas=REGLAS, comandos=COMANDOS
+    )
+    assert g.procesar(enc)["ok"]
+    srv = Servidor()
+    orq, agente = _sids(enc)
+    try:
+        assert _girar(g, srv, lambda: not any(s.ocupada() for s in g.sesiones.values()))
+
+        def cambio(reglas: list[str]) -> None:
+            e = {**_encargo("reglas", proyecto_id=PID), "reglas": reglas, "comandos": COMANDOS}
+            assert g.procesar(e)["ok"]
+            g.atender()
+
+        cambio(REGLAS[:2])  # se apaga "Tema claro"
+        cambio(REGLAS)  # se vuelve a encender
+        cambio([REGLAS[0], REGLAS[2], "Usar pnpm."])  # se apaga "Sin emojis" y llega una nueva
+        avisos = lambda sid: [  # noqa: E731
+            t for t in _mensajes(registro, sid) if t.startswith("Se actualizaron las reglas")
+        ]
+        assert _girar(g, srv, lambda: len(avisos(orq)) == 1 and len(avisos(agente)) == 1)
+        time.sleep(2.0)
+        g.atender()
+        assert len(avisos(orq)) == 1 and len(avisos(agente)) == 1
+        texto = avisos(orq)[0]
+        assert "- Se agregó: Usar pnpm." in texto and "- Se quitó: Sin emojis." in texto
+        # Tema claro se apagó y se volvió a encender: no es un cambio.
+        assert "Tema claro" not in texto.split("Desde ahora")[0]
+        assert texto.endswith("- Tema claro por defecto.\n- Usar pnpm.")
+    finally:
+        g.detener_todo()
+
+
+def test_plantilla_web_dice_que_el_proyecto_lo_crea_la_primera_orden(tmp_path: Path) -> None:
+    from visualizador_monitor.equipos import preparar_carpeta
+
+    for plantilla, falta in (("web", "Next.js"), ("expo", "app de Expo")):
+        c = tmp_path / plantilla
+        preparar_carpeta(c, plantilla, plantilla, "2026-10-12", lambda _c: None, [])
+        md = (c / "PROJECT.md").read_text(encoding="utf-8")
+        claude = (c / "CLAUDE.md").read_text(encoding="utf-8")
+        assert "lo crea la primera orden del orquestador" in md and falta in md
+        assert "la primera orden crea" in md.split("## Siguiente paso")[1]
+        assert "la crea la primera orden" in claude or "lo crea la primera orden" in claude
+    c = tmp_path / "vacia"
+    preparar_carpeta(c, "vacia", "vacia", "2026-10-12", lambda _c: None, [])
+    assert "primera orden" not in (c / "PROJECT.md").read_text(encoding="utf-8")

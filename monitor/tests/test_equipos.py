@@ -274,6 +274,7 @@ def _gestor(tmp_path: Path, registro: Path, **extra: Any) -> Equipos:
         git=lambda c: None,
         arranque=extra.pop("arranque", 1.0),
         espera_cierre=5.0,
+        demora_reglas=extra.pop("demora_reglas", 0.0),
     )
 
 
