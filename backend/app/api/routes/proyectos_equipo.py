@@ -33,6 +33,7 @@ from app.core.agent_state_engine import get_state_engine
 from app.core.proyectos_equipo import (
     ESFUERZOS,
     MAX_AGENTES,
+    TIPOS_REGLA,
     ProyectoError,
     get_proyectos_equipo,
     vista_lanzada,
@@ -188,6 +189,138 @@ async def auto_aprobar(id_: str, body: Interruptor) -> dict[str, Any]:
 async def agregar_agente(id_: str, body: Miembro) -> dict[str, Any]:
     try:
         return con_estado(get_proyectos_equipo().agregar_agente(id_, body.modelo, body.esfuerzo))
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+# -- reglas de la casa y comandos seguros (Prompt 39) --------------------------------------
+
+TipoRegla = Literal[
+    "idioma",
+    "interfaz",
+    "git",
+    "documentacion",
+    "ordenes",
+    "entrega",
+    "herramientas",
+    "pruebas",
+    "otra",
+]
+assert set(TIPOS_REGLA) == set(TipoRegla.__args__)
+
+
+@router.get("/reglas")
+async def reglas() -> dict[str, Any]:
+    return {"reglas": get_proyectos_equipo().reglas(), "tipos": list(TIPOS_REGLA)}
+
+
+class NuevaRegla(BaseModel):
+    texto: str = Field(min_length=1, max_length=500)
+    tipo: TipoRegla
+    activa_por_defecto: bool = True
+
+
+@router.post("/reglas", status_code=201)
+async def crear_regla(body: NuevaRegla) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().crear_regla(body.texto, body.tipo, body.activa_por_defecto)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+class CambioRegla(BaseModel):
+    texto: str | None = Field(default=None, min_length=1, max_length=500)
+    tipo: TipoRegla | None = None
+    activa_por_defecto: bool | None = None
+
+
+@router.patch("/reglas/{id_}")
+async def cambiar_regla(id_: str, body: CambioRegla) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().cambiar_regla(
+            id_, body.texto, body.tipo, body.activa_por_defecto
+        )
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+@router.delete("/reglas/{id_}")
+async def borrar_regla(id_: str) -> dict[str, Any]:
+    try:
+        get_proyectos_equipo().borrar_regla(id_)
+    except ProyectoError as e:
+        raise _error(e) from None
+    return {"ok": True}
+
+
+@router.get("/comandos")
+async def comandos() -> dict[str, Any]:
+    return {"comandos": get_proyectos_equipo().comandos()}
+
+
+class NuevoComando(BaseModel):
+    comando: str = Field(min_length=1, max_length=80)
+    activo_por_defecto: bool = True
+
+
+@router.post("/comandos", status_code=201)
+async def crear_comando(body: NuevoComando) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().crear_comando(body.comando, body.activo_por_defecto)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+class CambioComando(BaseModel):
+    comando: str | None = Field(default=None, min_length=1, max_length=80)
+    activo_por_defecto: bool | None = None
+
+
+@router.patch("/comandos/{id_}")
+async def cambiar_comando(id_: str, body: CambioComando) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().cambiar_comando(id_, body.comando, body.activo_por_defecto)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+@router.delete("/comandos/{id_}")
+async def borrar_comando(id_: str) -> dict[str, Any]:
+    try:
+        get_proyectos_equipo().borrar_comando(id_)
+    except ProyectoError as e:
+        raise _error(e) from None
+    return {"ok": True}
+
+
+@router.get("/proyectos-creados/{id_}/reglas")
+async def reglas_de(id_: str) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().reglas_de(id_)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+class AjusteRegla(BaseModel):
+    activa: bool
+
+
+@router.post("/proyectos-creados/{id_}/reglas/{regla_id}")
+async def ajustar_regla(id_: str, regla_id: str, body: AjusteRegla) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().ajustar_regla(id_, regla_id, body.activa)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+class AjusteComando(BaseModel):
+    activo: bool
+
+
+@router.post("/proyectos-creados/{id_}/comandos/{comando_id}")
+async def ajustar_comando(id_: str, comando_id: str, body: AjusteComando) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().ajustar_comando(id_, comando_id, body.activo)
     except ProyectoError as e:
         raise _error(e) from None
 

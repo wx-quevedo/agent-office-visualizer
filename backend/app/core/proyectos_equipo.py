@@ -37,7 +37,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-ESQUEMA = 2
+ESQUEMA = 3
 # Nombre de un proyecto: la carpeta que se crea. Minúsculas, números y guiones,
 # sin empezar ni terminar con guion, sin puntos ni barras (nunca una ruta).
 NOMBRE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$")
@@ -73,6 +73,73 @@ FINAL_ENCARGO = {
     "pausar": "pausado",
     "detener": "detenido",
 }
+
+# Reglas de la casa (Prompt 39): el monitor las escribe en el CLAUDE.md de cada proyecto.
+TIPOS_REGLA = (
+    "idioma",
+    "interfaz",
+    "git",
+    "documentacion",
+    "ordenes",
+    "entrega",
+    "herramientas",
+    "pruebas",
+    "otra",
+)
+REGLA_AUTOSKILLS = "autoskills"
+REGLAS_INICIALES: tuple[tuple[str, str, str, bool], ...] = (
+    (
+        "idioma",
+        "idioma",
+        "Escribir en español latino neutro (sin voseo ni español de España).",
+        True,
+    ),
+    ("emojis", "interfaz", "Sin emojis en interfaces, código, registros ni documentos.", True),
+    ("tema-claro", "interfaz", "Tema claro por defecto.", True),
+    (
+        "commits",
+        "git",
+        "Commits solo a nombre de Washington, sin línea Co-Authored-By ni atribución a "
+        "Claude, y sin push ni pull requests.",
+        True,
+    ),
+    (
+        "project-md",
+        "documentacion",
+        "Mantener PROJECT.md con contexto, decisiones con su porqué, avance, problemas y "
+        "soluciones, y siguiente paso.",
+        True,
+    ),
+    (
+        "estimacion",
+        "ordenes",
+        "Antes de cada orden, estimar tiempo (en minutos, o en horas y minutos si pasa de 60) "
+        "y dificultad del 1 al 10.",
+        True,
+    ),
+    (
+        "resumen",
+        "entrega",
+        "Cerrar cada entrega con el resumen de 5 líneas: qué cambió, qué falta, qué decidir, "
+        "commit y siguiente paso.",
+        True,
+    ),
+    (REGLA_AUTOSKILLS, "herramientas", "Instalar skills con npx autoskills al empezar.", False),
+    ("subagentes", "pruebas", "Usar subagentes para pruebas si es más rápido.", True),
+)
+# Comandos seguros: los agentes de código los corren sin pedir permiso.
+COMANDOS_INICIALES: tuple[tuple[str, str], ...] = (
+    ("git-status", "git status"),
+    ("git-diff", "git diff"),
+    ("git-log", "git log"),
+    ("npm-test", "npm test"),
+    ("npm-run-build", "npm run build"),
+    ("npm-run-lint", "npm run lint"),
+    ("pytest", "pytest"),
+)
+# Un comando seguro: palabras simples, sin comodines ni operadores de la terminal (cada
+# uno se vuelve la regla de permiso Bash(<comando> *)).
+COMANDO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/=@+-]*(?: [A-Za-z0-9._:/=@+-]+)*$")
 
 _MIGRACIONES: dict[int, list[str]] = {
     1: [
@@ -110,6 +177,30 @@ _MIGRACIONES: dict[int, list[str]] = {
             creado TEXT NOT NULL, actualizado TEXT NOT NULL, origen_id TEXT UNIQUE,
             UNIQUE (proyecto_id, numero))""",
         "CREATE INDEX IF NOT EXISTS ordenes_estado ON ordenes (estado, creado)",
+    ],
+    3: [
+        """CREATE TABLE IF NOT EXISTS reglas (
+            id TEXT PRIMARY KEY, texto TEXT NOT NULL, tipo TEXT NOT NULL,
+            activa_por_defecto INTEGER NOT NULL, orden INTEGER NOT NULL,
+            actualizado TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS reglas_proyecto (
+            proyecto_id TEXT NOT NULL REFERENCES proyectos (id), regla_id TEXT NOT NULL,
+            activa INTEGER NOT NULL, PRIMARY KEY (proyecto_id, regla_id))""",
+        """CREATE TABLE IF NOT EXISTS comandos (
+            id TEXT PRIMARY KEY, comando TEXT NOT NULL UNIQUE,
+            activo_por_defecto INTEGER NOT NULL, orden INTEGER NOT NULL,
+            actualizado TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS comandos_proyecto (
+            proyecto_id TEXT NOT NULL REFERENCES proyectos (id), comando_id TEXT NOT NULL,
+            activo INTEGER NOT NULL, PRIMARY KEY (proyecto_id, comando_id))""",
+        *[
+            f"INSERT OR IGNORE INTO reglas VALUES ('{i}', '{x}', '{tipo}', {int(on)}, {n}, '')"
+            for n, (i, tipo, x, on) in enumerate(REGLAS_INICIALES)
+        ],
+        *[
+            f"INSERT OR IGNORE INTO comandos VALUES ('{i}', '{c}', 1, {n}, '')"
+            for n, (i, c) in enumerate(COMANDOS_INICIALES)
+        ],
     ],
 }
 
@@ -349,6 +440,7 @@ class ProyectosEquipo:
                 {k: m[k] for k in ("rol", "nombre", "modelo", "esfuerzo", "session_id")}
                 for m in self._miembros(db, proyecto_id)
             ],
+            **self._reglas_para_monitor(db, proyecto_id),
         }
 
     def _encargar(
@@ -915,6 +1007,255 @@ class ProyectosEquipo:
                 }
             )
         return salida
+
+    # -- reglas de la casa y comandos seguros (Prompt 39) -------------------------------------
+
+    @staticmethod
+    def _vista_regla(f: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": f["id"],
+            "texto": f["texto"],
+            "tipo": f["tipo"],
+            "activa_por_defecto": bool(f["activa_por_defecto"]),
+            "orden": f["orden"],
+        }
+
+    @staticmethod
+    def _vista_comando(f: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": f["id"],
+            "comando": f["comando"],
+            "activo_por_defecto": bool(f["activo_por_defecto"]),
+            "orden": f["orden"],
+        }
+
+    def reglas(self) -> list[dict[str, Any]]:
+        with self._db() as db:
+            return [
+                self._vista_regla(f)
+                for f in db.execute("SELECT * FROM reglas ORDER BY orden, rowid")
+            ]
+
+    def comandos(self) -> list[dict[str, Any]]:
+        with self._db() as db:
+            return [
+                self._vista_comando(f)
+                for f in db.execute("SELECT * FROM comandos ORDER BY orden, rowid")
+            ]
+
+    @staticmethod
+    def _texto_regla(texto: str) -> str:
+        texto = " ".join(texto.split())
+        if not texto:
+            raise ProyectoError(422, "Escribe el texto de la regla.")
+        if len(texto) > 500:
+            raise ProyectoError(422, "La regla puede tener hasta 500 caracteres.")
+        return texto
+
+    @staticmethod
+    def _tipo_regla(tipo: str) -> str:
+        if tipo not in TIPOS_REGLA:
+            raise ProyectoError(422, "Tipo de regla desconocido.")
+        return tipo
+
+    @staticmethod
+    def validar_comando(comando: str) -> str:
+        comando = " ".join(comando.split())
+        if not comando or len(comando) > 80:
+            raise ProyectoError(422, "Escribe un comando de hasta 80 caracteres.")
+        if not COMANDO.fullmatch(comando):
+            raise ProyectoError(
+                422,
+                "Un comando seguro es un programa y sus palabras, sin comodines, comillas, "
+                "paréntesis ni operadores de la terminal (; & | > < ` $).",
+            )
+        return comando
+
+    def crear_regla(self, texto: str, tipo: str, activa_por_defecto: bool) -> dict[str, Any]:
+        texto, tipo = self._texto_regla(texto), self._tipo_regla(tipo)
+        id_ = uuid.uuid4().hex
+        with self._lock, self._db() as db:
+            orden = int(db.execute("SELECT COALESCE(MAX(orden), -1) + 1 FROM reglas").fetchone()[0])
+            db.execute(
+                "INSERT INTO reglas VALUES (?,?,?,?,?,?)",
+                (id_, texto, tipo, int(activa_por_defecto), orden, _iso(self.clock())),
+            )
+            self._encargar_reglas(db)
+            return self._vista_regla(
+                db.execute("SELECT * FROM reglas WHERE id = ?", (id_,)).fetchone()
+            )
+
+    def cambiar_regla(
+        self,
+        id_: str,
+        texto: str | None = None,
+        tipo: str | None = None,
+        activa_por_defecto: bool | None = None,
+    ) -> dict[str, Any]:
+        with self._lock, self._db() as db:
+            f = db.execute("SELECT * FROM reglas WHERE id = ?", (id_,)).fetchone()
+            if f is None:
+                raise ProyectoError(404, "No existe esa regla.")
+            db.execute(
+                """UPDATE reglas SET texto = ?, tipo = ?, activa_por_defecto = ?, actualizado = ?
+                WHERE id = ?""",
+                (
+                    self._texto_regla(texto) if texto is not None else f["texto"],
+                    self._tipo_regla(tipo) if tipo is not None else f["tipo"],
+                    int(activa_por_defecto)
+                    if activa_por_defecto is not None
+                    else f["activa_por_defecto"],
+                    _iso(self.clock()),
+                    id_,
+                ),
+            )
+            self._encargar_reglas(db)
+            return self._vista_regla(
+                db.execute("SELECT * FROM reglas WHERE id = ?", (id_,)).fetchone()
+            )
+
+    def borrar_regla(self, id_: str) -> None:
+        with self._lock, self._db() as db:
+            if not db.execute("DELETE FROM reglas WHERE id = ?", (id_,)).rowcount:
+                raise ProyectoError(404, "No existe esa regla.")
+            db.execute("DELETE FROM reglas_proyecto WHERE regla_id = ?", (id_,))
+            self._encargar_reglas(db)
+
+    def crear_comando(self, comando: str, activo_por_defecto: bool) -> dict[str, Any]:
+        comando = self.validar_comando(comando)
+        id_ = uuid.uuid4().hex
+        with self._lock, self._db() as db:
+            if db.execute("SELECT 1 FROM comandos WHERE comando = ?", (comando,)).fetchone():
+                raise ProyectoError(409, "Ese comando ya está en la lista.")
+            orden = int(
+                db.execute("SELECT COALESCE(MAX(orden), -1) + 1 FROM comandos").fetchone()[0]
+            )
+            db.execute(
+                "INSERT INTO comandos VALUES (?,?,?,?,?)",
+                (id_, comando, int(activo_por_defecto), orden, _iso(self.clock())),
+            )
+            self._encargar_reglas(db)
+            return self._vista_comando(
+                db.execute("SELECT * FROM comandos WHERE id = ?", (id_,)).fetchone()
+            )
+
+    def cambiar_comando(
+        self, id_: str, comando: str | None = None, activo_por_defecto: bool | None = None
+    ) -> dict[str, Any]:
+        with self._lock, self._db() as db:
+            f = db.execute("SELECT * FROM comandos WHERE id = ?", (id_,)).fetchone()
+            if f is None:
+                raise ProyectoError(404, "No existe ese comando.")
+            nuevo = self.validar_comando(comando) if comando is not None else f["comando"]
+            if db.execute(
+                "SELECT 1 FROM comandos WHERE comando = ? AND id != ?", (nuevo, id_)
+            ).fetchone():
+                raise ProyectoError(409, "Ese comando ya está en la lista.")
+            db.execute(
+                "UPDATE comandos SET comando = ?, activo_por_defecto = ?, actualizado = ? "
+                "WHERE id = ?",
+                (
+                    nuevo,
+                    int(activo_por_defecto)
+                    if activo_por_defecto is not None
+                    else f["activo_por_defecto"],
+                    _iso(self.clock()),
+                    id_,
+                ),
+            )
+            self._encargar_reglas(db)
+            return self._vista_comando(
+                db.execute("SELECT * FROM comandos WHERE id = ?", (id_,)).fetchone()
+            )
+
+    def borrar_comando(self, id_: str) -> None:
+        with self._lock, self._db() as db:
+            if not db.execute("DELETE FROM comandos WHERE id = ?", (id_,)).rowcount:
+                raise ProyectoError(404, "No existe ese comando.")
+            db.execute("DELETE FROM comandos_proyecto WHERE comando_id = ?", (id_,))
+            self._encargar_reglas(db)
+
+    def _reglas_de(self, db: sqlite3.Connection, proyecto_id: str) -> dict[str, Any]:
+        ajustes = {
+            r["regla_id"]: bool(r["activa"])
+            for r in db.execute(
+                "SELECT regla_id, activa FROM reglas_proyecto WHERE proyecto_id = ?",
+                (proyecto_id,),
+            )
+        }
+        reglas: list[dict[str, Any]] = []
+        for f in db.execute("SELECT * FROM reglas ORDER BY orden, rowid"):
+            v = self._vista_regla(f)
+            v["ajustada"] = f["id"] in ajustes and ajustes[f["id"]] != v["activa_por_defecto"]
+            v["activa"] = ajustes.get(f["id"], v["activa_por_defecto"])
+            reglas.append(v)
+        ajustes_c = {
+            r["comando_id"]: bool(r["activo"])
+            for r in db.execute(
+                "SELECT comando_id, activo FROM comandos_proyecto WHERE proyecto_id = ?",
+                (proyecto_id,),
+            )
+        }
+        comandos: list[dict[str, Any]] = []
+        for f in db.execute("SELECT * FROM comandos ORDER BY orden, rowid"):
+            v = self._vista_comando(f)
+            v["ajustado"] = f["id"] in ajustes_c and ajustes_c[f["id"]] != v["activo_por_defecto"]
+            v["activo"] = ajustes_c.get(f["id"], v["activo_por_defecto"])
+            comandos.append(v)
+        return {"reglas": reglas, "comandos": comandos}
+
+    def reglas_de(self, proyecto_id: str) -> dict[str, Any]:
+        with self._db() as db:
+            self._fila_proyecto(db, proyecto_id)
+            return self._reglas_de(db, proyecto_id)
+
+    def _reglas_para_monitor(self, db: sqlite3.Connection, proyecto_id: str) -> dict[str, Any]:
+        """Lo que el monitor necesita: los textos de las reglas activas (para CLAUDE.md),
+        los comandos seguros activos y si la regla de autoskills está encendida."""
+        v = self._reglas_de(db, proyecto_id)
+        return {
+            "reglas": [x["texto"] for x in v["reglas"] if x["activa"]],
+            "comandos": [x["comando"] for x in v["comandos"] if x["activo"]],
+            "autoskills": any(x["id"] == REGLA_AUTOSKILLS and x["activa"] for x in v["reglas"]),
+        }
+
+    def ajustar_regla(self, proyecto_id: str, regla_id: str, activa: bool) -> dict[str, Any]:
+        with self._lock, self._db() as db:
+            r = self._fila_proyecto(db, proyecto_id)
+            if not db.execute("SELECT 1 FROM reglas WHERE id = ?", (regla_id,)).fetchone():
+                raise ProyectoError(404, "No existe esa regla.")
+            db.execute(
+                "INSERT OR REPLACE INTO reglas_proyecto VALUES (?,?,?)",
+                (proyecto_id, regla_id, int(activa)),
+            )
+            self._encargar_reglas(db, [r])
+            return self._reglas_de(db, proyecto_id)
+
+    def ajustar_comando(self, proyecto_id: str, comando_id: str, activo: bool) -> dict[str, Any]:
+        with self._lock, self._db() as db:
+            r = self._fila_proyecto(db, proyecto_id)
+            if not db.execute("SELECT 1 FROM comandos WHERE id = ?", (comando_id,)).fetchone():
+                raise ProyectoError(404, "No existe ese comando.")
+            db.execute(
+                "INSERT OR REPLACE INTO comandos_proyecto VALUES (?,?,?)",
+                (proyecto_id, comando_id, int(activo)),
+            )
+            self._encargar_reglas(db, [r])
+            return self._reglas_de(db, proyecto_id)
+
+    def _encargar_reglas(
+        self, db: sqlite3.Connection, proyectos: list[sqlite3.Row] | None = None
+    ) -> None:
+        """Un encargo "reglas" por proyecto con equipo: el monitor reescribe el bloque de
+        CLAUDE.md, avisa a las sesiones vivas y, si cambiaron los comandos, relanza a los
+        agentes con la lista nueva."""
+        filas = (
+            proyectos if proyectos is not None else db.execute("SELECT * FROM proyectos").fetchall()
+        )
+        for r in filas:
+            if r["estado"] == "creando" or not self._algun_lanzado(db, r["id"]):
+                continue  # el encargo de crear ya lleva las reglas
+            self._encargar(db, r["maquina"], r["id"], "reglas")
 
 
 # Estados de la oficina de una sesión que terminó (o se está yendo).

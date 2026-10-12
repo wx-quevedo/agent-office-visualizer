@@ -253,7 +253,7 @@ def test_migra_desde_la_version_1(tmp_path: Path) -> None:
     db.commit()
     db.close()
     r = ProyectosEquipo(tmp_path, clock=lambda: T0)
-    assert r.version() == 2
+    assert r.version() == 3
     assert r.proyecto("p1")["nombre"] == "viejo"  # type: ignore[index]
     assert r.ordenes("p1") == [] and r.mensajes("p1") == []
 
