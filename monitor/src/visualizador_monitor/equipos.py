@@ -1,4 +1,10 @@
-"""Equipos de proyectos (etapa 4, Prompts 37 a 39).
+"""Equipos de proyectos (etapa 4, Prompts 37 a 41).
+
+Prompt 41: las sesiones del equipo se lanzan sin la configuración de usuario
+(``--setting-sources project,local``), también al retomarlas, para que no hereden las
+reglas de permiso de las sesiones normales de Washington. Los hooks de la oficina llegan
+por ``--settings`` en un archivo propio de cada sesión (``ajustes-equipo/``), copiados del
+settings.json de su cuenta; la cuenta sigue elegida por CLAUDE_CONFIG_DIR.
 
 Prompt 39: las plantillas dejan PROJECT.md con las secciones del estándar de Washington y
 CLAUDE.md con una sección de la plantilla y el bloque de reglas de la casa (entre marcas
@@ -64,6 +70,7 @@ from typing import Any
 
 from visualizador_monitor.auxiliar import buscar_claude, cuenta_para
 from visualizador_monitor.cliente import Servidor, SinConexion
+from visualizador_monitor.hooks_oficina import hooks_de_oficina
 from visualizador_monitor.procesos import hora_creacion, proceso_vivo
 from visualizador_monitor.registro import logger
 
@@ -451,7 +458,44 @@ def huella(texto: str) -> str:
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:16]
 
 
-def comando_sesion(claude: list[str], proyecto: Proyecto, m: Miembro, reanudar: bool) -> list[str]:
+# Fuentes de configuración de las sesiones del equipo: las del proyecto, nunca la de
+# usuario. La configuración de usuario de Washington trae cientos de reglas de permiso
+# pensadas para sus sesiones normales; el equipo no debe heredarlas. Lo que el equipo sí
+# necesita de ella (los hooks de la oficina) llega por --settings, en un archivo propio.
+# La cuenta no cambia: CLAUDE_CONFIG_DIR sigue eligiendo la carpeta y sus credenciales,
+# que no son una fuente de configuración.
+FUENTES_DE_AJUSTES = "project,local"
+
+
+def ajustes_sesion(m: Miembro, hooks: dict[str, Any]) -> dict[str, Any]:
+    """La configuración propia de una sesión del equipo (lo que va en --settings)."""
+    ajustes: dict[str, Any] = {"hooks": hooks}
+    if m.rol == "agente":
+        # Solo el monitor le escribe (por su entrada): ninguna otra sesión de la máquina.
+        ajustes["crossSessionInbound"] = "refuse"
+    return ajustes
+
+
+def hooks_de_cuenta(cuenta_dir: Path | None, home: Path) -> dict[str, Any]:
+    """Los hooks de la oficina que el instalador dejó en el settings.json de la cuenta
+    (personal o Demo Org). Si no se pueden leer, ninguno: la sesión arranca igual."""
+    ruta = (cuenta_dir or home / ".claude") / "settings.json"
+    try:
+        datos = json.loads(ruta.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return hooks_de_oficina(datos) if isinstance(datos, dict) else {}
+
+
+def comando_sesion(
+    claude: list[str],
+    proyecto: Proyecto,
+    m: Miembro,
+    reanudar: bool,
+    ajustes: str | None = None,
+) -> list[str]:
+    """``ajustes``: la ruta del archivo de configuración propio de la sesión (o el JSON
+    en línea). Sin él, la sesión va sin hooks de la oficina."""
     rol = texto_rol(proyecto, m)
     cmd = [
         *claude,
@@ -476,12 +520,13 @@ def comando_sesion(claude: list[str], proyecto: Proyecto, m: Miembro, reanudar: 
         rol,
     ]
     cmd += ["--resume", m.session_id] if reanudar else ["--session-id", m.session_id]
+    # Sin la configuración de usuario, también al retomar (se aplica en cada arranque).
+    cmd += ["--setting-sources", FUENTES_DE_AJUSTES]
+    cmd += ["--settings", ajustes or json.dumps(ajustes_sesion(m, {}))]
     if m.rol == "orquestador":
         # Sus órdenes salen solo por el monitor (bloque <orden>), con la aprobación de Washington.
         cmd += ["--disallowedTools", BLOQUEADAS_ORQUESTADOR]
     else:
-        # Solo el monitor le escribe (por su entrada): ninguna otra sesión de la máquina.
-        cmd += ["--settings", json.dumps({"crossSessionInbound": "refuse"})]
         # Comandos seguros: Bash(<comando> *) también vale para el comando solo. Va al final
         # porque --allowedTools toma todos los valores que lo siguen.
         seguros = [c for c in proyecto.comandos if COMANDO_SEGURO.fullmatch(c)]
@@ -492,7 +537,7 @@ def comando_sesion(claude: list[str], proyecto: Proyecto, m: Miembro, reanudar: 
 
 def entorno_sesion(cuenta_dir: Path | None, base: dict[str, str], home: Path) -> dict[str, str]:
     """Entorno de una sesión lanzada: sin las variables de otra sesión de Claude Code y,
-    para Demo Org, con su carpeta de configuración. Los hooks del usuario siguen activos."""
+    para Demo Org, con su carpeta de configuración (de ahí salen sus credenciales)."""
     env = {k: v for k, v in base.items() if not k.upper().startswith(("CLAUDE", "ANTHROPIC"))}
     por_defecto = home / ".claude"
     if cuenta_dir is not None and os.path.normcase(str(cuenta_dir)) != os.path.normcase(
@@ -1197,19 +1242,36 @@ class Equipos:
             raise EquipoError("No se encontró claude.exe en esta máquina.")
         return [c]
 
+    def _escribir_ajustes(self, p: Proyecto, m: Miembro, hooks: dict[str, Any]) -> str:
+        """El archivo de configuración propio de una sesión (se reescribe en cada
+        arranque: así toma la ruta del monitor instalado en ese momento)."""
+        carpeta = self.archivo.parent / "ajustes-equipo"
+        carpeta.mkdir(parents=True, exist_ok=True)
+        ruta = carpeta / f"{p.id}-{m.nombre}.json"
+        tmp = ruta.with_name(ruta.name + ".tmp")
+        tmp.write_text(
+            json.dumps(ajustes_sesion(m, hooks), ensure_ascii=False, indent=1), encoding="utf-8"
+        )
+        os.replace(tmp, ruta)
+        return str(ruta)
+
     def _lanzar_equipo(self, p: Proyecto, reanudar: bool, saludo: bool = True) -> None:
         cuenta_dir = cuenta_para(None, p.cuenta, self.cuentas)
         if cuenta_dir is None:
             raise EquipoError(f"Esta máquina no tiene configurada la cuenta {p.cuenta}.")
         env = entorno_sesion(cuenta_dir, self.entorno_base, self.home)
         claude = self._claude_cmd()
+        hooks = hooks_de_cuenta(cuenta_dir, self.home)
+        if not hooks:
+            logger.warning("%s: la cuenta %s no tiene hooks de la oficina", p.nombre, p.cuenta)
         for m in p.miembros:
             actual = self.sesiones.get(m.session_id)
             if actual is not None and actual.viva():
                 continue
             # Una sesión que nunca arrancó se lanza de nuevo con su id, no se retoma.
             retomar = reanudar and m.lanzado
-            s = Sesion(comando_sesion(claude, p, m, retomar), Path(p.carpeta), env)
+            ajustes = self._escribir_ajustes(p, m, hooks)
+            s = Sesion(comando_sesion(claude, p, m, retomar, ajustes), Path(p.carpeta), env)
             self.sesiones[m.session_id] = s
             m.lanzado = True
             m.pid = s.pid

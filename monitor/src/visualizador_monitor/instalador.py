@@ -33,8 +33,8 @@ from typing import Any
 
 from visualizador_monitor import VERSION, config
 from visualizador_monitor.cli import NOMBRE_TAREA
+from visualizador_monitor.hooks_oficina import evento_de
 
-MARCA = "claude-office-hook"
 EVENTO_PERMISO = "permission_request"
 TIMEOUT_PERMISO = 600
 
@@ -49,17 +49,7 @@ def comando_hook(exe: Path, evento: str) -> str:
     return f'"{exe.as_posix()}" hook {evento}'
 
 
-def _evento_de(comando: str) -> str | None:
-    """El evento de una entrada nuestra: claude-office-hook <evento> o, de una
-    instalación anterior, "<...>/visualizador-monitor.exe" hook <evento>."""
-    partes = comando.split()
-    for n, crudo in enumerate(partes):
-        p = crudo.strip("\"'").removesuffix(".exe").removesuffix(".EXE")
-        if p.endswith(MARCA) and n + 1 < len(partes):
-            return partes[n + 1]
-        if p.endswith("visualizador-monitor") and n + 2 < len(partes) and partes[n + 1] == "hook":
-            return partes[n + 2]
-    return None
+_evento_de = evento_de
 
 
 def _encadenar(previos: list[dict[str, Any]], nuevos: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -176,10 +176,17 @@ def test_comando_y_entorno() -> None:
     assert (
         '<orden agente="NOMBRE"' in rol and "agentes de código de este proyecto son: ." not in rol
     )
-    assert "--settings" not in c and "--resume" not in c
+    assert "--resume" not in c
+    # Sin la configuración de usuario (sus reglas de permiso), ni siquiera al retomar.
+    assert c[c.index("--setting-sources") + 1] == "project,local"
+    assert json.loads(c[c.index("--settings") + 1]) == {"hooks": {}}
     a = comando_sesion(["claude.exe"], p, ag, True)
     assert a[a.index("--resume") + 1] == ag.session_id and "--session-id" not in a
-    assert json.loads(a[a.index("--settings") + 1]) == {"crossSessionInbound": "refuse"}
+    assert json.loads(a[a.index("--settings") + 1]) == {
+        "hooks": {},
+        "crossSessionInbound": "refuse",
+    }
+    assert a[a.index("--setting-sources") + 1] == "project,local"
     # Los dos editan su carpeta sin pedir permiso (el orquestador, para el plan).
     assert a[a.index("--permission-mode") + 1] == "acceptEdits"
     assert c[c.index("--permission-mode") + 1] == "acceptEdits"
