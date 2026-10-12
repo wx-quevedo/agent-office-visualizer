@@ -14,6 +14,7 @@ reinicio del backend no los borre.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -23,6 +24,18 @@ from pathlib import Path
 from typing import Any, cast
 
 logger = logging.getLogger(__name__)
+
+
+def carpeta_normal(carpeta: str) -> str:
+    """Una carpeta comparable: barras normales, sin barra final y en minúsculas."""
+    return carpeta.replace("\\", "/").rstrip("/").lower()
+
+
+def id_donde_quedamos(maquina: str, carpeta: str) -> str:
+    """El identificador estable de un proyecto de "Dónde quedamos": la máquina y su
+    carpeta normalizada. Lo usan GET /proyectos y los proyectos con equipo para unirse."""
+    clave = f"{maquina}|{carpeta_normal(carpeta)}"
+    return hashlib.sha256(clave.encode("utf-8")).hexdigest()[:16]
 
 
 def cuenta_de_carpeta(carpeta: str | None) -> str:
@@ -118,7 +131,15 @@ class DatosMaquinas:
 
     def vista_proyectos(self) -> list[dict[str, Any]]:
         with self._lock:
-            return [dict(v) for v in self.proyectos.values()]
+            return [
+                {
+                    **v,
+                    "id": id_donde_quedamos(
+                        str(v.get("maquina") or ""), str(v.get("carpeta") or "")
+                    ),
+                }
+                for v in self.proyectos.values()
+            ]
 
 
 _datos: DatosMaquinas | None = None

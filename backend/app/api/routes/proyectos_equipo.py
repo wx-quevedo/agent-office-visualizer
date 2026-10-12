@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from app.config import get_settings
 from app.core.acceso import get_acceso
 from app.core.agent_state_engine import get_state_engine
+from app.core.datos_maquinas import carpeta_normal, get_datos_maquinas
 from app.core.proyectos_equipo import (
     ESFUERZOS,
     MAX_AGENTES,
@@ -88,7 +89,24 @@ def con_estado(p: dict[str, Any]) -> dict[str, Any]:
         "equipo": equipo,
         "haciendo": haciendo,
         "ordenes_por_aprobar": get_proyectos_equipo().por_aprobar().get(p["id"], 0),
+        "donde_quedamos_id": donde_quedamos_de(p),
     }
+
+
+def donde_quedamos_de(p: dict[str, Any]) -> str | None:
+    """El id de la entrada de "Dónde quedamos" (GET /proyectos) de este proyecto: la de
+    su máquina y su carpeta. None mientras el monitor no la haya informado."""
+    ruta = p.get("ruta")
+    if not ruta:
+        return None
+    buscada = carpeta_normal(str(ruta))
+    for d in get_datos_maquinas().vista_proyectos():
+        if (
+            d.get("maquina") == p["maquina"]
+            and carpeta_normal(str(d.get("carpeta") or "")) == buscada
+        ):
+            return str(d["id"])
+    return None
 
 
 @router.get("/proyectos-creados")
@@ -328,6 +346,19 @@ async def ajustar_comando(id_: str, comando_id: str, body: AjusteComando) -> dic
 # -- chat y órdenes (Prompt 38) -----------------------------------------------------------
 
 
+EstadoOrden = Literal["por_aprobar", "aprobada", "rechazada", "en_curso", "terminada", "fallida"]
+
+
+@router.get("/proyectos-creados/{id_}/ordenes")
+async def ordenes_de(id_: str, estado: EstadoOrden | None = None) -> dict[str, Any]:
+    """Solo las órdenes de un proyecto (las más nuevas primero), sin los mensajes del chat:
+    título, estado, estimado, dificultad, quién decidió y cuándo, motivo y resumen."""
+    reg = get_proyectos_equipo()
+    if reg.proyecto(id_) is None:
+        raise HTTPException(status_code=404, detail="No existe ese proyecto.")
+    return {"ordenes": reg.ordenes(id_, estado=estado)}
+
+
 @router.get("/proyectos-creados/{id_}/chat")
 async def chat(id_: str) -> dict[str, Any]:
     reg = get_proyectos_equipo()
@@ -348,7 +379,6 @@ async def escribir(id_: str, body: NuevoMensaje) -> dict[str, Any]:
         raise _error(e) from None
 
 
-EstadoOrden = Literal["por_aprobar", "aprobada", "rechazada", "en_curso", "terminada", "fallida"]
 Dispositivo = Literal["web", "app", "celular", "pc"]
 
 
@@ -458,6 +488,7 @@ class OrdenPropuesta(BaseModel):
     texto: str = Field(min_length=1, max_length=20000)
     estimado: str | None = Field(default=None, max_length=60)
     dificultad: str | None = Field(default=None, max_length=60)
+    titulo: str | None = Field(default=None, max_length=200)
 
 
 @router.post("/maquinas/ordenes")
@@ -471,6 +502,7 @@ async def proponer_orden(request: Request, body: OrdenPropuesta) -> dict[str, An
             body.texto,
             body.estimado,
             body.dificultad,
+            body.titulo,
         )
     except ProyectoError as e:
         raise _error(e) from None

@@ -37,7 +37,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-ESQUEMA = 3
+ESQUEMA = 4
 # Nombre de un proyecto: la carpeta que se crea. Minúsculas, números y guiones,
 # sin empezar ni terminar con guion, sin puntos ni barras (nunca una ruta).
 NOMBRE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$")
@@ -202,7 +202,25 @@ _MIGRACIONES: dict[int, list[str]] = {
             for n, (i, c) in enumerate(COMANDOS_INICIALES)
         ],
     ],
+    # Prompt 42: el título corto de cada orden (lo escribe el orquestador en el bloque).
+    4: ["ALTER TABLE ordenes ADD COLUMN titulo TEXT"],
 }
+
+MAX_TITULO = 80
+
+
+def titulo_de(titulo: str | None, texto: str) -> str:
+    """El título de una orden: el que escribió el orquestador o, si no lo puso, la
+    primera línea del texto sin marcas de markdown, recortada."""
+    if titulo and titulo.strip():
+        limpio = " ".join(titulo.split())
+    else:
+        primera = next((x for x in texto.splitlines() if x.strip()), "")
+        limpio = re.sub(r"^\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s*)", "", primera)
+        limpio = " ".join(re.sub(r"[*_`]", "", limpio).split())
+    if len(limpio) > MAX_TITULO:
+        limpio = limpio[: MAX_TITULO - 1].rstrip() + "…"
+    return limpio or "Orden"
 
 
 class ProyectoError(Exception):
@@ -765,6 +783,9 @@ class ProyectosEquipo:
         o.pop("origen_id", None)
         o["texto"] = o["texto_final"] or o["texto_propuesto"]
         o["editada"] = o["texto_final"] is not None
+        # El título que dio el orquestador o uno sacado de la primera línea del texto.
+        o["titulo_propio"] = bool(o.get("titulo"))
+        o["titulo"] = titulo_de(o.get("titulo"), o["texto_propuesto"])
         return o
 
     _SELECT_ORDEN = """SELECT o.*, p.nombre AS proyecto FROM ordenes o
@@ -814,6 +835,7 @@ class ProyectosEquipo:
         texto: str,
         estimado: str | None = None,
         dificultad: str | None = None,
+        titulo: str | None = None,
     ) -> dict[str, Any]:
         """Una orden que propuso el orquestador (la manda el monitor). Queda por aprobar,
         salvo con la aprobación automática encendida. Solo para un agente de código de
@@ -847,7 +869,7 @@ class ProyectosEquipo:
             db.execute(
                 """INSERT INTO ordenes (id, proyecto_id, numero, agente, texto_propuesto,
                     estimado, dificultad, estado, decidido_por, decidido, creado, actualizado,
-                    origen_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    origen_id, titulo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     id_,
                     proyecto_id,
@@ -862,6 +884,7 @@ class ProyectosEquipo:
                     ahora,
                     ahora,
                     origen_id,
+                    (" ".join(titulo.split())[:MAX_TITULO] if titulo and titulo.strip() else None),
                 ),
             )
             if auto:
@@ -989,7 +1012,6 @@ class ProyectosEquipo:
             o = self._vista_orden(f)
             p = proyectos.get(o["proyecto_id"], {})
             creado = datetime.fromisoformat(o["creado"])
-            primera = o["texto"].strip().splitlines()[0] if o["texto"].strip() else ""
             salida.append(
                 {
                     "tipo": "orden",
@@ -1001,7 +1023,7 @@ class ProyectosEquipo:
                     "maquina": p.get("maquina"),
                     "desde": o["creado"],
                     "hace_s": max(0, int((ahora - creado).total_seconds())),
-                    "resumen": f"Orden {o['numero']} para {o['agente']}: {primera[:160]}",
+                    "resumen": f"Orden {o['numero']} para {o['agente']}: {o['titulo']}",
                     "detalle": o["texto"],
                     "orden": o,
                 }
