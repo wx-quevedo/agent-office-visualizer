@@ -341,3 +341,58 @@ def test_agregar_agente(tmp_path: Path) -> None:
         assert _girar(g, srv, lambda: any(d["estado"] == "terminada" for d in srv.de(ruta)))
     finally:
         g.detener_todo()
+
+
+def test_citas_y_relleno_no_son_ordenes() -> None:
+    cita = 'No veo el formato `<orden agente="agente">x</orden>` en mis instrucciones.'
+    assert extraer_ordenes(cita) == ([], cita)
+    [o], limpio = extraer_ordenes('<orden agente="agente" estimado="...">...</orden>')
+    assert o["texto"] == "" and limpio == ""
+    [o], limpio = extraer_ordenes('Va:\n```\n<orden agente="agente">Crea `hola.txt`</orden>\n```')
+    assert o["texto"] == "Crea `hola.txt`" and limpio == "Va:"
+
+
+def test_rol_actualizado_al_retomar(tmp_path: Path) -> None:
+    """Claude Code ignora un --append-system-prompt nuevo al usar --resume: una sesión
+    que nació con otro rol (o con un monitor anterior, sin huella) recibe una vez el
+    rol nuevo como primer mensaje al retomarla."""
+    g, srv, registro, enc = _listo(tmp_path)
+    orq, agente = _sids(enc)
+    g.detener_todo()
+    # Como si vinieran de la 0.4.0: sin huella de rol.
+    datos = json.loads((tmp_path / "monitor" / "equipos.json").read_text(encoding="utf-8"))
+    for m in datos["proyectos"][PID]["miembros"]:
+        m.pop("rol_huella", None)
+    (tmp_path / "monitor" / "equipos.json").write_text(json.dumps(datos), encoding="utf-8")
+    g2 = _gestor(tmp_path, registro)
+    try:
+        assert g2.retomar() == 1
+        assert _girar(
+            g2,
+            srv,
+            lambda: (
+                any(
+                    t.startswith("Actualización de tus instrucciones")
+                    for t in _mensajes(registro, orq)
+                )
+                and any(
+                    t.startswith("Actualización de tus instrucciones")
+                    for t in _mensajes(registro, agente)
+                )
+            ),
+        )
+        rol = [t for t in _mensajes(registro, orq) if t.startswith("Actualización")][0]
+        assert '<orden agente="NOMBRE"' in rol and "agente" in rol
+    finally:
+        g2.detener_todo()
+    # Un tercer arranque con el mismo rol ya no lo repite.
+    g3 = _gestor(tmp_path, registro)
+    try:
+        antes = len(_mensajes(registro, orq))
+        assert g3.retomar() == 1
+        time.sleep(0.5)
+        g3.atender()
+        time.sleep(0.3)
+        assert len(_mensajes(registro, orq)) == antes
+    finally:
+        g3.detener_todo()

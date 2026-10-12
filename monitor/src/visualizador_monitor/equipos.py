@@ -40,6 +40,7 @@ Chat y órdenes (Prompt 38), con el monitor de intermediario:
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -134,9 +135,18 @@ DESTINO_INVALIDO = (
     "Los agentes son: {agentes}."
 )
 NO_REGISTRADA = "La orden para {agente} no se registró en el servidor: {detalle}"
+ORDEN_VACIA = "La orden para {agente} no se registró: venía sin una instrucción concreta."
 AGREGADO = "Se agregó al equipo el agente de código {miembro}. Ya puedes darle órdenes."
+# Una sesión retomada conserva el --append-system-prompt con el que nació (Claude Code
+# ignora uno nuevo al usar --resume): si su rol cambió, se le escribe una vez.
+ROL_ACTUALIZADO = (
+    "Actualización de tus instrucciones, hecha por Washington a través del monitor. "
+    "Desde ahora reemplazan por completo a las de tu sistema donde se contradigan:\n\n{rol}"
+)
 
 _BLOQUE = re.compile(r"<orden\b([^>]*)>(.*?)</orden\s*>", re.S | re.I)
+# Código en línea (`...` dentro de una frase): un bloque citado así no es una orden.
+_CODIGO_EN_LINEA = re.compile(r"(?<!`)`(?!`)[^`\n]+`(?!`)")
 _ATRIBUTO = re.compile(r'(\w+)\s*=\s*"([^"]*)"')
 
 
@@ -222,18 +232,29 @@ def git_init(carpeta: Path) -> None:
 def extraer_ordenes(texto: str) -> tuple[list[dict[str, str | None]], str]:
     """Las órdenes que trae una respuesta del orquestador y el texto sin los bloques.
     Cada orden: agente, texto, estimado y dificultad (estos dos, si los dio)."""
+    citas = [c.span() for c in _CODIGO_EN_LINEA.finditer(texto)]
     ordenes: list[dict[str, str | None]] = []
+    partes: list[str] = []
+    previo = 0
     for bloque in _BLOQUE.finditer(texto):
+        if any(a <= bloque.start() < b for a, b in citas):
+            continue  # lo menciona entre comillas invertidas: es texto, no una orden
         attrs = {k.lower(): v.strip() for k, v in _ATRIBUTO.findall(bloque.group(1))}
+        cuerpo = bloque.group(2).strip()
         ordenes.append(
             {
                 "agente": attrs.get("agente", ""),
-                "texto": bloque.group(2).strip(),
+                # Un relleno ("...") no es una instrucción.
+                "texto": cuerpo if cuerpo.strip(". \u2026") else "",
                 "estimado": attrs.get("estimado") or None,
                 "dificultad": attrs.get("dificultad") or None,
             }
         )
-    limpio = re.sub(r"\n{3,}", "\n\n", _BLOQUE.sub("", texto)).strip()
+        partes.append(texto[previo : bloque.start()])
+        previo = bloque.end()
+    partes.append(texto[previo:])
+    sin_cercas = re.sub(r"```[A-Za-z]*\s*```", "", "".join(partes))  # la que envolvía la orden
+    limpio = re.sub(r"\n{3,}", "\n\n", sin_cercas).strip()
     return ordenes, limpio
 
 
@@ -250,6 +271,8 @@ class Miembro:
     lanzado: bool = False
     pid: int | None = None
     creado: float | None = None
+    # Huella del rol con el que nació o con el que se actualizó (ver ROL_ACTUALIZADO).
+    rol_huella: str | None = None
 
 
 @dataclass
@@ -302,13 +325,20 @@ def miembros_de(equipo: Any) -> list[Miembro]:
     return salida
 
 
-def comando_sesion(claude: list[str], proyecto: Proyecto, m: Miembro, reanudar: bool) -> list[str]:
+def texto_rol(proyecto: Proyecto, m: Miembro) -> str:
     if m.rol == "orquestador":
-        rol = ROL_ORQUESTADOR.format(
+        return ROL_ORQUESTADOR.format(
             nombre=proyecto.nombre, agentes=", ".join(proyecto.agentes()) or "ninguno"
         )
-    else:
-        rol = ROL_AGENTE.format(nombre=proyecto.nombre, miembro=m.nombre)
+    return ROL_AGENTE.format(nombre=proyecto.nombre, miembro=m.nombre)
+
+
+def huella(texto: str) -> str:
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:16]
+
+
+def comando_sesion(claude: list[str], proyecto: Proyecto, m: Miembro, reanudar: bool) -> list[str]:
+    rol = texto_rol(proyecto, m)
     cmd = [
         *claude,
         "-p",
@@ -820,11 +850,12 @@ class Equipos:
             agente = str(o["agente"] or "")
             if p.agente(agente) is None or not o["texto"]:
                 # Nunca sale a ningún lado: ni al servidor ni a otra sesión.
-                logger.warning("%s: orden para un destino que no es de su equipo", p.nombre)
+                logger.warning("%s: orden sin destino válido o sin instrucción", p.nombre)
                 if avisar:
+                    plantilla = ORDEN_VACIA if p.agente(agente) is not None else DESTINO_INVALIDO
                     self._avisar_orquestador(
                         p,
-                        DESTINO_INVALIDO.format(
+                        plantilla.format(
                             agente=agente, agentes=", ".join(p.agentes()) or "ninguno"
                         ),
                         "destino",
@@ -954,6 +985,15 @@ class Equipos:
             m.lanzado = True
             m.pid = s.pid
             m.creado = hora_creacion(s.pid)
+            rol = texto_rol(p, m)
+            if not retomar:
+                m.rol_huella = huella(rol)
+            elif m.rol_huella != huella(rol):
+                # Retomada con su rol de nacimiento: se le cuenta el nuevo antes que nada.
+                p.colas.setdefault(m.nombre, []).insert(
+                    0, {"tipo": "aviso", "texto": ROL_ACTUALIZADO.format(rol=rol), "clase": "rol"}
+                )
+                m.rol_huella = huella(rol)
             # Saludo solo al nacer (o si se pide): retomada, queda "En espera".
             if saludo or not retomar:
                 with contextlib.suppress(OSError, EquipoError):
