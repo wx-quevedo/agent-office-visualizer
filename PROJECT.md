@@ -97,7 +97,10 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-12 | Reglas de la casa globales (con las 9 de Washington; autoskills apagada por defecto), editables en Ajustes y apagables por proyecto; el monitor las escribe en un bloque con marcas del CLAUDE.md del proyecto, sin tocar lo demás, y avisa una vez a las sesiones vivas | Las reglas viajan con cada proyecto sin copiarlas a mano; el aviso cubre que CLAUDE.md solo se lee al empezar la sesión |
 | 2026-10-12 | Comandos seguros (git status, git diff, git log, npm test, npm run build, npm run lint, pytest) con `--allowedTools "Bash(<comando> *)"` para los agentes; sin comodines ni operadores de la terminal; si cambian, el agente se relanza al terminar su turno | Probado con Claude real: la lista se aplica al retomar y un comando fuera de ella sigue pidiendo permiso |
 | 2026-10-12 | El orquestador también corre con `acceptEdits` (edita su carpeta para escribir la especificación y el plan) y sigue sin terminal, `SendMessage` ni `ListAgents`; abre la entrevista inicial por su cuenta | Pedido del Prompt 39: la entrevista termina en PROJECT.md sin pedir permisos |
-| 2026-10-12 | Por ahora las sesiones del equipo siguen usando las reglas de permiso de la configuración de usuario (629 reglas); queda como pendiente de seguridad | Excluirlas también quitaría los hooks de la oficina; la idea es lanzarlas sin la configuración de usuario y pasarles los hooks por `--settings` |
+| 2026-10-12 | Por ahora las sesiones del equipo siguen usando las reglas de permiso de la configuración de usuario (629 reglas); queda como pendiente de seguridad (cerrado en el Prompt 41) | Excluirlas también quitaría los hooks de la oficina; la idea es lanzarlas sin la configuración de usuario y pasarles los hooks por `--settings` |
+| 2026-10-12 | Las sesiones del equipo se lanzan con `--setting-sources project,local` (sin la configuración de usuario), también al retomarlas, y con `--settings <archivo>` que el monitor genera en cada arranque con solo los hooks de la oficina de su cuenta (copiados de su settings.json, con matcher y timeout) y, para el agente, `crossSessionInbound: refuse` | Así el equipo no hereda las 629 reglas de permiso ni los demás hooks de las sesiones normales de Washington, la oficina sigue viéndolas y la cuenta no cambia (CLAUDE_CONFIG_DIR elige la carpeta y sus credenciales, que no son una fuente de configuración). Los archivos `.claude/` del proyecto son rutas protegidas: aun con `acceptEdits`, el agente no puede darse permisos sin pedirlos |
+| 2026-10-12 | Los avisos de reglas a una sesión se juntan: esperan 8 s desde el último cambio y dicen qué se agregó y qué se quitó respecto de lo que la sesión conocía | Varios interruptores seguidos generaban un aviso por cambio y confundían al orquestador (prueba del Prompt 39) |
+| 2026-10-12 | El chat muestra el markdown del orquestador con un parser propio que arma elementos de React (nunca HTML crudo) y enlaces solo http, https y mailto | Sin dependencias nuevas y sin forma de inyectar HTML o scripts desde la respuesta de un modelo |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -181,6 +184,14 @@ Paso a paso:
 - Al apagar "Tema claro por defecto" en Equipo, el bloque de CLAUDE.md se actualizó sin tocar lo demás y las sesiones vivas recibieron el aviso.
 - De los 67 procesos de Claude Code y VS Code de antes no se tocó ninguno; los únicos nuevos son las dos sesiones de prueba-39.
 Capturas 39-reglas.png, 39-entrevista.png y 39-plan.png en `docs/capturas/etapa-4/` |
+| 2026-10-12 | Etapa 4 (Prompt 41), aislar las sesiones del equipo y tres mejoras: monitor 0.7.0 sin la configuración de usuario (commit `c76acda`), avisos de reglas juntos y plantillas Web y App aclaradas (`3240dc5` y `1ff8720`), markdown seguro en el chat (`82763fc`).
+Prueba real con Claude (Haiku, esfuerzo bajo) y un monitor de prueba con el código del repo, no el instalado:
+- Antes (como 0.6.0): `npm run saludo`, permitido por la regla de usuario `Bash(npm run:*)` y fuera de los comandos seguros, corrió sin preguntar.
+- Después (0.7.0): el mismo comando respondió "This command requires approval" y el hook informó el permiso a la oficina (permission_request, Bash, "npm run saludo"); `git status` corrió sin preguntar.
+- Las 4 sesiones de prueba aparecieron en la oficina con su cuenta y cambiaron de estado; las de la cuenta personal escribieron su transcripción en `.claude/projects` y las de Demo Org en `.claude-demo/projects` (la de Demo Org respondió con su propio límite semanal).
+- Con el backend y la web locales (3100 y 8100) y el mismo monitor de prueba: la plantilla Web dice que el proyecto Next.js lo crea la primera orden; el orquestador respondió con título, lista numerada, negritas, bloque de código y enlace, todo con formato; cuatro cambios de reglas seguidos llegaron como un solo aviso por sesión con "Se quitó" de las dos que quedaron apagadas.
+- No se tocó ningún proceso: los 81 de Claude Code y VS Code de antes siguieron vivos y las sesiones de prueba se cerraron.
+Capturas 41-chat-formato.png y 41-avisos.png en `docs/capturas/etapa-4/` |
 
 ## Cómo levantar
 
@@ -604,6 +615,12 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
 **Plantillas:** Web (Next.js), Unity, App (Expo) y Vacía. Todas dejan PROJECT.md con contexto, decisiones con su porqué, registro de avance, problemas y soluciones, y siguiente paso, y CLAUDE.md con el bloque de reglas; las tres primeras suman una sección propia en CLAUDE.md y su `.gitignore`. Vacía deja solo PROJECT.md y CLAUDE.md. Las plantillas no generan el proyecto (no corren `create-next-app` ni similares): eso es una orden más.
 
 **Entrevista inicial:** al crear el proyecto, el orquestador saluda y entrevista con pocas preguntas a la vez (objetivo, para quién, alcance, plataformas, restricciones y fechas), escribe la especificación y el plan en PROJECT.md y propone la primera orden con estimado ("45 min" o "1 h 30 min") y dificultad del 1 al 10, que la tarjeta muestra como "3 de 10". Con la regla de autoskills encendida, primero propone `npx autoskills --dry-run` y después instalar con `-a claude-code`.
+
+**Aislamiento (Prompt 41, monitor 0.7.0):** cada sesión del equipo arranca con `--setting-sources project,local` y `--settings <carpeta del monitor>/ajustes-equipo/<proyecto>-<miembro>.json`. Ese archivo se reescribe en cada arranque con los hooks de la oficina del settings.json de la cuenta (así toma la ruta del monitor instalado en ese momento) y, para el agente, `crossSessionInbound: refuse`. Las reglas de permiso, el modelo, la barra de estado y los otros hooks de la configuración de usuario no llegan al equipo. Si la cuenta no tiene hooks de la oficina, la sesión arranca igual (sin que la oficina la vea) y el monitor lo deja en su registro.
+
+**Avisos de reglas:** un cambio de reglas no se escribe enseguida a la sesión: el aviso espera 8 s desde el último cambio, y si llega otro mientras tanto, se reemplaza por uno solo con todos los cambios respecto de lo que la sesión conocía ("Se agregó", "Se quitó") y la lista vigente.
+
+**Markdown en el chat:** los mensajes del orquestador se muestran con formato (negritas, cursivas, código, listas, encabezados, citas y enlaces); los de Washington siguen como texto plano.
 
 **Hallazgos de la prueba real:**
 - `git status`, `git diff`, `git log` y consultas como `node --version` ya son de solo lectura para Claude Code: nunca piden permiso, estén o no en la lista. Para probar la lista hace falta un comando que ejecute algo (`node -p 1+1` sí pidió permiso).
@@ -1038,6 +1055,8 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 | La PC dependía de Tailscale para ver la oficina | El frontend usa el host de la página para buscar el backend |
 | El orquestador de prueba-37 seguía diciendo que no podía dar órdenes después de actualizar el monitor | `--resume` conserva el rol de nacimiento: el monitor 0.5.1 le escribe el rol nuevo una vez al retomarlo |
 | El agente no pudo escribir hola.txt: permiso rechazado al instante | Una sesión `-p` no tiene diálogo; los permisos del equipo ahora siempre esperan la decisión en la web o la app (y los agentes editan su carpeta con `acceptEdits`) |
+| Las sesiones del equipo heredaban las 629 reglas de permiso de la configuración de usuario | Monitor 0.7.0: `--setting-sources project,local` y los hooks de la oficina por `--settings` |
+| La web local en http://127.0.0.1:3100 se queda en "Cargando…" (React no hidrata) | Next en modo desarrollo solo sirve sus recursos al origen permitido: abrirla en http://localhost:3100 |
 | En Windows, la recarga del backend detiene el frontend | Pendiente: reiniciar `make dev` tras cambios de código del backend |
 | En Windows, la recarga automática del backend a veces se traba y sigue respondiendo el proceso viejo | Detener 3100/8100 y volver a `make dev-local` |
 | Peticiones a `localhost` tardan unos 2 s en Windows | `localhost` prueba IPv6 primero y uvicorn solo escucha IPv4; usar `127.0.0.1` |
@@ -1089,7 +1108,7 @@ El orden de trabajo lo marca el "Plan por etapas"; esta lista queda como referen
 8. App de iPhone con notificaciones push.
 9. Personajes propios en GLB con animaciones de Mixamo, y estilo final.
 10. Deuda técnica: documentación de la vista original por actualizar (ver "Limpieza de la web original"), vulnerabilidades de npm, 3 tests viejos de `path_utils` que fallan (los 2 de WebSocket se fueron con la vista clásica).
-11. Seguridad de los proyectos con equipo: hoy sus sesiones usan las reglas de permiso de la configuración de usuario (629). Idea: lanzarlas sin la configuración de usuario (`--setting-sources` sin `user`) y pasarles los hooks de la oficina por `--settings`, comprobando con Claude real que la oficina las sigue viendo y que los permisos siguen llegando a la web.
+11. Seguridad de los proyectos con equipo (hecho en el Prompt 41, monitor 0.7.0): sus sesiones ya no usan la configuración de usuario; ver "Reglas de la casa, comandos seguros y entrevista".
 
 ## Plan por etapas
 
@@ -1130,11 +1149,12 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Seguridad de los proyectos con equipo: lanzar sus sesiones sin la configuración de usuario y con los hooks de la oficina por `--settings` (ver Pendientes).
-2. Mejoras vistas en la prueba del Prompt 39: el chat muestra el markdown sin formato (los `**` se ven); si llegan varios avisos de reglas seguidos, dejar en la cola solo el último; que la plantilla Web diga claramente que el proyecto Next.js se crea con una orden.
-3. prueba-39 tiene la orden 3 (crear el proyecto Next.js) por aprobar: aprobarla o rechazarla.
-4. App iOS (necesita una Mac): botones Aprobar y Rechazar para las órdenes en Decisiones, y el chat del proyecto.
-5. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
-6. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
-7. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
-8. Vigilar el disco del VPS (85 % usado).
+1. Washington despliega la web (`bash despliegue/desplegar.sh`) y actualiza el monitor a la 0.7.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`). Al arrancar, retoma prueba-37 y prueba-39 ya sin la configuración de usuario.
+2. Probar `--system-prompt-snapshot off` en las sesiones del equipo: según la documentación, hace que una sesión retomada tome el `--append-system-prompt` nuevo, lo que resolvería de raíz el aviso de rol del Prompt 38.
+3. El orquestador con Haiku a veces se presenta como "Washington" ("Soy Washington… no: soy el orquestador"): ajustar el texto del rol para que nombre a Washington solo como la persona con quien conversa.
+4. prueba-39 tiene la orden 3 (crear el proyecto Next.js) por aprobar: aprobarla o rechazarla.
+5. App iOS (otro agente, en la Mac): botones Aprobar y Rechazar para las órdenes en Decisiones, y el chat del proyecto.
+6. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
+7. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
+8. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
+9. Vigilar el disco del VPS (85 % usado).
