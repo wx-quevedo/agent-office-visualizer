@@ -158,6 +158,7 @@ struct PreguntaAgente: Codable, Equatable, Sendable {
 
 struct Bandeja: Codable, Equatable, Sendable {
     struct Conteo: Codable, Equatable, Sendable {
+        var orden: Int?
         var permiso: Int?
         var pregunta: Int?
         var atasco: Int?
@@ -191,7 +192,7 @@ struct Decision: Codable, Equatable, Identifiable, Sendable {
         var ultimo_error: String?
     }
 
-    var tipo: String // permiso, pregunta, atasco
+    var tipo: String // orden, permiso, pregunta, atasco
     var id: String
     var session_id: String
     var proyecto: String?
@@ -205,6 +206,8 @@ struct Decision: Codable, Equatable, Identifiable, Sendable {
     var permiso: PermisoItem?
     var pregunta: PreguntaItem?
     var atasco: AtascoItem?
+    /// Una orden del orquestador por aprobar (etapa 4).
+    var orden: Orden?
 }
 
 struct Resuelta: Codable, Equatable, Identifiable, Sendable {

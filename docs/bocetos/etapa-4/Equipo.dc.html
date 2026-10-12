@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Equipo del proyecto</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; background: #F4F5F7; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; color: #1F2329; display: flex; flex-direction: column; overflow: hidden">
+  <div style="padding: 54px 8px 0; display: flex; align-items: center; gap: 4px">
+    <a href="Main.dc.html" aria-label="Volver a Proyectos" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="10" height="18" viewBox="0 0 10 18" aria-hidden="true"><path d="M9 1L1 9l8 8" stroke="#1D4FAF" stroke-width="2" fill="none"></path></svg></a>
+    <div style="flex: 1; display: flex; flex-direction: column">
+      <span style="font-size: 17px; font-weight: 600">landing-inmersoft</span>
+      <span style="font-size: 12px; color: #4A505C">E:\Agents\landing-inmersoft · Alienware</span>
+    </div>
+  </div>
+  <div style="padding: 8px 16px 8px">
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: #E4E7EB; border-radius: 9px; padding: 2px">
+      <a href="Chat.dc.html" style="height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #2B2F36; text-decoration: none">Chat</a>
+      <a href="Equipo.dc.html" style="height: 32px; border-radius: 7px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #1F2329; text-decoration: none">Equipo</a>
+      <a href="#" style="height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #2B2F36; text-decoration: none">Dónde quedamos</a>
+    </div>
+  </div>
+  <div style="flex: 1; padding: 4px 16px 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+    <sc-for list="{{miembros}}" as="m" hint-placeholder-count="2">
+      <div style="background: #FFFFFF; border: 1px solid {{m.bd}}; border-radius: 14px; padding: 12px 14px; display: flex; gap: 12px; align-items: center">
+        <span style="width: 44px; height: 44px; border-radius: 22px; background: {{m.color}}; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0">{{m.ini}}</span>
+        <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 16px; font-weight: 600">{{m.rol}}</span>
+          <span style="font-size: 13px; color: #4A505C">{{m.modelo}}</span>
+          <span style="font-size: 13px; font-weight: 600; color: {{m.ec}}">{{m.estado}}</span>
+        </span>
+        <a href="#" aria-label="Abrir ficha" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+          <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true"><path d="M1 1l6 6-6 6" stroke="#9AA0AA" stroke-width="1.8" fill="none"></path></svg></a>
+      </div>
+    </sc-for>
+    <button style="height: 44px; border: 1px dashed #9AA0AA; border-radius: 12px; background: transparent; font-family: inherit; font-size: 15px; color: #1D4FAF">Agregar agente de código</button>
+    <div style="background: #FFFFFF; border-radius: 14px; overflow: hidden">
+      <div style="padding: 12px 14px 4px; font-size: 12px; font-weight: 600; color: #4A505C">ÓRDENES DEL ORQUESTADOR</div>
+      <sc-for list="{{ordenes}}" as="o" hint-placeholder-count="3">
+        <div style="display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border-top: 1px solid #EEF0F3">
+          <span style="font-family: ui-monospace, 'SF Mono', monospace; font-size: 12px; color: #4A505C; width: 40px">{{o.hora}}</span>
+          <span style="flex: 1; font-size: 14px">{{o.texto}}</span>
+          <span style="font-size: 12px; font-weight: 600; color: {{o.color}}">{{o.estado}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background: #FFFFFF; border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 10px">
+      <span style="flex: 1; font-size: 15px">Aprobar órdenes automáticamente</span>
+      <button role="switch" aria-checked="false" aria-label="Aprobar órdenes automáticamente" style="width: 51px; height: 31px; border: none; padding: 0; border-radius: 16px; background: #C9CDD3; position: relative; flex-shrink: 0"><span style="position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF"></span></button>
+    </div>
+  </div>
+  <div style="padding: 10px 16px 34px; display: flex; gap: 8px">
+    <button style="flex: 1; height: 46px; border-radius: 12px; border: 1px solid #D5D9DF; background: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 500; color: #1F2329">Pausar el equipo</button>
+    <a href="Reglas.dc.html" style="flex: 1; height: 46px; border-radius: 12px; border: 1px solid #D5D9DF; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; color: #1F2329; text-decoration: none">Reglas de la casa</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      miembros: [
+        { ini: 'OR', rol: 'Orquestador', modelo: 'Opus 5.5 · esfuerzo alto', estado: 'Espera que apruebes una orden', ec: '#5B3FA8', color: '#5B3FA8', bd: '#C9BDEB' },
+        { ini: 'AC', rol: 'Agente de código 1', modelo: 'Sonnet 5.5 · esfuerzo medio', estado: 'Libre, sin órdenes', ec: '#4A505C', color: '#2B2F36', bd: '#E4E7EB' }
+      ],
+      ordenes: [
+        { hora: '18:24', texto: 'Fase 1 · Prompt 1: base del sitio', estado: 'Por aprobar', color: '#5B3FA8' },
+        { hora: '18:12', texto: 'Crear PROJECT.md y CLAUDE.md', estado: 'Terminada', color: '#2F5C45' },
+        { hora: '18:11', texto: 'Instalar skills con autoskills', estado: 'Rechazada', color: '#9B2C1E' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

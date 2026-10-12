@@ -37,7 +37,22 @@ struct DecisionesVista: View {
                                 .padding(16)
                         }
                     }
-                    ForEach(items) { d in tarjeta(d) }
+                    ForEach(items) { d in
+                        if d.tipo == "orden", let o = d.orden {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(LogicaBandejas.titulo(d).uppercased())
+                                        .font(.system(size: 13, weight: .bold)).foregroundStyle(Color.morado)
+                                    Spacer()
+                                    Text(LogicaBandejas.hace(d, ahora: modelo.ahora))
+                                        .font(.system(size: 13)).foregroundStyle(Color.texto2)
+                                }
+                                TarjetaOrden(orden: o) { _ in Task { await leer() } }
+                            }
+                        } else {
+                            tarjeta(d)
+                        }
+                    }
                     resueltas(b.resueltas_hoy)
                 } else if let error {
                     Text(error).font(.system(size: 15)).foregroundStyle(Color.rojo)

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Chat con el orquestador</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; background: #F4F5F7; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; color: #1F2329; display: flex; flex-direction: column; overflow: hidden">
+  <div style="padding: 54px 8px 0; display: flex; align-items: center; gap: 4px">
+    <a href="Main.dc.html" aria-label="Volver a Proyectos" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="10" height="18" viewBox="0 0 10 18" aria-hidden="true"><path d="M9 1L1 9l8 8" stroke="#1D4FAF" stroke-width="2" fill="none"></path></svg></a>
+    <div style="flex: 1; display: flex; flex-direction: column">
+      <span style="font-size: 17px; font-weight: 600">landing-inmersoft</span>
+      <span style="font-size: 12px; color: #4A505C">Personal · Alienware · Opus 5.5</span>
+    </div>
+  </div>
+  <div style="padding: 8px 16px 8px">
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: #E4E7EB; border-radius: 9px; padding: 2px">
+      <a href="Chat.dc.html" style="height: 32px; border-radius: 7px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #1F2329; text-decoration: none">Chat</a>
+      <a href="Equipo.dc.html" style="height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #2B2F36; text-decoration: none">Equipo</a>
+      <a href="#" style="height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #2B2F36; text-decoration: none">Dónde quedamos</a>
+    </div>
+  </div>
+  <div style="flex: 1; padding: 6px 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+    <div style="align-self: center; font-size: 12px; color: #4A505C">Entrevista inicial · hoy 18:10</div>
+    <div style="align-self: flex-start; max-width: 82%; background: #FFFFFF; border: 1px solid #E4E7EB; border-radius: 16px 16px 16px 4px; padding: 10px 12px; font-size: 15px; line-height: 1.4">¿Para quién es la landing y qué tiene que lograr: contactos, demos o ventas?</div>
+    <div style="align-self: flex-end; max-width: 82%; background: #1D4FAF; color: #FFFFFF; border-radius: 16px 16px 4px 16px; padding: 10px 12px; font-size: 15px; line-height: 1.4">Para empresas que quieren experiencias en VR. Que pidan una demo.</div>
+    <div style="align-self: flex-start; max-width: 82%; background: #FFFFFF; border: 1px solid #E4E7EB; border-radius: 16px 16px 16px 4px; padding: 10px 12px; font-size: 15px; line-height: 1.4">Listo. Armé la especificación y el plan en 3 fases; están en PROJECT.md. Propongo empezar por la fase 1.</div>
+    <div style="background: #FFFFFF; border: 2px solid #5B3FA8; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #5B3FA8; letter-spacing: 0.03em"><span>ORDEN PARA EL AGENTE DE CÓDIGO</span><span style="font-weight: 500; color: #4A505C">por aprobar</span></div>
+      <div style="font-size: 15px; font-weight: 600">Fase 1 · Prompt 1: base del sitio</div>
+      <div style="font-size: 14px; line-height: 1.4; color: #2B2F36">Crear el proyecto Next.js, la portada con el formulario de demo y el despliegue de prueba. Commits locales, sin push.</div>
+      <div style="font-size: 12px; color: #4A505C">Estimado: 1 h a 1 h 30 min · dificultad 4</div>
+      <div style="display: flex; gap: 8px">
+        <button style="flex: 1; height: 44px; border: none; border-radius: 10px; background: #5B3FA8; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Aprobar</button>
+        <button style="flex: 1; height: 44px; border: 1px solid #9AA0AA; border-radius: 10px; background: #FFFFFF; color: #1F2329; font-family: inherit; font-size: 15px; font-weight: 600">Editar</button>
+        <button style="flex: 1; height: 44px; border: 1px solid #9AA0AA; border-radius: 10px; background: #FFFFFF; color: #1F2329; font-family: inherit; font-size: 15px; font-weight: 600">Rechazar</button>
+      </div>
+      <a href="#" style="font-size: 13px">Ver la orden completa</a>
+    </div>
+  </div>
+  <div style="padding: 8px 12px 30px; display: flex; gap: 8px; align-items: flex-end; background: #F4F5F7; border-top: 1px solid #E4E7EB">
+    <label for="mensaje" style="position: absolute; left: -9999px">Mensaje para el orquestador</label>
+    <textarea id="mensaje" rows="1" placeholder="Escríbele al orquestador" style="flex: 1; min-height: 40px; border: 1px solid #D5D9DF; border-radius: 20px; padding: 10px 14px; font-family: inherit; font-size: 15px; resize: none; background: #FFFFFF; color: #1F2329; box-sizing: border-box"></textarea>
+    <button aria-label="Dictar" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #D5D9DF; background: #FFFFFF; display: flex; align-items: center; justify-content: center">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="#2B2F36" stroke-width="1.8" fill="none"></rect><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="#2B2F36" stroke-width="1.8" fill="none"></path></svg></button>
+    <button aria-label="Enviar" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #1D4FAF; display: flex; align-items: center; justify-content: center">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V4M5 11l7-7 7 7" stroke="#FFFFFF" stroke-width="2.2" fill="none"></path></svg></button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

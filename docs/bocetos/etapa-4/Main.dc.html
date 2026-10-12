@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Proyectos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; background: #F4F5F7; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; color: #1F2329; display: flex; flex-direction: column; overflow: hidden">
+  <div style="padding: 58px 16px 8px; display: flex; justify-content: space-between; align-items: center">
+    <div style="font-size: 34px; font-weight: 700; letter-spacing: -0.01em">Proyectos</div>
+    <a href="Nuevo.dc.html" style="height: 40px; padding: 0 16px; border-radius: 20px; background: #1D4FAF; color: #FFFFFF; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600">
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v12M2 8h12" stroke="#FFFFFF" stroke-width="2"></path></svg>Nuevo</a>
+  </div>
+  <div style="padding: 0 16px 10px; font-size: 15px; color: #4A505C">3 con orquestador · 4 sin orquestador</div>
+  <div style="flex: 1; padding: 0 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden">
+    <sc-for list="{{proyectos}}" as="p" hint-placeholder-count="5">
+      <a href="Chat.dc.html" style="display: flex; flex-direction: column; gap: 8px; padding: 14px; background: #FFFFFF; border: 1px solid {{p.bd}}; border-radius: 14px; text-decoration: none; color: #1F2329">
+        <span style="display: flex; justify-content: space-between; align-items: baseline">
+          <span style="font-size: 17px; font-weight: 600">{{p.nombre}}</span>
+          <span style="font-size: 12px; color: #4A505C">{{p.cuenta}} · {{p.maquina}}</span>
+        </span>
+        <span style="font-size: 14px; color: #2B2F36">{{p.donde}}</span>
+        <span style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+          <span style="font-size: 12px; padding: 3px 8px; border-radius: 5px; background: #EEF0F3; color: #2B2F36">{{p.equipo}}</span>
+          <span style="font-size: 12px; font-weight: 600; color: {{p.color}}">{{p.estado}}</span>
+        </span>
+      </a>
+    </sc-for>
+  </div>
+  <nav aria-label="Secciones" style="position: absolute; left: 16px; right: 16px; bottom: 26px; height: 64px; border-radius: 32px; background: rgba(255,255,255,0.62); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); border: 1px solid rgba(255,255,255,0.85); box-shadow: 0 10px 30px rgba(31,35,41,0.14), inset 0 1px 0 rgba(255,255,255,0.9); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 4px; box-sizing: border-box; z-index: 3">
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.7" fill="none"></rect><path d="M8 21h8M12 18v3" stroke="currentColor" stroke-width="1.7"></path></svg>Oficina</a>
+    <a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #1D4FAF; font-size: 11px; font-weight: 600; border-radius: 28px; background: rgba(29,79,175,0.12)">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v10H3z" stroke="currentColor" stroke-width="1.7" fill="none"></path></svg>Proyectos</a>
+    <a href="#" style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="1.7" fill="none"></path></svg>Decisiones
+      <span style="position: absolute; top: 4px; left: 56%; min-width: 18px; height: 18px; border-radius: 9px; background: #9B2C1E; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">2</span></a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #5A6170; font-size: 11px">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9V16h7v-2.1A6 6 0 0012 3z" stroke="currentColor" stroke-width="1.7" fill="none"></path></svg>Ideas</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const n = '#E4E7EB';
+    return {
+      proyectos: [
+        { nombre: 'landing-inmersoft', cuenta: 'Personal', maquina: 'Alienware', donde: 'Entrevista inicial · armando la especificación', equipo: 'Orquestador + 1 agente', estado: 'Orden por aprobar', color: '#5B3FA8', bd: '#C9BDEB' },
+        { nombre: 'visualizador-agentes', cuenta: 'Personal', maquina: 'Alienware', donde: 'Etapa 4 · Prompt 36 (bocetos)', equipo: 'Orquestador + 2 agentes', estado: 'Trabajando', color: '#2F5C45', bd: n },
+        { nombre: 'vive-demo', cuenta: 'Demo Org', maquina: 'Alienware', donde: 'Migraciones de la base', equipo: 'Orquestador + 1 agente', estado: 'Atascado', color: '#9B2C1E', bd: '#E4A69C' },
+        { nombre: 'SkyNest', cuenta: 'Personal', maquina: 'Alienware', donde: 'Fase 7A · Prompt 1', equipo: 'Sin orquestador · 1 agente', estado: 'Te pide permiso', color: '#1D4FAF', bd: n },
+        { nombre: 'rayneo-power', cuenta: 'Personal', maquina: 'MacBook', donde: 'Fase 2 en pausa', equipo: 'Sin orquestador', estado: 'Detenido', color: '#4A505C', bd: n }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Web: chat del orquestador</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1D4FAF}a:hover{color:#123A85}
+</style>
+</helmet>
+<div style="min-height: 820px; background: #F4F5F7; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1F2329; display: flex; flex-wrap: wrap; align-items: stretch">
+  <div style="flex: 1 1 240px; max-width: 280px; min-width: 220px; background: #FFFFFF; border-right: 1px solid #D5D9DF; padding: 20px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 6px 6px">
+      <span style="font-size: 18px; font-weight: 600">Proyectos</span>
+      <button style="height: 34px; padding: 0 12px; border: none; border-radius: 8px; background: #1D4FAF; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600">Nuevo</button>
+    </div>
+    <sc-for list="{{proyectos}}" as="p" hint-placeholder-count="5">
+      <a href="#" style="display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 8px; border: 1px solid {{p.bd}}; background: {{p.bg}}; text-decoration: none; color: #1F2329">
+        <span style="font-size: 15px; font-weight: 600">{{p.nombre}}</span>
+        <span style="font-size: 12px; font-weight: 600; color: {{p.color}}">{{p.estado}}</span>
+      </a>
+    </sc-for>
+  </div>
+  <div style="flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column">
+    <div style="padding: 18px 28px 12px; border-bottom: 1px solid #E4E7EB; background: #FFFFFF; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 22px; font-weight: 600">landing-inmersoft</span>
+        <span style="font-size: 13px; color: #4A505C">E:\Agents\landing-inmersoft · Alienware · cuenta personal</span>
+      </div>
+      <div style="display: flex; gap: 4px; background: #EEF0F3; border-radius: 8px; padding: 3px">
+        <a href="#" style="padding: 6px 14px; border-radius: 6px; background: #FFFFFF; font-size: 14px; font-weight: 600; color: #1F2329; text-decoration: none">Chat</a>
+        <a href="#" style="padding: 6px 14px; border-radius: 6px; font-size: 14px; color: #2B2F36; text-decoration: none">Equipo</a>
+        <a href="#" style="padding: 6px 14px; border-radius: 6px; font-size: 14px; color: #2B2F36; text-decoration: none">Dónde quedamos</a>
+      </div>
+    </div>
+    <div style="flex: 1; padding: 20px 28px; display: flex; flex-direction: column; gap: 12px; max-width: 760px">
+      <div style="align-self: flex-start; max-width: 80%; background: #FFFFFF; border: 1px solid #E4E7EB; border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.45">¿Para quién es la landing y qué tiene que lograr: contactos, demos o ventas?</div>
+      <div style="align-self: flex-end; max-width: 80%; background: #1D4FAF; color: #FFFFFF; border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.45">Para empresas que quieren experiencias en VR. Que pidan una demo.</div>
+      <div style="align-self: flex-start; max-width: 80%; background: #FFFFFF; border: 1px solid #E4E7EB; border-radius: 12px; padding: 12px 14px; font-size: 15px; line-height: 1.45">Listo. Armé la especificación y el plan en 3 fases; están en PROJECT.md. Propongo empezar por la fase 1.</div>
+      <div style="background: #FFFFFF; border: 2px solid #5B3FA8; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #5B3FA8"><span>ORDEN PARA EL AGENTE DE CÓDIGO · POR APROBAR</span><span style="color: #4A505C; font-weight: 500">Estimado 1 h a 1 h 30 min · dificultad 4</span></div>
+        <div style="font-size: 16px; font-weight: 600">Fase 1 · Prompt 1: base del sitio</div>
+        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.5; background: #F4F5F7; border-radius: 8px; padding: 10px 12px; color: #2B2F36; white-space: pre-line">Crea el proyecto Next.js con la portada y el formulario de demo.
+Despliegue de prueba en el VPS. Commits locales, sin push.
+Cierra con el resumen de 5 líneas.</div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <button style="height: 40px; padding: 0 20px; border: none; border-radius: 8px; background: #5B3FA8; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Aprobar y enviar</button>
+          <button style="height: 40px; padding: 0 20px; border: 1px solid #9AA0AA; border-radius: 8px; background: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600; color: #1F2329">Editar</button>
+          <button style="height: 40px; padding: 0 20px; border: 1px solid #9AA0AA; border-radius: 8px; background: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600; color: #1F2329">Rechazar con motivo</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding: 14px 28px 20px; display: flex; gap: 10px; border-top: 1px solid #E4E7EB; background: #FFFFFF">
+      <label for="msg" style="position: absolute; left: -9999px">Mensaje para el orquestador</label>
+      <input id="msg" placeholder="Escríbele al orquestador" style="flex: 1; height: 44px; border: 1px solid #D5D9DF; border-radius: 10px; padding: 0 14px; font-family: inherit; font-size: 15px">
+      <button style="height: 44px; padding: 0 20px; border: none; border-radius: 10px; background: #1D4FAF; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 600">Enviar</button>
+    </div>
+  </div>
+  <div style="flex: 1 1 280px; max-width: 320px; min-width: 260px; background: #FFFFFF; border-left: 1px solid #D5D9DF; padding: 20px 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+    <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">EQUIPO</div>
+    <sc-for list="{{equipo}}" as="m" hint-placeholder-count="2">
+      <div style="display: flex; gap: 10px; align-items: center">
+        <span style="width: 38px; height: 38px; border-radius: 19px; background: {{m.color}}; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0">{{m.ini}}</span>
+        <span style="display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 14px; font-weight: 600">{{m.rol}}</span>
+          <span style="font-size: 12px; color: #4A505C">{{m.modelo}}</span>
+          <span style="font-size: 12px; font-weight: 600; color: {{m.ec}}">{{m.estado}}</span>
+        </span>
+      </div>
+    </sc-for>
+    <div style="border-top: 1px solid #EEF0F3; padding-top: 12px; display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: #4A505C">ÓRDENES</div>
+      <sc-for list="{{ordenes}}" as="o" hint-placeholder-count="3">
+        <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 13px">
+          <span>{{o.texto}}</span><span style="font-weight: 600; color: {{o.color}}; white-space: nowrap">{{o.estado}}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="border-top: 1px solid #EEF0F3; padding-top: 12px; display: flex; align-items: center; gap: 10px">
+      <span style="flex: 1; font-size: 14px">Aprobar órdenes automáticamente</span>
+      <button role="switch" aria-checked="false" aria-label="Aprobar órdenes automáticamente" style="width: 44px; height: 26px; border: none; padding: 0; border-radius: 13px; background: #C9CDD3; position: relative"><span style="position: absolute; left: 2px; top: 2px; width: 22px; height: 22px; border-radius: 11px; background: #FFFFFF"></span></button>
+    </div>
+    <a href="#" style="font-size: 14px">Reglas de la casa</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const n = { bd: '#FFFFFF', bg: '#FFFFFF' };
+    return {
+      proyectos: [
+        { nombre: 'landing-inmersoft', estado: 'Orden por aprobar', color: '#5B3FA8', bd: '#5B3FA8', bg: '#F3F0FB' },
+        Object.assign({ nombre: 'visualizador-agentes', estado: 'Trabajando', color: '#2F5C45' }, n),
+        Object.assign({ nombre: 'vive-demo', estado: 'Atascado', color: '#9B2C1E' }, n),
+        Object.assign({ nombre: 'SkyNest', estado: 'Te pide permiso', color: '#1D4FAF' }, n),
+        Object.assign({ nombre: 'rayneo-power', estado: 'Detenido', color: '#4A505C' }, n)
+      ],
+      equipo: [
+        { ini: 'OR', rol: 'Orquestador', modelo: 'Opus 5.5 · alto', estado: 'Espera tu aprobación', ec: '#5B3FA8', color: '#5B3FA8' },
+        { ini: 'AC', rol: 'Agente de código 1', modelo: 'Sonnet 5.5 · medio', estado: 'Libre', ec: '#4A505C', color: '#2B2F36' }
+      ],
+      ordenes: [
+        { texto: 'Fase 1 · Prompt 1', estado: 'Por aprobar', color: '#5B3FA8' },
+        { texto: 'PROJECT.md y CLAUDE.md', estado: 'Terminada', color: '#2F5C45' },
+        { texto: 'Instalar skills', estado: 'Rechazada', color: '#9B2C1E' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

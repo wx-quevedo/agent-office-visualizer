@@ -1,106 +1,39 @@
 import SwiftUI
 
-/// "Dónde quedamos" (boceto Donde): selector de proyectos, plan por etapas,
-/// dónde estás, lo último y lo que espera tu decisión. Datos de /proyectos y /consumo.
-struct DondeVista: View {
+/// "Dónde quedamos" de un proyecto (boceto Donde, ahora dentro de cada proyecto):
+/// plan por etapas, dónde estás, lo último y lo que espera tu decisión.
+/// Datos de /proyectos y /consumo (los lee ModeloApp).
+struct DondeDetalle: View {
     @Environment(ModeloApp.self) private var modelo
-    @State private var api: [ProyectoApi]?
-    @State private var consumo: Consumo?
-    @State private var error: String?
+    let proyecto: ProyectoVista?
 
     var body: some View {
-        let proyectos = api.map { LogicaDonde.armar($0, modelo.agentes) }
-        let elegido = proyectos?.first { $0.id == modelo.proyectoElegido } ?? proyectos?.first
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Dónde quedamos")
-                    .font(.system(size: 34, weight: .bold))
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                if let proyectos, !proyectos.isEmpty {
-                    chips(proyectos, elegido: elegido?.id)
-                    if let elegido { detalle(elegido) }
-                } else if proyectos != nil {
-                    Text("Todavía no hay proyectos. Aparecen cuando el monitor de una máquina envía su PROJECT.md.")
-                        .font(.system(size: 15)).foregroundStyle(Color.texto2)
-                        .padding(16)
-                } else if let error {
-                    Text(error).font(.system(size: 15)).foregroundStyle(Color.rojo).padding(16)
-                } else {
+                if let p = proyecto {
+                    detalle(p)
+                } else if modelo.proyectosMonitor == nil {
                     ProgressView().frame(maxWidth: .infinity).padding(.vertical, 40)
+                } else {
+                    Tarjeta {
+                        Text("Este proyecto todavía no tiene PROJECT.md o su máquina aún no lo envió.")
+                            .font(.system(size: 15)).foregroundStyle(Color.texto2).padding(16)
+                    }
+                    .padding(.horizontal, 16)
                 }
             }
+            .padding(.top, 4)
             .padding(.bottom, 24)
         }
-        .refreshable { await leer() }
+        .refreshable { await modelo.leerProyectos() }
         .background(Color.fondo)
         .foregroundStyle(Color.texto)
-        .task { await sondear() }
-    }
-
-    /// Proyectos cada 30 s, consumo cada 60 s (como la web).
-    private func sondear() async {
-        var vuelta = 0
-        while !Task.isCancelled {
-            await leer(conConsumo: vuelta % 2 == 0)
-            vuelta += 1
-            try? await Task.sleep(for: .seconds(30))
-        }
-    }
-
-    private func leer(conConsumo: Bool = true) async {
-        guard let cliente = modelo.api else { return }
-        do {
-            api = try await cliente.proyectos()
-            error = nil
-        } catch ErrorAPI.sinSesion {
-            modelo.sesionVencida()
-        } catch let e as ErrorAPI {
-            error = e.mensaje
-        } catch {}
-        if conConsumo, let c = try? await cliente.consumo() { consumo = c }
-    }
-
-    private func chips(_ proyectos: [ProyectoVista], elegido: String?) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(proyectos) { p in
-                    let on = p.id == elegido
-                    Button { modelo.proyectoElegido = p.id } label: {
-                        HStack(spacing: 6) {
-                            if p.alerta.urgencia < 4 {
-                                Circle().fill(on ? Color.white : colorAlerta(p.alerta)).frame(width: 7, height: 7)
-                            }
-                            Text(p.nombre)
-                        }
-                        .font(.system(size: 14, weight: .medium))
-                        .padding(.horizontal, 14)
-                        .frame(height: 34)
-                        .foregroundStyle(on ? Color.white : Color.texto)
-                        .background(on ? Color.acento : Color.white, in: Capsule())
-                        .overlay(Capsule().strokeBorder(on ? Color.acento : Color.bordeCampo))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-        }
-    }
-
-    private func colorAlerta(_ a: TipoAlerta) -> Color {
-        switch a {
-        case .permiso, .pregunta: return .acento
-        case .atasco: return .rojo
-        case .decision: return .naranja
-        default: return .texto2
-        }
     }
 
     @ViewBuilder
     private func detalle(_ p: ProyectoVista) -> some View {
         let d = p.datos
-        let segundos = LogicaDonde.segundosHoy(consumo, carpeta: d.carpeta)
+        let segundos = LogicaDonde.segundosHoy(modelo.consumo, carpeta: d.carpeta)
         let linea = [p.ultima.map { Logica.cuando($0, ahora: modelo.ahora) } ?? "Sin fecha",
                      segundos.flatMap { $0 > 0 ? "\(Logica.tiempoCorto($0)) de agentes" : nil }]
             .compactMap { $0 }.joined(separator: " · ")

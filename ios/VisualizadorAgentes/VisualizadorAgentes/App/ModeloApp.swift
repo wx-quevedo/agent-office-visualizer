@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import UIKit
 
-enum Pestana: Hashable { case oficina, decisiones, donde, ideas }
+enum Pestana: Hashable { case oficina, proyectos, decisiones, ideas }
 
 /// Estado de la app: sesión, bloqueo y datos en vivo de la oficina.
 @MainActor
@@ -18,7 +18,13 @@ final class ModeloApp {
     // Navegación
     var pestana: Pestana = .oficina
     var rutaOficina: [String] = []
-    var proyectoElegido: String?
+    var rutaProyectos: [RutaProyecto] = []
+
+    // Proyectos (etapa 4): con equipo, los del monitor (Dónde quedamos) y el consumo de hoy.
+    private(set) var proyectosEquipo: [ProyectoEquipo]?
+    private(set) var proyectosMonitor: [ProyectoApi]?
+    private(set) var consumo: Consumo?
+    private(set) var errorProyectos: String?
 
     // Datos en vivo
     private(set) var estado: EstadoOficina?
@@ -82,6 +88,9 @@ final class ModeloApp {
         credencial = nil
         estado = nil
         rutaOficina = []
+        rutaProyectos = []
+        proyectosEquipo = nil
+        proyectosMonitor = nil
         bloqueada = false
         OficinaWeb.olvidar()
     }
@@ -191,8 +200,49 @@ final class ModeloApp {
         if rutaOficina.last != id { rutaOficina.append(id) }
     }
 
+    /// "Dónde quedamos" vive en cada proyecto: abre el de esa carpeta.
     func abrirDonde(carpeta: String?) {
-        proyectoElegido = carpeta.map(LogicaDonde.idProyecto)
-        pestana = .donde
+        pestana = .proyectos
+        let lista = listaProyectos
+        let p = lista.first { LogicaDonde.mismaCarpeta($0.donde?.datos.carpeta, carpeta) || LogicaDonde.mismaCarpeta($0.equipo?.ruta, carpeta) }
+        rutaProyectos = p.map { [RutaProyecto(id: $0.id, seccion: .donde)] } ?? []
+    }
+
+    func abrirProyecto(equipo id: String, seccion: SeccionProyecto = .chat) {
+        pestana = .proyectos
+        rutaProyectos = [RutaProyecto(id: "e-" + id, seccion: seccion)]
+    }
+
+    // MARK: - Proyectos
+
+    var listaProyectos: [ProyectoLista] {
+        let donde = LogicaDonde.armar(proyectosMonitor ?? [], agentes)
+        return LogicaProyectos.lista(equipos: proyectosEquipo ?? [], donde: donde, agentes: agentes)
+    }
+
+    func proyecto(_ id: String) -> ProyectoLista? { listaProyectos.first { $0.id == id } }
+
+    /// Proyectos con equipo y, cada tanto, los del monitor y el consumo.
+    func leerProyectos(todo: Bool = true) async {
+        guard let api else { return }
+        do {
+            proyectosEquipo = try await api.proyectosEquipo()
+            errorProyectos = nil
+        } catch ErrorAPI.sinSesion {
+            sesionVencida()
+            return
+        } catch let e as ErrorAPI {
+            errorProyectos = e.mensaje
+        } catch {}
+        if todo || proyectosMonitor == nil {
+            if let p = try? await api.proyectos() { proyectosMonitor = p }
+            if let c = try? await api.consumo() { consumo = c }
+        }
+    }
+
+    func reemplazar(_ p: ProyectoEquipo) {
+        guard var lista = proyectosEquipo else { return }
+        if let i = lista.firstIndex(where: { $0.id == p.id }) { lista[i] = p } else { lista.insert(p, at: 0) }
+        proyectosEquipo = lista
     }
 }

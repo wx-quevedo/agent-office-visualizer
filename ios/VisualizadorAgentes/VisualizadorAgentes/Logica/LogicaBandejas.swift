@@ -3,9 +3,9 @@ import Foundation
 // Bandejas de Decisiones e Ideas (Prompt 33). Sin SwiftUI ni red: se prueba en BandejasTests.
 
 enum LogicaBandejas {
-    static let ordenTipo = ["permiso": 0, "pregunta": 1, "atasco": 2]
+    static let ordenTipo = ["orden": 0, "permiso": 1, "pregunta": 2, "atasco": 3]
 
-    /// Lo más urgente arriba: permisos, preguntas, atascos; dentro de cada tipo, lo que
+    /// Lo más urgente arriba: órdenes, permisos, preguntas, atascos; dentro de cada tipo, lo que
     /// espera hace más tiempo (el backend ya las manda así; se reordena por si acaso).
     static func ordenar(_ items: [Decision]) -> [Decision] {
         items.sorted { a, b in
@@ -34,6 +34,7 @@ enum LogicaBandejas {
         case "permiso": tipo = "Permiso"
         case "pregunta": tipo = "Pregunta"
         case "atasco": tipo = "Atascado"
+        case "orden": tipo = "Orden"
         default: tipo = d.tipo.capitalized
         }
         return "\(tipo) · \(d.proyecto ?? Logica.nombreCarpeta(d.carpeta))"

@@ -208,6 +208,80 @@ final class ClienteAPI: @unchecked Sendable {
         return datos
     }
 
+    // MARK: - Proyectos con equipo (etapa 4)
+
+    func proyectosEquipo() async throws -> [ProyectoEquipo] {
+        let r: ProyectosEquipoRespuesta = try await leer("/api/v1/proyectos-creados")
+        return r.proyectos
+    }
+
+    func proyectoEquipo(_ id: String) async throws -> ProyectoEquipo {
+        try await leer("/api/v1/proyectos-creados/\(Self.ruta(id))")
+    }
+
+    func maquinasEquipo() async throws -> [MaquinaEquipo] {
+        let r: MaquinasRespuesta = try await leer("/api/v1/proyectos-creados/maquinas")
+        return r.maquinas
+    }
+
+    func crearProyecto(_ p: NuevoProyecto) async throws -> ProyectoEquipo {
+        try Self.decodificar(try await cambiar("/api/v1/proyectos-creados", "POST", Self.json(p)))
+    }
+
+    /// pausar, reanudar o detener el equipo.
+    func accionEquipo(_ id: String, _ accion: String) async throws -> ProyectoEquipo {
+        try Self.decodificar(try await cambiar("/api/v1/proyectos-creados/\(Self.ruta(id))/\(accion)", "POST", [:]))
+    }
+
+    func autoAprobar(_ id: String, activo: Bool) async throws -> ProyectoEquipo {
+        try Self.decodificar(try await cambiar("/api/v1/proyectos-creados/\(Self.ruta(id))/auto-aprobar", "POST", ["activo": activo]))
+    }
+
+    func agregarAgente(_ id: String, modelo: String, esfuerzo: String) async throws -> ProyectoEquipo {
+        try Self.decodificar(try await cambiar("/api/v1/proyectos-creados/\(Self.ruta(id))/agentes", "POST",
+                                               ["modelo": modelo, "esfuerzo": esfuerzo]))
+    }
+
+    func chat(_ id: String) async throws -> ChatRespuesta {
+        try await leer("/api/v1/proyectos-creados/\(Self.ruta(id))/chat")
+    }
+
+    func escribir(_ id: String, texto: String) async throws -> MensajeChat {
+        try Self.decodificar(try await cambiar("/api/v1/proyectos-creados/\(Self.ruta(id))/chat", "POST", ["texto": texto]))
+    }
+
+    /// Aprobar una orden; `texto` solo si se editó (queda como texto final).
+    func aprobarOrden(_ id: String, texto: String? = nil) async throws -> Orden {
+        var cuerpo: [String: Any] = ["dispositivo": "app"]
+        if let texto { cuerpo["texto"] = texto }
+        return try Self.decodificar(try await cambiar("/api/v1/ordenes/\(Self.ruta(id))/aprobar", "POST", cuerpo))
+    }
+
+    func rechazarOrden(_ id: String, motivo: String) async throws -> Orden {
+        try Self.decodificar(try await cambiar("/api/v1/ordenes/\(Self.ruta(id))/rechazar", "POST",
+                                               ["motivo": motivo, "dispositivo": "app"]))
+    }
+
+    func reglasDe(_ id: String) async throws -> ReglasDeProyecto {
+        try await leer("/api/v1/proyectos-creados/\(Self.ruta(id))/reglas")
+    }
+
+    func ajustarRegla(proyecto id: String, regla: String, activa: Bool) async throws -> ReglasDeProyecto {
+        try Self.decodificar(try await cambiar("/api/v1/proyectos-creados/\(Self.ruta(id))/reglas/\(Self.ruta(regla))",
+                                               "POST", ["activa": activa]))
+    }
+
+    func reglas() async throws -> ReglasRespuesta { try await leer("/api/v1/reglas") }
+
+    func crearRegla(texto: String, tipo: String, activaPorDefecto: Bool) async throws -> Regla {
+        try Self.decodificar(try await cambiar("/api/v1/reglas", "POST",
+                                               ["texto": texto, "tipo": tipo, "activa_por_defecto": activaPorDefecto]))
+    }
+
+    private static func json<T: Encodable>(_ v: T) throws -> [String: Any] {
+        (try JSONSerialization.jsonObject(with: JSONEncoder().encode(v)) as? [String: Any]) ?? [:]
+    }
+
     // MARK: - Base
 
     private func leer<T: Decodable>(_ ruta: String) async throws -> T {

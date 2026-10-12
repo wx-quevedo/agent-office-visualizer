@@ -47,13 +47,13 @@ struct Pestanas: View {
             Tab("Oficina", systemImage: "building.2", value: Pestana.oficina) {
                 OficinaVista()
             }
+            Tab("Proyectos", systemImage: "folder", value: Pestana.proyectos) {
+                ProyectosVista()
+            }
             Tab("Decisiones", systemImage: "checkmark.circle", value: Pestana.decisiones) {
                 DecisionesVista()
             }
             .badge(modelo.pendientes)
-            Tab("Dónde quedamos", systemImage: "map", value: Pestana.donde) {
-                DondeVista()
-            }
             Tab("Ideas", systemImage: "lightbulb", value: Pestana.ideas) {
                 IdeasVista()
             }
