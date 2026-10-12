@@ -16,7 +16,6 @@ import pytest
 
 from visualizador_monitor.cliente import Respuesta
 from visualizador_monitor.equipos import (
-    REANUDADO,
     EquipoError,
     Equipos,
     HiloEncargos,
@@ -156,17 +155,20 @@ def test_comando_y_entorno() -> None:
         ("--model", "opus"),
         ("--effort", "high"),
         ("--session-id", orq.session_id),
-        ("--disallowedTools", "SendMessage,ListAgents"),
+        ("--disallowedTools", "SendMessage,ListAgents,Bash,PowerShell"),
         ("--name", "prueba-37-orquestador"),
     ):
         assert c[c.index(par[0]) + 1] == par[1]
-    assert "todavía no das órdenes" in c[c.index("--append-system-prompt") + 1].lower()
+    rol = c[c.index("--append-system-prompt") + 1]
+    assert (
+        '<orden agente="NOMBRE"' in rol and "agentes de código de este proyecto son: ." not in rol
+    )
     assert "--settings" not in c and "--resume" not in c
     a = comando_sesion(["claude.exe"], p, ag, True)
     assert a[a.index("--resume") + 1] == ag.session_id and "--session-id" not in a
-    assert json.loads(a[a.index("--settings") + 1]) == {"crossSessionInbound": "accept"}
+    assert json.loads(a[a.index("--settings") + 1]) == {"crossSessionInbound": "refuse"}
     assert "--disallowedTools" not in a
-    assert "esperas las órdenes" in a[a.index("--append-system-prompt") + 1].lower()
+    assert "aprobadas por washington" in a[a.index("--append-system-prompt") + 1].lower()
     home = Path("C:/Users/w")
     base = {
         "PATH": "x",
@@ -203,7 +205,13 @@ def test_miembros_de_valida() -> None:
 def _eventos(registro: Path) -> list[dict[str, Any]]:
     if not registro.is_file():
         return []
-    return [json.loads(x) for x in registro.read_text(encoding="utf-8").splitlines() if x.strip()]
+    salida: list[dict[str, Any]] = []
+    for x in registro.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            salida.append(json.loads(x))
+        except ValueError:
+            continue  # una línea que un proceso falso está escribiendo en este momento
+    return salida
 
 
 def _esperar(cond: Any, s: float = 10.0) -> bool:
@@ -265,26 +273,21 @@ def test_crear_pausar_reanudar_y_retomar(tmp_path: Path) -> None:
         assert r["ok"] and {m["estado"] for m in r["miembros"]} == {"pausado"}
         assert len([e for e in _eventos(registro) if e["evento"] == "fin"]) == 2
         assert ajeno.poll() is None
-        # Reanudar: con --resume y el mensaje de reanudación.
+        # Reanudar: con --resume y sin saludo (la oficina las muestra "En espera").
         r = g.procesar(_encargo("reanudar"))
         assert r["ok"] and {m["estado"] for m in r["miembros"]} == {"activo"}
+        assert _esperar(lambda: sum(e["evento"] == "inicio" for e in _eventos(registro)) == 4)
         reanudados = [e for e in _eventos(registro) if e["evento"] == "inicio"][2:]
         assert {e["args"][e["args"].index("--resume") + 1] for e in reanudados} == sids
-        assert _esperar(
-            lambda: (
-                sum(
-                    e.get("texto") == REANUDADO.format(nombre="prueba-37")
-                    for e in _eventos(registro)
-                )
-                == 2
-            )
-        )
+        time.sleep(0.3)
+        assert sum(e["evento"] == "mensaje" for e in _eventos(registro)) == 2
         # El monitor se reinicia: otro gestor con el mismo estado retoma el equipo activo.
         g.detener_todo()
         g2 = _gestor(tmp_path, registro)
         mensajes_antes = sum(e["evento"] == "mensaje" for e in _eventos(registro))
         assert g2.retomar() == 1
         assert {m["estado"] for m in g2.estado_equipos()[0]["miembros"]} == {"activo"}
+        assert _esperar(lambda: sum(e["evento"] == "inicio" for e in _eventos(registro)) == 6)
         retomados = [e for e in _eventos(registro) if e["evento"] == "inicio"][4:]
         assert len(retomados) == 2 and all("--resume" in e["args"] for e in retomados)
         # Al retomar tras un reinicio no se manda saludo: quedan "En espera".
@@ -345,9 +348,10 @@ def test_hilo_de_encargos(tmp_path: Path) -> None:
     try:
         assert hilo.ronda() == 1
         rutas = [r for r, _ in falso.posts]
-        assert rutas == [f"/api/v1/maquinas/encargos/{enc['id']}", "/api/v1/maquinas/equipos"]
+        assert rutas[0] == f"/api/v1/maquinas/encargos/{enc['id']}"
+        assert rutas[-1] == "/api/v1/maquinas/equipos"
         assert falso.posts[0][1]["ok"] is True
-        assert falso.posts[1][1]["equipos"][0]["proyecto_id"] == "a" * 32
+        assert falso.posts[-1][1]["equipos"][0]["proyecto_id"] == "a" * 32
         assert hilo.ronda() == 0  # sin encargos nuevos y antes del próximo informe
     finally:
         g.detener_todo()
