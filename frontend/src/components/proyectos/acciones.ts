@@ -3,22 +3,24 @@
 /**
  * Requests that change something in the projects (Prompt 38): a POST with a
  * JSON body that answers the new object or rejects with the "detail" of the
- * server, and a clock for the "hace cuánto" texts.
+ * server, and a clock for the "hace cuánto" texts. Prompt 39 adds the method
+ * (PATCH and DELETE of the house rules and the safe commands).
  */
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/utils/api";
 import { detalleError } from "./logica";
 
-/** POST `ruta` with `cuerpo` (when given); resolves with the JSON answer. */
+/** POST (or `metodo`) `ruta` with `cuerpo` (when given); resolves with the JSON answer. */
 export async function enviarJson<T>(
   ruta: string,
   cuerpo?: unknown,
+  metodo: "POST" | "PATCH" | "DELETE" = "POST",
 ): Promise<T> {
   let r: Response;
   try {
     r = await apiFetch(ruta, {
-      method: "POST",
+      method: metodo,
       ...(cuerpo === undefined
         ? {}
         : {

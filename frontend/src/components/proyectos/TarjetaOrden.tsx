@@ -3,7 +3,7 @@
 /**
  * Orders of the orchestrator to the code agents (Prompt 38): the purple card
  * of the chat (number, agent, estimate, text, state, who decided, reason,
- * result) and the buttons to decide one that waits for approval (Aprobar,
+ * result; Prompt 39: "Dificultad: 3 de 10") and the buttons to decide one that waits for approval (Aprobar,
  * Editar and Rechazar with a reason). The decision is sent from here with
  * dispositivo "web"; the answered order goes back through `cambio`.
  */
@@ -20,6 +20,8 @@ import {
   fueEditada,
   ordenLarga,
   quienDecidio,
+  textoDificultad,
+  textoEstimado,
   tituloOrden,
   type Orden,
 } from "./logica";
@@ -261,8 +263,8 @@ export function TarjetaOrden({ orden: o, ahora, cambio }: PropsTarjeta) {
       </header>
       {(o.estimado || o.dificultad || editada) && (
         <p className={s.ordenDatos}>
-          {o.estimado && <span>Estimado: {o.estimado}</span>}
-          {o.dificultad && <span>Dificultad: {o.dificultad}</span>}
+          {o.estimado && <span>{textoEstimado(o.estimado)}</span>}
+          {o.dificultad && <span>{textoDificultad(o.dificultad)}</span>}
           {editada && <span className={s.ordenEditada}>Editada</span>}
         </p>
       )}

@@ -3,7 +3,8 @@
 /**
  * /proyectos (Prompt 37): the projects created from the office, with account,
  * machine, what they are doing, the team and the state. Prompt 38 adds the
- * "Decisiones" block on top (orders waiting for approval). Refreshed every 3 s.
+ * "Decisiones" block on top (orders waiting for approval). Prompt 39 adds the
+ * link to /ajustes (house rules and safe commands). Refreshed every 3 s.
  */
 
 import Link from "next/link";
@@ -70,6 +71,9 @@ export function ListaVista({
           <div className={s.acciones}>
             <Link href="/oficina/3d" className={s.boton}>
               Ir a la oficina
+            </Link>
+            <Link href="/ajustes" className={s.boton}>
+              Ajustes
             </Link>
             <Link href="/proyectos/nuevo" className={s.botonPrincipal}>
               Nuevo proyecto

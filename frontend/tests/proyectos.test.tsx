@@ -385,12 +385,18 @@ describe("formulario de nuevo proyecto", () => {
     expect(texto(el)).not.toContain("Agente de código 4");
     expect(agregar()).toBeDefined();
 
-    // the switch and the note
+    // the switch and the note, which says what happens in each state
     const sw = el.querySelector<HTMLButtonElement>('[role="switch"]')!;
     expect(sw.getAttribute("aria-checked")).toBe("false");
     expect(texto(el)).toContain(
+      "Apagado: cada orden del orquestador espera tu aprobación.",
+    );
+    await React.act(async () => sw.click());
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+    expect(texto(el)).toContain(
       "Encendido: las órdenes del orquestador llegan al agente sin pasar por ti.",
     );
+    await React.act(async () => sw.click());
 
     await React.act(async () => crear.click());
     expect(enviados).toHaveLength(1);
@@ -666,8 +672,9 @@ describe("equipo: detener, aprobar solo y agregar agente (Prompt 38)", () => {
     const sw = el.querySelector<HTMLButtonElement>('[role="switch"]')!;
     expect(sw.getAttribute("aria-checked")).toBe("false");
     expect(texto(el)).toContain(
-      "Encendido: las órdenes del orquestador llegan al agente sin pasar por ti.",
+      "Apagado: cada orden del orquestador espera tu aprobación.",
     );
+    expect(texto(el)).not.toContain("Encendido:");
     await React.act(async () => sw.click());
     expect(valores).toEqual([true]);
   });

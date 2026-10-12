@@ -4,7 +4,10 @@
  * model and effort, the state text and colour, and the body of the POST.
  * Prompt 38 adds the chat with the orchestrator and its orders to the code
  * agents (mixing, state texts, who decided, the body of approve/reject).
- * No React, no fetch: tested in tests/proyectos.test.tsx and tests/chat.test.tsx.
+ * Prompt 39 adds the texts of the auto-approve switch, the estimate and the
+ * difficulty of an order.
+ * No React, no fetch: tested in tests/proyectos.test.tsx, tests/chat.test.tsx
+ * and tests/ajustes.test.tsx.
  */
 
 // -- API (/api/v1/proyectos-creados) ------------------------------------------------
@@ -579,4 +582,27 @@ export function notaChat(estado: EstadoProyecto): string | null {
 /** Number of code agents of the team. */
 export function cuantosAgentes(equipo: Miembro[]): number {
   return equipo.filter((m) => m.rol === "agente").length;
+}
+
+// -- texts of the switch and the orders (Prompt 39) ---------------------------------
+
+/** What the "Aprobar órdenes automáticamente" switch does in its current state. */
+export function textoAuto(activo: boolean): string {
+  return activo
+    ? "Encendido: las órdenes del orquestador llegan al agente sin pasar por ti."
+    : "Apagado: cada orden del orquestador espera tu aprobación.";
+}
+
+/** "Estimado: 45 min" (the text of the orchestrator as it comes). */
+export function textoEstimado(estimado: string): string {
+  return `Estimado: ${estimado.trim()}`;
+}
+
+/** "Dificultad: 3 de 10" for 1..10 (also "3/10"); otherwise the text as it comes. */
+export function textoDificultad(dificultad: string): string {
+  const t = dificultad.trim();
+  const m = /^(\d{1,2})(?:\s*\/\s*10)?$/.exec(t);
+  const n = m ? Number(m[1]) : NaN;
+  if (Number.isInteger(n) && n >= 1 && n <= 10) return `Dificultad: ${n} de 10`;
+  return `Dificultad: ${t}`;
 }

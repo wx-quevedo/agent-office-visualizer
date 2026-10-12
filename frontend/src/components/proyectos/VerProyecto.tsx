@@ -6,7 +6,9 @@
  * and shows its orders to the code agents; Equipo shows each member with what
  * the office sees, the pause/resume/stop buttons, the switch to approve orders
  * automatically, "Agregar agente de código" and the history of orders; "Dónde
- * quedamos" reuses that view fixed to this project. Refreshed every 3 s.
+ * quedamos" reuses that view fixed to this project. Prompt 39 adds to Equipo
+ * the house rules and safe commands of the project, each with its switch, and
+ * the switch note says what happens in its current state. Refreshed every 3 s.
  */
 
 import Link from "next/link";
@@ -18,6 +20,8 @@ import { enviarJson, mensajeDe, useAhora } from "./acciones";
 import { ChatVista } from "./Chat";
 import Dialogo from "./Dialogo";
 import { Estado, nombreMaquina } from "./ListaProyectos";
+import { ReglasProyectoVista } from "./Reglas";
+import type { ReglasDeProyecto } from "./logicaReglas";
 import SelectorModelo from "./SelectorModelo";
 import {
   AGENTE_POR_DEFECTO,
@@ -34,7 +38,10 @@ import {
   nombreModelo,
   nombrePlantilla,
   nombreRol,
+  textoAuto,
   textoCorto,
+  textoDificultad,
+  textoEstimado,
   textoOficina,
   unirOrdenes,
   type Chat,
@@ -76,9 +83,6 @@ export function masNuevo(
 const TEXTO_DETENER =
   "Se cierran las sesiones del orquestador y los agentes. La carpeta queda intacta y puedes reanudar después.";
 
-const TEXTO_AUTO =
-  "Encendido: las órdenes del orquestador llegan al agente sin pasar por ti.";
-
 /** History of the orders of the project, the newest first. */
 function HistorialOrdenes({
   ordenes,
@@ -117,6 +121,16 @@ function HistorialOrdenes({
                 <span className={`${s.estado} ${s[e.tono]}`}>{e.texto}</span>
                 <span className={s.historialResto}>
                   <span className={s.filaHaciendo}>{textoCorto(o.texto)}</span>
+                  {(o.estimado || o.dificultad) && (
+                    <span className={s.secundario}>
+                      {[
+                        o.estimado && textoEstimado(o.estimado),
+                        o.dificultad && textoDificultad(o.dificultad),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
                   {o.resumen && (
                     <span className={s.secundario}>
                       Resultado: {textoCorto(o.resumen, 200)}
@@ -239,6 +253,13 @@ export interface PropsEquipo {
   autoAprobar?: (activo: boolean) => Promise<void>;
   /** POST agentes; rejects with the message of the server. */
   agregarAgente?: (c: ConfigModelo) => Promise<void>;
+  /** House rules and safe commands of the project (null while they are read). */
+  reglas?: ReglasDeProyecto | null;
+  errorReglas?: string | null;
+  /** POST .../reglas/{id}; rejects with the message of the server. */
+  cambiarRegla?: (id: string, activa: boolean) => Promise<void>;
+  /** POST .../comandos/{id}; rejects with the message of the server. */
+  cambiarComando?: (id: string, activo: boolean) => Promise<void>;
 }
 
 const nada = async () => {};
@@ -250,6 +271,10 @@ export function EquipoVista({
   ordenes = null,
   autoAprobar = nada,
   agregarAgente = nada,
+  reglas = null,
+  errorReglas = null,
+  cambiarRegla = nada,
+  cambiarComando = nada,
 }: PropsEquipo) {
   const id = useId();
   const [enviando, setEnviando] = useState<Accion | null>(null);
@@ -370,7 +395,7 @@ export function EquipoVista({
           </span>
         </div>
         <p id={`${id}-auto-n`} className={s.nota}>
-          {TEXTO_AUTO}
+          {textoAuto(auto ?? p.auto_aprobar)}
         </p>
         {errorAuto && (
           <p className={s.avisoError} role="alert">
@@ -431,6 +456,12 @@ export function EquipoVista({
         agregar={agregarAgente}
         ocupado={a.ocupado || p.estado === "creando"}
       />
+      <ReglasProyectoVista
+        datos={reglas}
+        error={errorReglas}
+        cambiarRegla={cambiarRegla}
+        cambiarComando={cambiarComando}
+      />
       <HistorialOrdenes ordenes={ordenes} proyectoId={p.id} />
     </section>
   );
@@ -448,6 +479,10 @@ export interface PropsVista {
   ahora?: number;
   autoAprobar?: (activo: boolean) => Promise<void>;
   agregarAgente?: (c: ConfigModelo) => Promise<void>;
+  reglas?: ReglasDeProyecto | null;
+  errorReglas?: string | null;
+  cambiarRegla?: (id: string, activa: boolean) => Promise<void>;
+  cambiarComando?: (id: string, activo: boolean) => Promise<void>;
   /** "Dónde quedamos" of the project (injected: tests do not read the API). */
   donde?: (nombre: string) => ReactNode;
 }
@@ -464,6 +499,10 @@ export function ProyectoVista({
   ahora = 0,
   autoAprobar,
   agregarAgente,
+  reglas,
+  errorReglas,
+  cambiarRegla,
+  cambiarComando,
   donde,
 }: PropsVista) {
   // Orders decided here: the chat and the Equipo history show them at once.
@@ -536,6 +575,10 @@ export function ProyectoVista({
                 ordenes={chat ? unirOrdenes(chat.ordenes, locales) : null}
                 autoAprobar={autoAprobar}
                 agregarAgente={agregarAgente}
+                reglas={reglas}
+                errorReglas={errorReglas}
+                cambiarRegla={cambiarRegla}
+                cambiarComando={cambiarComando}
               />
             )}
             {seccion === "donde" && donde?.(p.nombre)}
@@ -546,7 +589,10 @@ export function ProyectoVista({
   );
 }
 
-/** The page with its reads: project and chat (3 s), machines (30 s). */
+/**
+ * The page with its reads: project, chat and rules of the project (3 s),
+ * machines (30 s).
+ */
 export default function VerProyecto() {
   const params = useSearchParams();
   const id = params.get("id");
@@ -563,6 +609,32 @@ export default function VerProyecto() {
     "/api/v1/proyectos-creados/maquinas",
     30000,
   );
+  const leidas = useLectura<ReglasDeProyecto>(
+    base && seccion === "equipo" ? `${base}/reglas` : null,
+    3000,
+  );
+  // The answer of a switch, shown until the next read.
+  const [reglasLocal, setReglasLocal] = useState<{
+    base: ReglasDeProyecto | null;
+    datos: ReglasDeProyecto;
+  } | null>(null);
+  const reglas =
+    reglasLocal && reglasLocal.base === leidas.datos
+      ? reglasLocal.datos
+      : leidas.datos;
+  const cambiarAjuste = async (
+    lista: "reglas" | "comandos",
+    ajusteId: string,
+    cuerpo: { activa: boolean } | { activo: boolean },
+  ) => {
+    if (!base) return;
+    const antes = leidas.datos;
+    const datos = await enviarJson<ReglasDeProyecto>(
+      `${base}/${lista}/${encodeURIComponent(ajusteId)}`,
+      cuerpo,
+    );
+    setReglasLocal({ base: antes, datos });
+  };
   const ahora = useAhora();
   const [local, setLocal] = useState<Proyecto | null>(null);
   const accion = async (tipo: Accion) => {
@@ -607,6 +679,12 @@ export default function VerProyecto() {
       ahora={ahora}
       autoAprobar={autoAprobar}
       agregarAgente={agregarAgente}
+      reglas={reglas}
+      errorReglas={leidas.error}
+      cambiarRegla={(rid, activa) => cambiarAjuste("reglas", rid, { activa })}
+      cambiarComando={(cid, activo) =>
+        cambiarAjuste("comandos", cid, { activo })
+      }
       donde={(nombre) => <DondeQuedamos proyecto={nombre} />}
     />
   );

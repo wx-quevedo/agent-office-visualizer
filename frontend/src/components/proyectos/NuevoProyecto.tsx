@@ -25,6 +25,7 @@ import {
   primeraDisponible,
   puedeCrear,
   rutaNueva,
+  textoAuto,
   type Borrador,
   type Maquina,
   type Proyecto,
@@ -312,8 +313,7 @@ export function FormularioNuevo({
               </span>
             </div>
             <p id={`${idNombre}-auto-n`} className={s.nota}>
-              Encendido: las órdenes del orquestador llegan al agente sin pasar
-              por ti.
+              {textoAuto(b.auto_aprobar)}
             </p>
           </div>
 
