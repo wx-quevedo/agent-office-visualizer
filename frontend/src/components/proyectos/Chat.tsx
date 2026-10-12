@@ -5,6 +5,8 @@
  * the orchestrator's on the left, and a purple card for each order, mixed by
  * `creado`. The sent message shows at once and is replaced by the read one.
  * Scrolls to the end on new items only when the reader was already there.
+ * Prompt 41: the orchestrator's text is shown as markdown (Markdown.tsx);
+ * Washington's stays plain text.
  */
 
 import {
@@ -27,6 +29,7 @@ import {
   type Orden,
   type Proyecto,
 } from "./logica";
+import { Markdown } from "./Markdown";
 import { TarjetaOrden } from "./TarjetaOrden";
 import s from "./proyectos.module.css";
 
@@ -184,7 +187,11 @@ export function ChatVista({
                 <span className={s.burbujaAutor}>
                   {mio ? "Tú" : "Orquestador"}
                 </span>
-                <p className={s.burbujaTexto}>{m.texto}</p>
+                {mio ? (
+                  <p className={s.burbujaTexto}>{m.texto}</p>
+                ) : (
+                  <Markdown texto={m.texto} />
+                )}
                 <span className={s.hora}>
                   {pendiente ? (
                     "Enviando…"
