@@ -88,6 +88,10 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-12 | Hasta el Prompt 38, el orquestador arranca con `SendMessage` y `ListAgents` bloqueados; los agentes aceptan mensajes de otras sesiones (`crossSessionInbound: accept`). El id de sesión de cada miembro lo decide el servidor | `ListAgents` ve todas las sesiones de la máquina; el hook que limita los destinos llega con las órdenes. Con el id decidido antes de lanzar, la oficina reconoce la sesión desde su primer evento |
 | 2026-10-12 | Al reiniciar el monitor, las sesiones retomadas no reciben saludo: la oficina las muestra "En espera" hasta que alguien les escriba | Evita gastar tokens en cada reinicio; el servidor sabe por el monitor que siguen vivas aunque la oficina las haya visto terminar |
 | 2026-10-12 | Solo habrá "Detener" (cierra las sesiones y deja la carpeta intacta), en el Prompt 38; borrar carpetas desde la web no se hará | Un borrado remoto de carpetas es demasiado riesgo para lo que aporta |
+| 2026-10-12 | Órdenes del orquestador con el monitor de intermediario, no con `SendMessage` y un hook: el orquestador escribe un bloque `<orden agente="...">` en su respuesta, el monitor lo registra por aprobar y solo una orden aprobada (o con el interruptor automático encendido) se escribe por la entrada estándar al agente elegido de ese proyecto | Un hook no puede esperar minutos la aprobación de Washington, `ListAgents` muestra todas las sesiones de la máquina y el agente tendría que aceptar mensajes de cualquier sesión. Un bloque de texto no necesita servidor MCP ni permisos extra en `-p` |
+| 2026-10-12 | Los agentes de código arrancan con `crossSessionInbound: refuse` y el orquestador sin `SendMessage`, `ListAgents`, `Bash` ni `PowerShell` | Con `refuse` puesto por `--settings`, ninguna sesión de la máquina puede escribirle al agente; solo el monitor. Sin terminal, el orquestador no puede lanzar ni retomar otra sesión por su cuenta |
+| 2026-10-12 | Una orden en curso cuando se corta la sesión (pausar, detener, reinicio del monitor) se informa fallida y se le avisa al orquestador; no se repite sola. Lo aprobado en cola, los mensajes y lo pendiente de mandar al servidor se guardan y no se pierden | Repetirla sola podría duplicar trabajo que quedó a medias |
+| 2026-10-12 | Encender la aprobación automática vale solo para las órdenes nuevas; reanudar ya no manda saludo (quedan "En espera") | Lo que ya esperaba a Washington no se aprueba sin que lo vea; el saludo gastaba tokens y ensuciaba el chat |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -151,6 +155,7 @@ Ajustes:
 - Una sesión lanzada que el monitor informa viva pero que la oficina vio terminar se muestra "En espera" (estado 18, sin cierre ni aviso).
 - Un equipo activo y quieto dice "En espera" en Proyectos.
 Capturas en `docs/capturas/etapa-4/` |
+| 2026-10-12 | Etapa 4 (Prompt 38), chat y órdenes: backend con mensajes y órdenes (esquema 2 de `proyectos.db`), aprobación automática, Detener y agregar agente (commit `1ce3d5f`); monitor 0.5.0 de intermediario (commit `81ea71e`); web con Chat, tarjetas de orden, Equipo y Decisiones (commit `2f4bd42`). Falta la prueba real con prueba-37 después del despliegue |
 
 ## Cómo levantar
 
@@ -564,6 +569,26 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
   - el interruptor de aprobación automática, todavía sin efecto.
 - `/proyectos/ver?id=`: Chat (llega en el Prompt 38), Equipo (miembros, estado, Pausar el equipo y Reanudar) y Dónde quedamos de ese proyecto.
 - Botón Proyectos en la oficina 3D y en la vista de cajas. La página `/donde-quedamos` sigue igual.
+
+## Chat y órdenes (etapa 4, Prompt 38)
+
+Regla de fondo: el agente de código nunca recibe una orden que Washington no aprobó (salvo con el interruptor automático encendido en ese proyecto), y el orquestador nunca puede escribirle a una sesión que no sea un agente de su proyecto.
+
+**Cómo viaja una orden:**
+1. Washington escribe en el chat; el mensaje viaja como encargo "mensaje" y el monitor lo escribe al orquestador.
+2. El orquestador responde. El monitor manda el texto al chat y, por cada bloque `<orden agente="agente" estimado="10 min" dificultad="baja">...</orden>`, registra la orden en el servidor, que la deja por aprobar. Si el destino no es un agente de código de ese proyecto, no sale a ningún lado y el orquestador recibe un aviso (una sola vez seguida, para evitar un ida y vuelta sin fin).
+3. Washington la aprueba (tal cual o editada) o la rechaza con motivo, desde el chat, la lista de Proyectos o la bandeja de Decisiones. La máquina nunca puede aprobar: solo informa en curso, terminada o fallida.
+4. La aprobada llega como encargo "orden"; el monitor comprueba que el agente es de ese proyecto y la escribe a su entrada estándar. Si está ocupado, espera en su cola.
+5. Al terminar el turno del agente, el monitor informa el resumen y se lo pasa al orquestador. Un rechazo le llega al orquestador con su motivo.
+
+**Backend:** tablas `mensajes` y `ordenes` (esquema 2). Orden: texto propuesto y final, agente, estimado, dificultad, estado (por_aprobar, aprobada, rechazada, en_curso, terminada, fallida), motivo, quién decidió y cuándo, resumen.
+- Usuario: `GET`/`POST /proyectos-creados/{id}/chat`, `GET /ordenes?estado=por_aprobar`, `POST /ordenes/{id}/aprobar` (`texto` si se editó) y `/rechazar` (`motivo`), `POST /proyectos-creados/{id}/auto-aprobar`, `/detener` y `/agentes`.
+- Máquina: `POST /maquinas/chat`, `/maquinas/ordenes` y `/maquinas/ordenes/{id}`. Encargos nuevos: mensaje, orden, rechazo, detener y agregar.
+- `/decisiones` pone las órdenes por aprobar primero (tipo "orden") y `decisiones_pendientes` las cuenta. La app iOS las muestra como "Orden" sin botones hasta que se actualice en una Mac.
+
+**Monitor 0.5.0:** colas por miembro, lo en curso y lo pendiente de mandar se guardan en `equipos.json`. El texto del turno se arma con lo que escribió la sesión principal (no sus subagentes).
+
+**Web:** pestaña Chat con burbujas y la tarjeta morada de cada orden (Aprobar, Editar, Rechazar con motivo, Ver la orden completa); Equipo con historial, interruptor, Detener con confirmación y Agregar agente de código; bloque Decisiones arriba de la lista de Proyectos.
 
 ## Proyectos y orquestador (etapa 4): investigación
 
@@ -1055,13 +1080,10 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington despliega el ajuste "En espera" (`bash despliegue/desplegar.sh`). No hace falta actualizar el monitor: la 0.4.0 ya retoma sin saludo. Para verlo: reiniciar el monitor con prueba-37 activo; las dos sesiones deben verse "En espera" en la oficina.
-2. Etapa 4, Prompt 38:
-   - chat con el orquestador en la web y la app;
-   - órdenes al agente con `SendMessage`, con un hook que aprueba cada orden y limita los destinos a los agentes del proyecto;
-   - el interruptor automático por proyecto;
-   - "Detener" (cierra las sesiones y deja la carpeta).
-3. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
-4. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
-5. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
-6. Vigilar el disco del VPS (85 % usado).
+1. Washington despliega el backend y la web (`bash despliegue/desplegar.sh`) y actualiza el monitor de la Alienware a la 0.5.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`).
+2. Prueba real del Prompt 38 con prueba-37: orden editada y aprobada (hola.txt con "Prueba 38"), orden rechazada con motivo, interruptor automático, y que el orquestador no alcance ninguna otra sesión. Capturas 38-chat.png, 38-orden.png y 38-equipo.png.
+3. App iOS (necesita una Mac): botones Aprobar y Rechazar para las órdenes en Decisiones.
+4. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
+5. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
+6. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
+7. Vigilar el disco del VPS (85 % usado).
