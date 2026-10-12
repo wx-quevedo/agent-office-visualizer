@@ -156,7 +156,7 @@ SALUDO_AUTOSKILLS = (
 # Las reglas de la casa cambiaron con la sesión viva (o mientras estaba cerrada): se le
 # cuenta una vez; CLAUDE.md solo se lee al empezar.
 REGLAS_ACTUALIZADAS = (
-    "Se actualizaron las reglas de la casa de este proyecto (están en CLAUDE.md).{cambios} "
+    "Se actualizaron las reglas de la casa de este proyecto (están en CLAUDE.md).{cambios}\n"
     "Desde ahora valen estas:\n{reglas}"
 )
 # Varios cambios de reglas seguidos se juntan en un solo aviso: el aviso espera estos
