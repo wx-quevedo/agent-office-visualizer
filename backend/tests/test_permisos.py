@@ -147,6 +147,21 @@ def test_politicas(
     assert crear(reg).esperando is espera
 
 
+@pytest.mark.parametrize("politica", ["solo_en_el_celular", "nunca"])
+def test_sesion_de_equipo_siempre_espera(tmp_path: Path, politica: str) -> None:
+    """Una sesión claude -p lanzada por el monitor no tiene diálogo de permisos: si el
+    hook no esperara, Claude Code lo rechazaría al instante. Espera aunque estés en la
+    PC, y no se suelta cuando el celular se desconecta."""
+    disp = Dispositivos(pc=True, celular=False)
+    reg = RegistroPermisos(tmp_path, presencia=disp, sin_dialogo=lambda sid: sid == "agente-38")
+    reg.guardar_config(Configuracion(politica=politica))  # type: ignore[arg-type]
+    s = crear(reg, session_id="agente-38", herramienta="Write")
+    assert s.esperando and s.vence is not None and s.politica == "equipo"
+    assert not crear(reg, "solicitud-2", session_id="otra").esperando
+    assert reg.obtener("solicitud-1").esperando  # type: ignore[union-attr]
+    assert reg.decidir("solicitud-1", True, None, "pc").estado == "aprobada"
+
+
 def test_siempre_no_suelta_sin_celular(reg: RegistroPermisos, disp: Dispositivos) -> None:
     reg.guardar_config(Configuracion(politica="siempre"))
     crear(reg)

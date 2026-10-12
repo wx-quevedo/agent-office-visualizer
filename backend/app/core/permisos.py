@@ -162,13 +162,20 @@ class RegistroPermisos:
     """Requests in memory plus their SQLite log; the configuration in a JSON file."""
 
     def __init__(
-        self, carpeta: Path, clock: Any = None, presencia: Presencia | None = None
+        self,
+        carpeta: Path,
+        clock: Any = None,
+        presencia: Presencia | None = None,
+        sin_dialogo: Callable[[str], bool] | None = None,
     ) -> None:
         self.ruta_db = carpeta / "permisos.db"
         self.ruta_config = carpeta / "permisos.json"
         self.clock = clock or (lambda: datetime.now(UTC))
         # Where the user has the office open; no provider: nowhere.
         self.presencia: Presencia = presencia or (lambda: (False, False))
+        # Sesiones sin diálogo de permisos (claude -p lanzadas por un monitor, etapa 4):
+        # si el hook no espera, Claude Code rechaza el permiso al instante.
+        self.sin_dialogo: Callable[[str], bool] = sin_dialogo or (lambda _sid: False)
         self._lock = threading.Lock()
         self._solicitudes: dict[str, Solicitud] = {}
         self._eventos: dict[str, asyncio.Event] = {}
@@ -316,7 +323,16 @@ class RegistroPermisos:
             if id_ in self._solicitudes:
                 return self._solicitudes[id_]
             cfg = self._config
-            if cfg.politica == "siempre":
+            politica = cfg.politica
+            try:
+                equipo = self.sin_dialogo(session_id)
+            except Exception:
+                equipo = False
+            if equipo:
+                # Sin VS Code que pregunte: siempre se decide en la web o la app.
+                esperar = True
+                politica = "equipo"
+            elif cfg.politica == "siempre":
                 esperar = True
             elif cfg.politica == "solo_en_el_celular":
                 try:
@@ -344,11 +360,11 @@ class RegistroPermisos:
                 creada=now,
                 esperando=esperar,
                 vence=now + timedelta(seconds=cfg.espera_seg) if esperar else None,
-                politica=cfg.politica,
+                politica=politica,
                 machine_id=machine_id,
             )
             self._solicitudes[id_] = s
-            self._guardar(s, cfg.politica)
+            self._guardar(s, politica)
             return s
 
     def obtener(self, id_: str) -> Solicitud | None:
@@ -498,6 +514,12 @@ def validar_config(raw: Any) -> Configuracion:
 _registro: RegistroPermisos | None = None
 
 
+def _sesion_de_equipo(session_id: str) -> bool:
+    from app.core.proyectos_equipo import get_proyectos_equipo
+
+    return session_id in get_proyectos_equipo().sesiones_lanzadas()
+
+
 def get_registro() -> RegistroPermisos:
     global _registro
     if _registro is None:
@@ -507,6 +529,7 @@ def get_registro() -> RegistroPermisos:
         _registro = RegistroPermisos(
             Path(get_settings().STATE_EVENT_LOG_PATH).parent,
             presencia=lambda: get_state_engine().dispositivos_vigentes(),
+            sin_dialogo=_sesion_de_equipo,
         )
     return _registro
 
