@@ -1,4 +1,12 @@
-"""Equipos de proyectos (etapa 4, Prompts 37 y 38).
+"""Equipos de proyectos (etapa 4, Prompts 37 a 39).
+
+Prompt 39: las plantillas dejan PROJECT.md con las secciones del estándar de Washington y
+CLAUDE.md con una sección de la plantilla y el bloque de reglas de la casa (entre marcas
+que solo toca el monitor; lo demás del archivo queda igual). Si las reglas cambian, el
+monitor reescribe el bloque y se las cuenta una vez a las sesiones vivas. Los comandos
+seguros llegan a los agentes con ``--allowedTools Bash(<comando> *)`` (se aplica al
+retomar: si cambian, el agente se relanza al terminar su turno). El orquestador edita su
+carpeta sin pedir permiso para escribir la especificación y el plan de la entrevista.
 
 El servidor deja encargos para esta máquina y el monitor:
 
@@ -75,6 +83,8 @@ MAX_VISTOS = 500  # ids de encargos ya encolados que se recuerdan (reentregas)
 # Lo que el orquestador no puede usar: mensajes a otras sesiones y la terminal (con la
 # terminal podría lanzar o retomar otra sesión por su cuenta).
 BLOQUEADAS_ORQUESTADOR = "SendMessage,ListAgents,Bash,PowerShell"
+# Un comando seguro (lo valida también el servidor): sin comodines ni operadores.
+COMANDO_SEGURO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/=@+-]*(?: [A-Za-z0-9._:/=@+-]+)*$")
 
 PLANTILLAS: dict[str, tuple[str, str | None]] = {
     "vacia": ("Vacía", None),
@@ -99,30 +109,49 @@ PLANTILLAS: dict[str, tuple[str, str | None]] = {
 
 ROL_ORQUESTADOR = (
     "Eres el orquestador del proyecto {nombre}. Diseñas y planificas con Washington: "
-    "conversas, propones y ordenas el trabajo en etapas. Los agentes de código de este "
-    "proyecto son: {agentes}. Para darle una orden a uno de ellos, escribe en tu respuesta "
-    "un bloque con este formato exacto, un bloque por orden:\n"
-    '<orden agente="NOMBRE" estimado="10 min" dificultad="baja">\n'
+    "conversas, propones y ordenas el trabajo en fases. Al crearse el proyecto abres tú la "
+    "conversación con una entrevista breve: pocas preguntas a la vez (objetivo, para quién, "
+    "alcance, plataformas, restricciones y fechas). Con las respuestas armas la "
+    "especificación y un plan por fases y prompts, y los escribes en PROJECT.md (puedes "
+    "editar los archivos de esta carpeta; no tienes terminal). Al terminar la entrevista, "
+    "propones la primera orden.\n"
+    "Los agentes de código de este proyecto son: {agentes}. Para darle una orden a uno de "
+    "ellos, escribe en tu respuesta un bloque con este formato exacto, un bloque por orden:\n"
+    '<orden agente="NOMBRE" estimado="45 min" dificultad="3">\n'
     "La instrucción completa, clara y autocontenida.\n"
     "</orden>\n"
-    "estimado y dificultad (baja, media o alta) son opcionales. Washington aprueba, edita "
-    "o rechaza cada orden antes de que llegue al agente; después recibirás el resultado o "
-    "el motivo del rechazo. No tienes otra forma de escribirles a otras sesiones. "
-    "Responde en español latino neutro."
+    'En cada orden, estimado es el tiempo en minutos ("45 min") o en horas y minutos si '
+    'pasa de 60 ("1 h 30 min"), y dificultad es un número del 1 al 10. Washington '
+    "aprueba, edita o rechaza cada orden antes de que llegue al agente; después recibirás el "
+    "resultado o el motivo del rechazo. No tienes otra forma de escribirles a otras sesiones. "
+    "Sigue las reglas de la casa de CLAUDE.md. Responde en español latino neutro."
 )
 ROL_AGENTE = (
     "Eres {miembro}, agente de código del proyecto {nombre}. Recibes órdenes del "
     "orquestador de este proyecto aprobadas por Washington y no empiezas trabajo por tu "
-    "cuenta. Al terminar cada orden, responde con un resumen breve de lo que hiciste y "
-    "del resultado. Responde en español latino neutro."
+    "cuenta. Sigue las reglas de la casa de CLAUDE.md. Al terminar cada orden, responde con "
+    "un resumen breve de lo que hiciste y del resultado. Responde en español latino neutro."
 )
 SALUDO = {
     "orquestador": (
-        "Se creó el proyecto {nombre}. Preséntate en una sola frase y espera "
-        "a que Washington te escriba."
+        "Se creó el proyecto {nombre} con la plantilla {plantilla}. Empieza la entrevista "
+        "inicial con Washington: preséntate en una frase y haz tus primeras preguntas, pocas "
+        "a la vez."
     ),
     "agente": "Se creó el proyecto {nombre}. Responde solo: listo, esperando órdenes.",
 }
+# Con la regla de autoskills encendida en el proyecto, se suma al saludo del orquestador.
+SALUDO_AUTOSKILLS = (
+    " Antes de la entrevista, propone como primera orden para un agente de código correr "
+    "`npx autoskills --dry-run` y contar qué instalaría; cuando veas el resultado, propone "
+    "otra orden para instalar con `npx autoskills -a claude-code`."
+)
+# Las reglas de la casa cambiaron con la sesión viva (o mientras estaba cerrada): se le
+# cuenta una vez; CLAUDE.md solo se lee al empezar.
+REGLAS_ACTUALIZADAS = (
+    "Se actualizaron las reglas de la casa de este proyecto (están en CLAUDE.md). Desde "
+    "ahora valen estas:\n{reglas}"
+)
 ORDEN_AL_AGENTE = "Orden {numero} del orquestador, aprobada por Washington:\n\n{texto}"
 RESULTADO = "Resultado de la orden {numero} para {agente} ({estado}):\n{resumen}"
 EDITADA = (
@@ -188,28 +217,101 @@ def carpeta_segura(base: Path, nombre: str) -> Path:
     return carpeta
 
 
+SECCION_PLANTILLA: dict[str, str | None] = {
+    "vacia": None,
+    "web": (
+        "## Plantilla Web (Next.js)\n\n"
+        "- Next.js con TypeScript y el App Router.\n"
+        "- Pruebas con `npm test`, build con `npm run build` y lint con `npm run lint`.\n"
+        "- Nada de claves en el repositorio: `.env` fuera y un `.env.example` con los nombres."
+    ),
+    "unity": (
+        "## Plantilla Unity\n\n"
+        "- Scripts en `Assets/Scripts`, escenas en `Assets/Scenes`.\n"
+        "- No se versionan `Library/`, `Temp/`, `Obj/`, `Build/` ni `Logs/`.\n"
+        "- Escenas y prefabs como texto (Force Text) para que se puedan revisar."
+    ),
+    "expo": (
+        "## Plantilla App (Expo)\n\n"
+        "- App con Expo y TypeScript; se prueba con `npx expo start`.\n"
+        "- No se versionan `ios/` ni `android/` generados, ni claves de firma."
+    ),
+}
+INICIO_REGLAS = "<!-- reglas-de-la-casa: inicio (lo mantiene el monitor; no lo edites a mano) -->"
+FIN_REGLAS = "<!-- reglas-de-la-casa: fin -->"
+
+
+def bloque_reglas(reglas: list[str]) -> str:
+    lineas = [INICIO_REGLAS, "## Reglas de la casa", ""]
+    lineas += [f"- {x}" for x in reglas] or ["- (Ninguna regla activa en este proyecto.)"]
+    return "\n".join([*lineas, FIN_REGLAS])
+
+
+def con_bloque(texto: str, reglas: list[str]) -> str:
+    """El texto de CLAUDE.md con el bloque de reglas puesto al día, sin tocar lo demás.
+    Sin marcas (o con una sola), el bloque se agrega al final."""
+    bloque = bloque_reglas(reglas)
+    a = texto.find(INICIO_REGLAS)
+    b = texto.find(FIN_REGLAS, a + 1) if a >= 0 else -1
+    if a >= 0 and b >= 0:
+        return texto[:a] + bloque + texto[b + len(FIN_REGLAS) :]
+    base = texto.rstrip("\n")
+    return (base + "\n\n" if base else "") + bloque + "\n"
+
+
+def escribir_reglas(carpeta: Path, reglas: list[str]) -> bool:
+    """Pone al día el bloque de reglas del CLAUDE.md del proyecto. Devuelve si cambió.
+    Nunca escribe fuera de la carpeta: si CLAUDE.md es un enlace, no lo toca."""
+    ruta = carpeta / "CLAUDE.md"
+    if os.path.islink(ruta) or (ruta.exists() and not ruta.is_file()):
+        raise EquipoError("CLAUDE.md no es un archivo normal: no se tocó.")
+    real = ruta.resolve(strict=False)
+    if os.path.normcase(str(real.parent)) != os.path.normcase(str(carpeta.resolve())):
+        raise EquipoError("CLAUDE.md quedaría fuera de la carpeta del proyecto.")
+    previo = ruta.read_text(encoding="utf-8") if ruta.exists() else ""
+    nuevo = con_bloque(previo, reglas)
+    if nuevo == previo:
+        return False
+    ruta.write_text(nuevo, encoding="utf-8")
+    return True
+
+
+def project_md(nombre: str, titulo: str, hoy: str) -> str:
+    """PROJECT.md con las secciones del estándar de Washington."""
+    return (
+        f"# {nombre}\n\n"
+        f"Proyecto creado el {hoy} desde la oficina de agentes. Plantilla: {titulo}.\n\n"
+        "## Contexto\n\nPor definir en la entrevista inicial con el orquestador.\n\n"
+        "## Decisiones\n\n| Fecha | Decisión | Por qué |\n| --- | --- | --- |\n\n"
+        f"## Registro de avance\n\n| Fecha | Avance |\n| --- | --- |\n"
+        f"| {hoy} | Proyecto creado. |\n\n"
+        "## Problemas y soluciones\n\n| Problema | Solución |\n| --- | --- |\n\n"
+        "## Siguiente paso\n\nEntrevista inicial con el orquestador.\n"
+    )
+
+
 def preparar_carpeta(
     carpeta: Path,
     nombre: str,
     plantilla: str,
     hoy: str,
     git: Callable[[Path], None] | None = None,
+    reglas: list[str] | None = None,
 ) -> None:
-    """Crea la carpeta, ``git init``, un PROJECT.md mínimo y la plantilla."""
+    """Crea la carpeta, ``git init``, PROJECT.md con las secciones del estándar, CLAUDE.md
+    con la sección de la plantilla y el bloque de reglas, y el .gitignore (Vacía no lleva)."""
     if plantilla not in PLANTILLAS:
         raise EquipoError("Plantilla desconocida.")
     titulo, gitignore = PLANTILLAS[plantilla]
     carpeta.mkdir(parents=False, exist_ok=False)
     (git or git_init)(carpeta)
-    lineas = [
-        f"# {nombre}",
-        "",
-        f"Proyecto creado el {hoy} desde la oficina de agentes.",
-    ]
     if gitignore is not None:
-        lineas.append(f"Plantilla: {titulo} (con un .gitignore para {titulo}).")
         (carpeta / ".gitignore").write_text(gitignore, encoding="utf-8")
-    (carpeta / "PROJECT.md").write_text("\n".join(lineas) + "\n", encoding="utf-8")
+    (carpeta / "PROJECT.md").write_text(project_md(nombre, titulo, hoy), encoding="utf-8")
+    seccion = SECCION_PLANTILLA[plantilla]
+    cabecera = f"# {nombre}\n\n" + (seccion + "\n" if seccion else "")
+    (carpeta / "CLAUDE.md").write_text(cabecera, encoding="utf-8")
+    escribir_reglas(carpeta, reglas or [])
 
 
 def git_init(carpeta: Path) -> None:
@@ -276,6 +378,8 @@ class Miembro:
     creado: float | None = None
     # Huella del rol con el que nació o con el que se actualizó (ver ROL_ACTUALIZADO).
     rol_huella: str | None = None
+    # Huella de las reglas de la casa que conoce (CLAUDE.md se lee solo al empezar).
+    reglas_huella: str | None = None
 
 
 @dataclass
@@ -292,6 +396,13 @@ class Proyecto:
     en_curso: dict[str, dict[str, Any]] = field(default_factory=lambda: {})
     # Mensajes, órdenes y rechazos ya encolados (el servidor puede reentregarlos).
     vistos: list[str] = field(default_factory=lambda: [])
+    # Reglas de la casa activas, comandos seguros y la regla de autoskills (Prompt 39).
+    plantilla: str = "vacia"
+    reglas: list[str] = field(default_factory=lambda: [])
+    comandos: list[str] = field(default_factory=lambda: [])
+    autoskills: bool = False
+    # Agentes por relanzar cuando terminen su turno (cambiaron los comandos seguros).
+    relanzar: list[str] = field(default_factory=lambda: [])
 
     def orquestador(self) -> Miembro | None:
         return next((m for m in self.miembros if m.rol == "orquestador"), None)
@@ -355,9 +466,10 @@ def comando_sesion(claude: list[str], proyecto: Proyecto, m: Miembro, reanudar: 
         "--effort",
         m.esfuerzo,
         "--permission-mode",
-        # El agente solo trabaja con órdenes aprobadas: edita archivos de su carpeta sin
-        # pedir permiso; la terminal sigue pidiéndolo. El orquestador, como siempre.
-        "acceptEdits" if m.rol == "agente" else "default",
+        # Los dos editan archivos de su carpeta sin pedir permiso: el agente, con órdenes
+        # aprobadas; el orquestador, para escribir la especificación y el plan (no tiene
+        # terminal). La terminal del agente sigue pidiendo permiso, salvo los comandos seguros.
+        "acceptEdits",
         "--name",
         f"{proyecto.nombre}-{m.nombre}",
         "--append-system-prompt",
@@ -370,6 +482,11 @@ def comando_sesion(claude: list[str], proyecto: Proyecto, m: Miembro, reanudar: 
     else:
         # Solo el monitor le escribe (por su entrada): ninguna otra sesión de la máquina.
         cmd += ["--settings", json.dumps({"crossSessionInbound": "refuse"})]
+        # Comandos seguros: Bash(<comando> *) también vale para el comando solo. Va al final
+        # porque --allowedTools toma todos los valores que lo siguen.
+        seguros = [c for c in proyecto.comandos if COMANDO_SEGURO.fullmatch(c)]
+        if seguros:
+            cmd += ["--allowedTools", *[f"Bash({c} *)" for c in seguros]]
     return cmd
 
 
@@ -388,6 +505,20 @@ def entorno_sesion(cuenta_dir: Path | None, base: dict[str, str], home: Path) ->
 def mensaje(texto: str) -> bytes:
     linea = {"type": "user", "message": {"role": "user", "content": texto}}
     return (json.dumps(linea, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def reglas_de(e: dict[str, Any]) -> tuple[list[str] | None, list[str] | None, bool | None]:
+    """Reglas activas, comandos seguros y autoskills de un encargo (None si no vienen)."""
+    reglas = e.get("reglas")
+    comandos = e.get("comandos")
+    autoskills = e.get("autoskills")
+    return (
+        [str(x)[:500] for x in reglas][:100] if isinstance(reglas, list) else None,
+        [str(x) for x in comandos if COMANDO_SEGURO.fullmatch(str(x))][:100]
+        if isinstance(comandos, list)
+        else None,
+        autoskills if isinstance(autoskills, bool) else None,
+    )
 
 
 class Sesion:
@@ -557,6 +688,11 @@ class Equipos:
                     colas={k: list(v) for k, v in (p.get("colas") or {}).items()},
                     en_curso=dict(p.get("en_curso") or {}),
                     vistos=list(p.get("vistos") or []),
+                    plantilla=str(p.get("plantilla") or "vacia"),
+                    reglas=[str(x) for x in p.get("reglas") or []],
+                    comandos=[str(x) for x in p.get("comandos") or []],
+                    autoskills=bool(p.get("autoskills")),
+                    relanzar=[str(x) for x in p.get("relanzar") or []],
                 )
             except (KeyError, TypeError, AttributeError):
                 logger.warning("equipos.json: se ignoró un proyecto ilegible")
@@ -589,13 +725,15 @@ class Equipos:
                 elif tipo == "detener":
                     p = self.pausar(pid_, detener=True)
                 elif tipo == "reanudar":
-                    p = self.reanudar(pid_)
+                    p = self.reanudar(pid_, encargo)
                 elif tipo == "agregar":
                     p = self.agregar(encargo)
                 elif tipo == "mensaje":
                     p = self.recibir_mensaje(encargo)
                 elif tipo == "orden":
                     p = self.recibir_orden(encargo)
+                elif tipo == "reglas":
+                    p = self.recibir_reglas(encargo)
                 elif tipo == "rechazo":
                     p = self.recibir_rechazo(encargo)
                 else:
@@ -627,15 +765,20 @@ class Equipos:
         if cuenta_para(None, cuenta, self.cuentas) is None:
             raise EquipoError(f"Esta máquina no tiene configurada la cuenta {cuenta}.")
         miembros = miembros_de(e.get("equipo"))
+        plantilla = str(e.get("plantilla") or "vacia")
+        reglas, comandos, autoskills = reglas_de(e)
         carpeta = carpeta_segura(self.ruta_proyectos, nombre)
         preparar_carpeta(
             carpeta,
             nombre,
-            str(e.get("plantilla") or "vacia"),
+            plantilla,
             datetime.now().strftime("%Y-%m-%d"),
             self.git,
+            reglas or [],
         )
         p = Proyecto(pid_, nombre, str(carpeta), cuenta, activo=True, miembros=miembros)
+        p.plantilla = plantilla
+        p.reglas, p.comandos, p.autoskills = reglas or [], comandos or [], bool(autoskills)
         self.proyectos[pid_] = p
         self._guardar()
         self._lanzar_equipo(p, reanudar=False)
@@ -661,8 +804,10 @@ class Equipos:
         self._guardar()
         return p
 
-    def reanudar(self, pid_: str) -> Proyecto:
+    def reanudar(self, pid_: str, e: dict[str, Any] | None = None) -> Proyecto:
         p = self._proyecto(pid_)
+        if e is not None:
+            self._poner_reglas(p, e)
         p.activo = True
         p.detenido = False
         self._guardar()
@@ -680,6 +825,7 @@ class Equipos:
             raise EquipoError("Solo se agregan agentes de código.")
         if not nuevos:
             return p  # reentrega: ya está
+        self._poner_reglas(p, e)
         p.miembros.extend(nuevos)
         for m in nuevos:
             self._avisar_orquestador(p, AGREGADO.format(miembro=m.nombre))
@@ -687,6 +833,76 @@ class Equipos:
         if p.activo:
             self._lanzar_equipo(p, reanudar=True, saludo=False)
         return p
+
+    # -- reglas de la casa y comandos seguros (Prompt 39) ------------------------------------
+
+    def _poner_reglas(self, p: Proyecto, e: dict[str, Any]) -> bool:
+        """Toma las reglas, los comandos y autoskills de un encargo y pone al día el bloque
+        de CLAUDE.md. Si los comandos cambiaron, los agentes se relanzan (al terminar su
+        turno) con la lista nueva. Devuelve si cambiaron las reglas."""
+        reglas, comandos, autoskills = reglas_de(e)
+        if reglas is None:
+            return False  # un servidor anterior al Prompt 39: no manda reglas
+        if autoskills is not None:
+            p.autoskills = autoskills
+        if comandos is not None and comandos != p.comandos:
+            p.comandos = comandos
+            p.relanzar = [m.nombre for m in p.miembros if m.rol == "agente"]
+        cambiaron = reglas != p.reglas
+        p.reglas = reglas
+        try:
+            escribir_reglas(Path(p.carpeta), reglas)
+        except (OSError, EquipoError) as err:
+            logger.warning("%s: no se pudo escribir el bloque de reglas: %s", p.nombre, err)
+        return cambiaron
+
+    def recibir_reglas(self, e: dict[str, Any]) -> Proyecto:
+        """Cambiaron las reglas de la casa o los comandos seguros del proyecto."""
+        p = self._proyecto(str(e.get("proyecto_id") or ""))
+        self._poner_reglas(p, e)
+        self._avisar_reglas(p)
+        self._guardar()
+        return p
+
+    def _avisar_reglas(self, p: Proyecto) -> None:
+        """A cada sesión viva que no conoce estas reglas, se las cuenta una vez."""
+        h = huella("\n".join(p.reglas))
+        for m in p.miembros:
+            s = self.sesiones.get(m.session_id)
+            if s is None or not s.viva() or m.reglas_huella == h:
+                continue
+            self._encolar_reglas(p, m)
+
+    def _encolar_reglas(self, p: Proyecto, m: Miembro) -> None:
+        lista = "\n".join(f"- {x}" for x in p.reglas) or "- (ninguna)"
+        p.colas.setdefault(m.nombre, []).append(
+            {"tipo": "aviso", "texto": REGLAS_ACTUALIZADAS.format(reglas=lista), "clase": "reglas"}
+        )
+        m.reglas_huella = huella("\n".join(p.reglas))
+
+    def _relanzar_libres(self, p: Proyecto) -> int:
+        """Relanza a los agentes marcados que no están trabajando, para que tomen los
+        comandos seguros nuevos (--allowedTools se aplica al retomar)."""
+        hechos = 0
+        for nombre in list(p.relanzar):
+            m = next((x for x in p.miembros if x.nombre == nombre), None)
+            s = self.sesiones.get(m.session_id) if m is not None else None
+            if m is None or s is None or not s.viva() or not p.activo:
+                p.relanzar.remove(nombre)  # al lanzarse otra vez ya toma la lista nueva
+                continue
+            if s.ocupada() or nombre in p.en_curso:
+                continue
+            s.cerrar(self.espera_cierre)
+            self.sesiones.pop(m.session_id, None)
+            for turno in s.tomar_turnos():
+                self._fin_de_turno(p, m, turno)
+            p.relanzar.remove(nombre)
+            try:
+                self._lanzar_equipo(p, reanudar=True, saludo=False)
+            except EquipoError as err:
+                logger.warning("%s: no se pudo relanzar a %s: %s", p.nombre, nombre, err)
+            hechos += 1
+        return hechos
 
     def _ya_visto(self, p: Proyecto, clave: str) -> bool:
         if clave in p.vistos:
@@ -916,6 +1132,8 @@ class Equipos:
                         hechas += 1
                 if not p.activo:
                     continue
+                if p.relanzar:
+                    hechas += self._relanzar_libres(p)
                 for m in p.miembros:
                     cola = p.colas.get(m.nombre)
                     s = self.sesiones.get(m.session_id)
@@ -1005,10 +1223,20 @@ class Equipos:
                     0, {"tipo": "aviso", "texto": ROL_ACTUALIZADO.format(rol=rol), "clase": "rol"}
                 )
                 m.rol_huella = huella(rol)
+            reglas_h = huella("\n".join(p.reglas))
+            if not retomar:
+                m.reglas_huella = reglas_h  # leyó CLAUDE.md al empezar
+            elif p.reglas and m.reglas_huella != reglas_h:
+                self._encolar_reglas(p, m)
             # Saludo solo al nacer (o si se pide): retomada, queda "En espera".
             if saludo or not retomar:
+                texto = SALUDO[m.rol].format(
+                    nombre=p.nombre, plantilla=PLANTILLAS.get(p.plantilla, ("Vacía",))[0]
+                )
+                if m.rol == "orquestador" and p.autoskills:
+                    texto += SALUDO_AUTOSKILLS
                 with contextlib.suppress(OSError, EquipoError):
-                    s.enviar(SALUDO[m.rol].format(nombre=p.nombre))
+                    s.enviar(texto)
         self._guardar()
         # Unos segundos para ver que no se cayeron al arrancar (cuenta, modelo, opciones).
         fin = time.monotonic() + self.arranque

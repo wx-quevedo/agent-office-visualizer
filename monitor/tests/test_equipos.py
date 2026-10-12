@@ -103,28 +103,41 @@ def test_ruta_fuera_de_la_base_por_un_enlace(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("plantilla", "linea", "ignora"),
+    ("plantilla", "titulo", "seccion", "ignora"),
     [
-        ("vacia", None, None),
-        ("web", "Plantilla: Web", "node_modules/"),
-        ("unity", "Plantilla: Unity", "[Ll]ibrary/"),
-        ("expo", "Plantilla: App Expo", ".expo/"),
+        ("vacia", "Vacía", None, None),
+        ("web", "Web", "## Plantilla Web (Next.js)", "node_modules/"),
+        ("unity", "Unity", "## Plantilla Unity", "[Ll]ibrary/"),
+        ("expo", "App Expo", "## Plantilla App (Expo)", ".expo/"),
     ],
 )
 def test_preparar_carpeta(
-    tmp_path: Path, plantilla: str, linea: str | None, ignora: str | None
+    tmp_path: Path, plantilla: str, titulo: str, seccion: str | None, ignora: str | None
 ) -> None:
     gits: list[Path] = []
     c = tmp_path / "p"
-    preparar_carpeta(c, "p", plantilla, "2026-10-12", gits.append)
+    preparar_carpeta(c, "p", plantilla, "2026-10-12", gits.append, ["Regla uno.", "Regla dos."])
     assert gits == [c]
     md = (c / "PROJECT.md").read_text(encoding="utf-8")
-    assert md.startswith("# p\n") and "2026-10-12" in md
-    if linea is None:
-        assert not (c / ".gitignore").exists() and "Plantilla" not in md
+    assert md.startswith("# p\n") and "2026-10-12" in md and f"Plantilla: {titulo}." in md
+    # Las secciones del estándar de Washington.
+    for s in (
+        "## Contexto",
+        "## Decisiones",
+        "## Registro de avance",
+        "## Problemas y soluciones",
+        "## Siguiente paso",
+    ):
+        assert s in md
+    claude = (c / "CLAUDE.md").read_text(encoding="utf-8")
+    assert claude.startswith("# p\n") and "- Regla uno.\n- Regla dos.\n" in claude
+    if seccion is None:
+        # Vacía: solo PROJECT.md y CLAUDE.md (más el .git).
+        assert sorted(x.name for x in c.iterdir()) == ["CLAUDE.md", "PROJECT.md"]
+        assert "## Plantilla" not in claude
     else:
-        assert ignora is not None
-        assert linea in md and ignora in (c / ".gitignore").read_text(encoding="utf-8")
+        assert ignora is not None and seccion in claude
+        assert ignora in (c / ".gitignore").read_text(encoding="utf-8")
     with pytest.raises(EquipoError):
         preparar_carpeta(tmp_path / "q", "q", "django", "x", gits.append)
 
@@ -167,9 +180,20 @@ def test_comando_y_entorno() -> None:
     a = comando_sesion(["claude.exe"], p, ag, True)
     assert a[a.index("--resume") + 1] == ag.session_id and "--session-id" not in a
     assert json.loads(a[a.index("--settings") + 1]) == {"crossSessionInbound": "refuse"}
-    # Agente: edita su carpeta sin pedir permiso; orquestador: el modo de siempre.
+    # Los dos editan su carpeta sin pedir permiso (el orquestador, para el plan).
     assert a[a.index("--permission-mode") + 1] == "acceptEdits"
-    assert c[c.index("--permission-mode") + 1] == "default"
+    assert c[c.index("--permission-mode") + 1] == "acceptEdits"
+    assert "entrevista" in rol and 'dificultad="3"' in rol
+    # Sin comandos seguros, no hay --allowedTools; con ellos, al final y uno por argumento.
+    assert "--allowedTools" not in a and "--allowedTools" not in c
+    p.comandos = ["git status", "npm run build", "rm -rf * ; x"]
+    a = comando_sesion(["claude.exe"], p, ag, True)
+    assert a[a.index("--allowedTools") :] == [
+        "--allowedTools",
+        "Bash(git status *)",
+        "Bash(npm run build *)",
+    ]
+    assert "--allowedTools" not in comando_sesion(["claude.exe"], p, orq, True)
     assert "--disallowedTools" not in a
     assert "aprobadas por washington" in a[a.index("--append-system-prompt") + 1].lower()
     home = Path("C:/Users/w")
