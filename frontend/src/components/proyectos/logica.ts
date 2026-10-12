@@ -397,6 +397,8 @@ export interface Orden {
   texto_final: string | null;
   texto: string;
   editada: boolean;
+  /** Short title written by the orchestrator, or the first line of the text (Prompt 42). */
+  titulo?: string | null;
   estimado: string | null;
   dificultad: string | null;
   estado: EstadoOrden;

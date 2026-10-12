@@ -778,6 +778,15 @@
   overflow-wrap: anywhere;
 }
 
+/* Short title of the order (Prompt 42), as in the Chat mockup. */
+.ordenNombre {
+  margin: 4px 0 0;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--tinta);
+  overflow-wrap: anywhere;
+}
+
 .ordenDatos {
   margin: 0;
   display: flex;

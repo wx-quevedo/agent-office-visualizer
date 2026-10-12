@@ -261,6 +261,7 @@ export function TarjetaOrden({ orden: o, ahora, cambio }: PropsTarjeta) {
         </h3>
         <span className={`${s.estado} ${s[e.tono]}`}>{e.texto}</span>
       </header>
+      {o.titulo && <p className={s.ordenNombre}>{o.titulo}</p>}
       {(o.estimado || o.dificultad || editada) && (
         <p className={s.ordenDatos}>
           {o.estimado && <span>{textoEstimado(o.estimado)}</span>}

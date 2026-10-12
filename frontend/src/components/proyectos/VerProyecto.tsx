@@ -120,7 +120,9 @@ function HistorialOrdenes({
                 </span>
                 <span className={`${s.estado} ${s[e.tono]}`}>{e.texto}</span>
                 <span className={s.historialResto}>
-                  <span className={s.filaHaciendo}>{textoCorto(o.texto)}</span>
+                  <span className={s.filaHaciendo}>
+                    {o.titulo || textoCorto(o.texto)}
+                  </span>
                   {(o.estimado || o.dificultad) && (
                     <span className={s.secundario}>
                       {[

@@ -246,6 +246,29 @@ describe("lógica del chat y las órdenes", () => {
 });
 
 describe("tarjeta de orden", () => {
+  it("muestra el título corto de la orden debajo de la cabecera", async () => {
+    const con = await montar(
+      React.createElement(TarjetaOrden, {
+        orden: orden({ titulo: "Fase 1 · Prompt 1: base del sitio" }),
+        ahora: AHORA,
+        cambio: () => {},
+      }),
+    );
+    const cabecera = con.querySelector("header");
+    const titulo = cabecera?.nextElementSibling;
+    expect(titulo?.textContent).toBe("Fase 1 · Prompt 1: base del sitio");
+    // Una orden de antes del Prompt 42 (sin título) se ve como siempre.
+    const sin = await montar(
+      React.createElement(TarjetaOrden, {
+        orden: orden({ titulo: undefined }),
+        ahora: AHORA,
+        cambio: () => {},
+      }),
+    );
+    expect(texto(sin)).not.toContain("Fase 1");
+    expect(sin.querySelector("h3")?.textContent).toBe("Orden 1 para agente");
+  });
+
   it("por aprobar: datos, estado y los tres botones", async () => {
     const el = await montar(
       React.createElement(TarjetaOrden, {
