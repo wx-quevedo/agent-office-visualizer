@@ -167,6 +167,9 @@ def test_comando_y_entorno() -> None:
     a = comando_sesion(["claude.exe"], p, ag, True)
     assert a[a.index("--resume") + 1] == ag.session_id and "--session-id" not in a
     assert json.loads(a[a.index("--settings") + 1]) == {"crossSessionInbound": "refuse"}
+    # Agente: edita su carpeta sin pedir permiso; orquestador: el modo de siempre.
+    assert a[a.index("--permission-mode") + 1] == "acceptEdits"
+    assert c[c.index("--permission-mode") + 1] == "default"
     assert "--disallowedTools" not in a
     assert "aprobadas por washington" in a[a.index("--append-system-prompt") + 1].lower()
     home = Path("C:/Users/w")

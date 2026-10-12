@@ -355,7 +355,9 @@ def comando_sesion(claude: list[str], proyecto: Proyecto, m: Miembro, reanudar: 
         "--effort",
         m.esfuerzo,
         "--permission-mode",
-        "default",
+        # El agente solo trabaja con órdenes aprobadas: edita archivos de su carpeta sin
+        # pedir permiso; la terminal sigue pidiéndolo. El orquestador, como siempre.
+        "acceptEdits" if m.rol == "agente" else "default",
         "--name",
         f"{proyecto.nombre}-{m.nombre}",
         "--append-system-prompt",
