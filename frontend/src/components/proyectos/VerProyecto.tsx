@@ -2,36 +2,52 @@
 
 /**
  * /proyectos/ver?id=<id>&seccion=chat|equipo|donde (Prompt 37): the header of
- * the project and three sections. Chat arrives in Prompt 38; Equipo shows each
- * member with what the office sees and the pause/resume buttons; "Dónde
+ * the project and three sections. Chat (Prompt 38) talks with the orchestrator
+ * and shows its orders to the code agents; Equipo shows each member with what
+ * the office sees, the pause/resume/stop buttons, the switch to approve orders
+ * automatically, "Agregar agente de código" and the history of orders; "Dónde
  * quedamos" reuses that view fixed to this project. Refreshed every 3 s.
  */
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import DondeQuedamos from "@/components/donde/DondeQuedamos";
-import { apiFetch } from "@/utils/api";
 import { useLectura } from "@/utils/useLectura";
+import { enviarJson, mensajeDe, useAhora } from "./acciones";
+import { ChatVista } from "./Chat";
+import Dialogo from "./Dialogo";
 import { Estado, nombreMaquina } from "./ListaProyectos";
+import SelectorModelo from "./SelectorModelo";
 import {
+  AGENTE_POR_DEFECTO,
+  MAX_AGENTES,
   accionesDe,
-  detalleError,
+  cuantosAgentes,
   enlaceProyecto,
   estadoMiembro,
+  estadoOrden,
   haciendoDe,
+  historialOrdenes,
   nombreCuenta,
   nombreEsfuerzo,
   nombreModelo,
   nombrePlantilla,
   nombreRol,
+  textoCorto,
   textoOficina,
+  unirOrdenes,
+  type Chat,
+  type ConfigModelo,
   type Maquina,
+  type Orden,
   type Proyecto,
 } from "./logica";
 import s from "./proyectos.module.css";
 
 export type Seccion = "chat" | "equipo" | "donde";
+
+export type Accion = "pausar" | "reanudar" | "detener";
 
 export const SECCIONES: { valor: Seccion; texto: string }[] = [
   { valor: "chat", texto: "Chat" },
@@ -57,26 +73,212 @@ export function masNuevo(
     : leido;
 }
 
-export interface PropsEquipo {
-  proyecto: Proyecto;
-  /** Sends pause or resume; rejects with the message of the server. */
-  accion: (tipo: "pausar" | "reanudar") => Promise<void>;
+const TEXTO_DETENER =
+  "Se cierran las sesiones del orquestador y los agentes. La carpeta queda intacta y puedes reanudar después.";
+
+const TEXTO_AUTO =
+  "Encendido: las órdenes del orquestador llegan al agente sin pasar por ti.";
+
+/** History of the orders of the project, the newest first. */
+function HistorialOrdenes({
+  ordenes,
+  proyectoId,
+}: {
+  ordenes: Orden[] | null;
+  proyectoId: string;
+}) {
+  return (
+    <section className={s.bloque} aria-labelledby="historial-titulo">
+      <h3 id="historial-titulo" className={s.campoTitulo}>
+        Órdenes
+      </h3>
+      {!ordenes && <p className={s.secundario}>Cargando las órdenes…</p>}
+      {ordenes && ordenes.length === 0 && (
+        <p className={s.secundario}>
+          Todavía no hay órdenes. El orquestador las propone en el chat.
+        </p>
+      )}
+      {ordenes && ordenes.length > 0 && (
+        <ul className={s.historial}>
+          {historialOrdenes(ordenes).map((o) => {
+            const e = estadoOrden(o.estado);
+            return (
+              <li
+                key={o.id}
+                className={
+                  o.estado === "por_aprobar"
+                    ? `${s.historialFila} ${s.historialPendiente}`
+                    : s.historialFila
+                }
+              >
+                <span className={s.historialTitulo}>
+                  Orden {o.numero} · {o.agente}
+                </span>
+                <span className={`${s.estado} ${s[e.tono]}`}>{e.texto}</span>
+                <span className={s.historialResto}>
+                  <span className={s.filaHaciendo}>{textoCorto(o.texto)}</span>
+                  {o.resumen && (
+                    <span className={s.secundario}>
+                      Resultado: {textoCorto(o.resumen, 200)}
+                    </span>
+                  )}
+                  {o.estado === "por_aprobar" && (
+                    <Link
+                      href={enlaceProyecto(proyectoId, "chat")}
+                      className={s.enlace}
+                    >
+                      Decidir en el chat
+                      <span className={s.oculto}> la orden {o.numero}</span>
+                    </Link>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
 }
 
-/** Equipo section: members, buttons and the error of the project. */
-export function EquipoVista({ proyecto: p, accion }: PropsEquipo) {
-  const [enviando, setEnviando] = useState<"pausar" | "reanudar" | null>(null);
+/** "Agregar agente de código": a small form with model and effort. */
+function AgregarAgente({
+  proyecto: p,
+  agregar,
+  ocupado,
+}: {
+  proyecto: Proyecto;
+  agregar: (c: ConfigModelo) => Promise<void>;
+  ocupado: boolean;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [config, setConfig] = useState<ConfigModelo>({
+    ...AGENTE_POR_DEFECTO,
+  });
+  const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lleno = cuantosAgentes(p.equipo) >= MAX_AGENTES;
+
+  const enviar = async (e: FormEvent) => {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    try {
+      await agregar(config);
+      setAbierto(false);
+      setConfig({ ...AGENTE_POR_DEFECTO });
+    } catch (err) {
+      setError(mensajeDe(err));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  if (!abierto)
+    return (
+      <div className={s.botonesEquipo}>
+        <button
+          type="button"
+          className={s.boton}
+          disabled={lleno || ocupado}
+          aria-describedby={lleno ? "agregar-nota" : undefined}
+          onClick={() => {
+            setError(null);
+            setAbierto(true);
+          }}
+        >
+          Agregar agente de código
+        </button>
+        {lleno && (
+          <p id="agregar-nota" className={s.nota}>
+            Ya tiene {MAX_AGENTES} agentes de código, el máximo.
+          </p>
+        )}
+      </div>
+    );
+  return (
+    <form className={s.bloque} onSubmit={enviar}>
+      <SelectorModelo
+        titulo="Nuevo agente de código"
+        valor={config}
+        cambiar={setConfig}
+      />
+      {error && (
+        <p className={s.avisoError} role="alert">
+          {error}
+        </p>
+      )}
+      <div className={s.pie}>
+        <button
+          type="submit"
+          className={s.botonPrincipal}
+          disabled={enviando || lleno}
+        >
+          {enviando ? "Agregando…" : "Agregar"}
+        </button>
+        <button
+          type="button"
+          className={s.boton}
+          disabled={enviando}
+          onClick={() => setAbierto(false)}
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export interface PropsEquipo {
+  proyecto: Proyecto;
+  /** Sends pause, resume or stop; rejects with the message of the server. */
+  accion: (tipo: Accion) => Promise<void>;
+  /** Orders of the project (null while they are read). */
+  ordenes?: Orden[] | null;
+  /** POST auto-aprobar; rejects with the message of the server. */
+  autoAprobar?: (activo: boolean) => Promise<void>;
+  /** POST agentes; rejects with the message of the server. */
+  agregarAgente?: (c: ConfigModelo) => Promise<void>;
+}
+
+const nada = async () => {};
+
+/** Equipo section: members, buttons, switch, history and the error. */
+export function EquipoVista({
+  proyecto: p,
+  accion,
+  ordenes = null,
+  autoAprobar = nada,
+  agregarAgente = nada,
+}: PropsEquipo) {
+  const id = useId();
+  const [enviando, setEnviando] = useState<Accion | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmar, setConfirmar] = useState(false);
+  const [auto, setAuto] = useState<boolean | null>(null);
+  const [errorAuto, setErrorAuto] = useState<string | null>(null);
   const a = accionesDe(p.estado);
-  const hacer = async (tipo: "pausar" | "reanudar") => {
+  const hacer = async (tipo: Accion) => {
     setEnviando(tipo);
     setError(null);
     try {
       await accion(tipo);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(mensajeDe(e));
     } finally {
       setEnviando(null);
+    }
+  };
+  const cambiarAuto = async () => {
+    const nuevo = !(auto ?? p.auto_aprobar);
+    setAuto(nuevo);
+    setErrorAuto(null);
+    try {
+      await autoAprobar(nuevo);
+    } catch (e) {
+      setErrorAuto(mensajeDe(e));
+    } finally {
+      setAuto(null);
     }
   };
   const equipo = [...p.equipo].sort(
@@ -84,6 +286,7 @@ export function EquipoVista({ proyecto: p, accion }: PropsEquipo) {
       (x.rol === "orquestador" ? 0 : 1) - (y.rol === "orquestador" ? 0 : 1) ||
       x.orden - y.orden,
   );
+  const bloqueado = a.ocupado || enviando !== null;
   return (
     <section className={s.formulario} aria-labelledby="equipo-titulo">
       <h2 id="equipo-titulo" className={s.oculto}>
@@ -94,9 +297,11 @@ export function EquipoVista({ proyecto: p, accion }: PropsEquipo) {
           {p.error ?? "El equipo tuvo un error sin detalle."}
         </p>
       )}
-      {a.ocupado && (
+      {(a.ocupado || p.estado === "detenido") && (
         <p className={s.aviso} role="status">
-          {haciendoDe({ ...p, haciendo: null })}
+          {p.estado === "detenido"
+            ? "El equipo está detenido. La carpeta quedó intacta; con Reanudar vuelve a trabajar."
+            : haciendoDe({ ...p, haciendo: null })}
         </p>
       )}
       <div className={s.botonesEquipo}>
@@ -104,7 +309,7 @@ export function EquipoVista({ proyecto: p, accion }: PropsEquipo) {
           <button
             type="button"
             className={s.boton}
-            disabled={a.ocupado || enviando !== null}
+            disabled={bloqueado}
             onClick={() => void hacer("pausar")}
           >
             {enviando === "pausar" ? "Pausando…" : "Pausar el equipo"}
@@ -114,18 +319,65 @@ export function EquipoVista({ proyecto: p, accion }: PropsEquipo) {
           <button
             type="button"
             className={s.botonPrincipal}
-            disabled={a.ocupado || enviando !== null}
+            disabled={bloqueado}
             onClick={() => void hacer("reanudar")}
           >
             {enviando === "reanudar" ? "Reanudando…" : "Reanudar"}
           </button>
         )}
+        {a.detener && (
+          <button
+            type="button"
+            className={s.botonPeligro}
+            disabled={bloqueado}
+            onClick={() => setConfirmar(true)}
+          >
+            {enviando === "detener" ? "Deteniendo…" : "Detener"}
+          </button>
+        )}
       </div>
+      {confirmar && (
+        <Dialogo
+          titulo="¿Detener el equipo?"
+          texto={TEXTO_DETENER}
+          textoConfirmar="Detener"
+          confirmar={() => {
+            setConfirmar(false);
+            void hacer("detener");
+          }}
+          cancelar={() => setConfirmar(false)}
+        />
+      )}
       {error && (
         <p className={s.avisoError} role="alert">
           {error}
         </p>
       )}
+      <div className={s.bloque}>
+        <div className={s.interruptorFila}>
+          <button
+            type="button"
+            role="switch"
+            className={s.interruptor}
+            aria-checked={auto ?? p.auto_aprobar}
+            aria-labelledby={`${id}-auto-t`}
+            aria-describedby={`${id}-auto-n`}
+            disabled={auto !== null}
+            onClick={() => void cambiarAuto()}
+          />
+          <span id={`${id}-auto-t`} className={s.campoTitulo}>
+            Aprobar órdenes automáticamente
+          </span>
+        </div>
+        <p id={`${id}-auto-n`} className={s.nota}>
+          {TEXTO_AUTO}
+        </p>
+        {errorAuto && (
+          <p className={s.avisoError} role="alert">
+            {errorAuto}
+          </p>
+        )}
+      </div>
       {equipo.length === 0 ? (
         <p className={s.aviso}>El equipo todavía no está armado.</p>
       ) : (
@@ -174,6 +426,12 @@ export function EquipoVista({ proyecto: p, accion }: PropsEquipo) {
           })}
         </ul>
       )}
+      <AgregarAgente
+        proyecto={p}
+        agregar={agregarAgente}
+        ocupado={a.ocupado || p.estado === "creando"}
+      />
+      <HistorialOrdenes ordenes={ordenes} proyectoId={p.id} />
     </section>
   );
 }
@@ -183,7 +441,13 @@ export interface PropsVista {
   seccion: Seccion;
   maquinas?: Maquina[] | null;
   error?: string | null;
-  accion: (tipo: "pausar" | "reanudar") => Promise<void>;
+  accion: (tipo: Accion) => Promise<void>;
+  /** Chat of the project (messages and orders), null while it is read. */
+  chat?: Chat | null;
+  errorChat?: string | null;
+  ahora?: number;
+  autoAprobar?: (activo: boolean) => Promise<void>;
+  agregarAgente?: (c: ConfigModelo) => Promise<void>;
   /** "Dónde quedamos" of the project (injected: tests do not read the API). */
   donde?: (nombre: string) => ReactNode;
 }
@@ -195,8 +459,16 @@ export function ProyectoVista({
   maquinas = null,
   error = null,
   accion,
+  chat = null,
+  errorChat = null,
+  ahora = 0,
+  autoAprobar,
+  agregarAgente,
   donde,
 }: PropsVista) {
+  // Orders decided here: the chat and the Equipo history show them at once.
+  const [locales, setLocales] = useState<Record<string, Orden>>({});
+  const cambioOrden = (o: Orden) => setLocales((v) => ({ ...v, [o.id]: o }));
   return (
     <div className={s.pagina}>
       <main className={s.contenido}>
@@ -248,12 +520,23 @@ export function ProyectoVista({
               ))}
             </nav>
             {seccion === "chat" && (
-              <p className={s.aviso}>
-                El chat con el orquestador llega en el Prompt 38.
-              </p>
+              <ChatVista
+                proyecto={p}
+                chat={chat}
+                error={errorChat}
+                ahora={ahora}
+                cambioOrden={cambioOrden}
+                ordenesLocales={locales}
+              />
             )}
             {seccion === "equipo" && (
-              <EquipoVista proyecto={p} accion={accion} />
+              <EquipoVista
+                proyecto={p}
+                accion={accion}
+                ordenes={chat ? unirOrdenes(chat.ordenes, locales) : null}
+                autoAprobar={autoAprobar}
+                agregarAgente={agregarAgente}
+              />
             )}
             {seccion === "donde" && donde?.(p.nombre)}
           </>
@@ -263,33 +546,41 @@ export function ProyectoVista({
   );
 }
 
-/** The page with its reads: the project (3 s) and machines (30 s, for names). */
+/** The page with its reads: project and chat (3 s), machines (30 s). */
 export default function VerProyecto() {
   const params = useSearchParams();
   const id = params.get("id");
   const seccion = seccionDe(params.get("seccion"));
-  const api = useLectura<Proyecto>(
-    id ? `/api/v1/proyectos-creados/${encodeURIComponent(id)}` : null,
+  const base = id
+    ? `/api/v1/proyectos-creados/${encodeURIComponent(id)}`
+    : null;
+  const api = useLectura<Proyecto>(base, 3000);
+  const chat = useLectura<Chat>(
+    base && seccion !== "donde" ? `${base}/chat` : null,
     3000,
   );
   const maq = useLectura<{ maquinas: Maquina[] }>(
     "/api/v1/proyectos-creados/maquinas",
     30000,
   );
+  const ahora = useAhora();
   const [local, setLocal] = useState<Proyecto | null>(null);
-  const accion = async (tipo: "pausar" | "reanudar") => {
-    if (!id) return;
-    let r: Response;
-    try {
-      r = await apiFetch(
-        `/api/v1/proyectos-creados/${encodeURIComponent(id)}/${tipo}`,
-        { method: "POST" },
-      );
-    } catch {
-      throw new Error("No se pudo conectar con el servidor; intenta de nuevo.");
-    }
-    if (!r.ok) throw new Error(await detalleError(r));
-    setLocal((await r.json()) as Proyecto);
+  const accion = async (tipo: Accion) => {
+    if (!base) return;
+    setLocal(await enviarJson<Proyecto>(`${base}/${tipo}`));
+  };
+  const autoAprobar = async (activo: boolean) => {
+    if (!base) return;
+    setLocal(await enviarJson<Proyecto>(`${base}/auto-aprobar`, { activo }));
+  };
+  const agregarAgente = async (c: ConfigModelo) => {
+    if (!base) return;
+    setLocal(
+      await enviarJson<Proyecto>(`${base}/agentes`, {
+        modelo: c.modelo,
+        esfuerzo: c.esfuerzo,
+      }),
+    );
   };
   if (!id)
     return (
@@ -311,6 +602,11 @@ export default function VerProyecto() {
       maquinas={maq.datos?.maquinas ?? null}
       error={api.error}
       accion={accion}
+      chat={chat.datos}
+      errorChat={chat.error}
+      ahora={ahora}
+      autoAprobar={autoAprobar}
+      agregarAgente={agregarAgente}
       donde={(nombre) => <DondeQuedamos proyecto={nombre} />}
     />
   );

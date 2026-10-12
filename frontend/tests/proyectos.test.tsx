@@ -219,6 +219,8 @@ describe("lógica de proyectos", () => {
     expect(e("reanudando").tono).toBe("azul");
     expect(e("pausado")).toEqual({ texto: "En pausa", tono: "gris" });
     expect(e("error").tono).toBe("rojo");
+    expect(e("deteniendo")).toEqual({ texto: "Deteniendo", tono: "azul" });
+    expect(e("detenido")).toEqual({ texto: "Detenido", tono: "gris" });
     expect(e("activo", 1)).toEqual({
       texto: "1 orden por aprobar",
       tono: "morado",
@@ -232,6 +234,8 @@ describe("lógica de proyectos", () => {
     expect(h({ estado: "creando" })).toBe("Creando la carpeta y el equipo…");
     expect(h({ estado: "pausado" })).toBe("En pausa");
     expect(h({ estado: "activo" })).toBe("En espera");
+    expect(h({ estado: "deteniendo" })).toBe("Deteniendo el equipo…");
+    expect(h({ estado: "detenido" })).toBe("Detenido");
     expect(h({ estado: "error", error: "Falló git init", haciendo: "x" })).toBe(
       "Falló git init",
     );
@@ -248,14 +252,31 @@ describe("lógica de proyectos", () => {
     expect(accionesDe("activo")).toEqual({
       pausar: true,
       reanudar: false,
+      detener: true,
       ocupado: false,
     });
     expect(accionesDe("pausado")).toMatchObject({
       pausar: false,
       reanudar: true,
     });
-    expect(accionesDe("error")).toMatchObject({ pausar: true, reanudar: true });
+    expect(accionesDe("error")).toMatchObject({
+      pausar: true,
+      reanudar: true,
+      detener: true,
+    });
+    expect(accionesDe("pausado").detener).toBe(true);
     expect(accionesDe("creando").ocupado).toBe(true);
+    expect(accionesDe("detenido")).toEqual({
+      pausar: false,
+      reanudar: true,
+      detener: false,
+      ocupado: false,
+    });
+    expect(accionesDe("deteniendo")).toMatchObject({
+      ocupado: true,
+      reanudar: false,
+      detener: false,
+    });
   });
 
   it("arma el cuerpo del POST con los valores por defecto", () => {
@@ -368,7 +389,7 @@ describe("formulario de nuevo proyecto", () => {
     const sw = el.querySelector<HTMLButtonElement>('[role="switch"]')!;
     expect(sw.getAttribute("aria-checked")).toBe("false");
     expect(texto(el)).toContain(
-      "Todavía sin efecto: llega con las órdenes del orquestador.",
+      "Encendido: las órdenes del orquestador llegan al agente sin pasar por ti.",
     );
 
     await React.act(async () => crear.click());
@@ -491,20 +512,23 @@ describe("equipo del proyecto", () => {
 });
 
 describe("página del proyecto", () => {
-  it("encabezado, pestañas y aviso del chat", async () => {
+  it("encabezado, pestañas y el chat", async () => {
     const el = await montar(
       React.createElement(ProyectoVista, {
         proyecto: proyecto(),
         seccion: "chat",
         maquinas: MAQUINAS,
         accion: async () => {},
+        chat: { mensajes: [], ordenes: [] },
       }),
     );
     const t = texto(el);
     expect(el.querySelector("h1")?.textContent).toBe("tienda-web");
     expect(t).toContain("E:\\proyectos\\tienda-web");
     expect(t).toContain("Alienware");
-    expect(t).toContain("El chat con el orquestador llega en el Prompt 38.");
+    expect(t).toContain("Todavía no hay mensajes.");
+    expect(t).not.toContain("Prompt 38");
+    expect(el.querySelector("textarea#chat-mensaje")).not.toBeNull();
     const actual = el.querySelector('a[aria-current="page"]');
     expect(actual?.textContent).toBe("Chat");
     expect(actual?.getAttribute("href")).toBe(
@@ -556,5 +580,155 @@ describe("página del proyecto", () => {
     expect(el.querySelector('nav[aria-label="Proyectos"]')).toBeNull();
     expect(el.querySelector("h1")).toBeNull();
     expect(texto(el)).not.toContain("Ir a la oficina");
+  });
+});
+
+describe("equipo: detener, aprobar solo y agregar agente (Prompt 38)", () => {
+  it("Detener pide confirmación en un diálogo propio", async () => {
+    const enviadas: string[] = [];
+    const el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto(),
+        accion: async (t: string) => {
+          enviadas.push(t);
+        },
+      }),
+    );
+    await React.act(async () => botonCon(el, "Detener")!.click());
+    const dialogo = el.querySelector('[role="alertdialog"]')!;
+    expect(dialogo).not.toBeNull();
+    expect(dialogo.getAttribute("aria-modal")).toBe("true");
+    expect(texto(dialogo as HTMLElement)).toContain(
+      "Se cierran las sesiones del orquestador y los agentes. La carpeta queda intacta y puedes reanudar después.",
+    );
+    // the focus starts on the safe button
+    expect(document.activeElement?.textContent).toBe("Cancelar");
+    await React.act(async () =>
+      botonCon(dialogo as HTMLElement, "Cancelar")!.click(),
+    );
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(enviadas).toEqual([]);
+
+    await React.act(async () => botonCon(el, "Detener")!.click());
+    // Escape closes it too
+    await React.act(async () => {
+      el.querySelector('[role="alertdialog"]')!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
+
+    await React.act(async () => botonCon(el, "Detener")!.click());
+    const d2 = el.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    await React.act(async () => botonCon(d2, "Detener")!.click());
+    expect(enviadas).toEqual(["detener"]);
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+
+  it("deteniendo y detenido: estados y Reanudar en detenido", async () => {
+    let el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto({ estado: "deteniendo" }),
+        accion: async () => {},
+      }),
+    );
+    expect(texto(el)).toContain("Deteniendo el equipo…");
+    expect(botonCon(el, "Detener")).toBeUndefined();
+    document.body.innerHTML = "";
+
+    el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto({
+          estado: "detenido",
+          equipo: [miembro({ estado: "detenido" })],
+        }),
+        accion: async () => {},
+      }),
+    );
+    expect(texto(el)).toContain("El equipo está detenido.");
+    expect(botonCon(el, "Reanudar")?.disabled).toBe(false);
+    expect(botonCon(el, "Detener")).toBeUndefined();
+    expect(botonCon(el, "Pausar el equipo")).toBeUndefined();
+    expect(texto(el)).toContain("Detenido");
+  });
+
+  it("el interruptor envía el valor contrario y explica qué hace", async () => {
+    const valores: boolean[] = [];
+    const el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto({ auto_aprobar: false }),
+        accion: async () => {},
+        autoAprobar: async (v: boolean) => {
+          valores.push(v);
+        },
+      }),
+    );
+    const sw = el.querySelector<HTMLButtonElement>('[role="switch"]')!;
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+    expect(texto(el)).toContain(
+      "Encendido: las órdenes del orquestador llegan al agente sin pasar por ti.",
+    );
+    await React.act(async () => sw.click());
+    expect(valores).toEqual([true]);
+  });
+
+  it("el interruptor muestra el detail si falla", async () => {
+    const el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto({ auto_aprobar: true }),
+        accion: async () => {},
+        autoAprobar: async () => {
+          throw new Error("El proyecto no existe.");
+        },
+      }),
+    );
+    const sw = el.querySelector<HTMLButtonElement>('[role="switch"]')!;
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+    await React.act(async () => sw.click());
+    expect(el.querySelector('[role="alert"]')?.textContent).toBe(
+      "El proyecto no existe.",
+    );
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("Agregar agente de código: formulario con modelo y esfuerzo", async () => {
+    const pedidos: unknown[] = [];
+    const el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto(),
+        accion: async () => {},
+        agregarAgente: async (c: unknown) => {
+          pedidos.push(c);
+        },
+      }),
+    );
+    await React.act(async () =>
+      botonCon(el, "Agregar agente de código")!.click(),
+    );
+    const selects = [...el.querySelectorAll("select")];
+    expect(selects).toHaveLength(2);
+    expect(selects[0].value).toBe("sonnet");
+    await React.act(async () => {
+      selects[0].value = "opus";
+      selects[0].dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await React.act(async () => botonCon(el, "Agregar")!.click());
+    expect(pedidos).toEqual([{ modelo: "opus", esfuerzo: "medium" }]);
+    // the form closes
+    expect(el.querySelectorAll("select")).toHaveLength(0);
+  });
+
+  it("con 4 agentes no se puede agregar otro", async () => {
+    const agentes = [1, 2, 3, 4].map((n) =>
+      miembro({ id: `a${n}`, rol: "agente", nombre: `agente-${n}`, orden: n }),
+    );
+    const el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto({ equipo: [miembro(), ...agentes] }),
+        accion: async () => {},
+      }),
+    );
+    expect(botonCon(el, "Agregar agente de código")?.disabled).toBe(true);
+    expect(texto(el)).toContain("Ya tiene 4 agentes de código, el máximo.");
   });
 });

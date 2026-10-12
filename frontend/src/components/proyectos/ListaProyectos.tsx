@@ -2,11 +2,14 @@
 
 /**
  * /proyectos (Prompt 37): the projects created from the office, with account,
- * machine, what they are doing, the team and the state. Refreshed every 3 s.
+ * machine, what they are doing, the team and the state. Prompt 38 adds the
+ * "Decisiones" block on top (orders waiting for approval). Refreshed every 3 s.
  */
 
 import Link from "next/link";
 import { useLectura } from "@/utils/useLectura";
+import { useAhora } from "./acciones";
+import { DecisionesVista } from "./Decisiones";
 import {
   enlaceProyecto,
   estadoDe,
@@ -14,6 +17,7 @@ import {
   nombreCuenta,
   resumenEquipo,
   type Maquina,
+  type Orden,
   type Proyecto,
 } from "./logica";
 import s from "./proyectos.module.css";
@@ -39,6 +43,9 @@ export interface PropsLista {
   proyectos: Proyecto[] | null;
   maquinas?: Maquina[] | null;
   error?: string | null;
+  /** Orders waiting for approval (GET /ordenes?estado=por_aprobar). */
+  ordenes?: Orden[] | null;
+  ahora?: number;
 }
 
 /** The page with its data given (tested with sample data). */
@@ -46,6 +53,8 @@ export function ListaVista({
   proyectos,
   maquinas = null,
   error = null,
+  ordenes = null,
+  ahora = 0,
 }: PropsLista) {
   return (
     <div className={s.pagina}>
@@ -67,6 +76,7 @@ export function ListaVista({
             </Link>
           </div>
         </header>
+        <DecisionesVista ordenes={ordenes} ahora={ahora} />
         {error && !proyectos && (
           <p className={s.avisoError} role="status">
             No se pudieron leer los proyectos ({error}); se reintenta solo.
@@ -129,7 +139,7 @@ export function ListaVista({
   );
 }
 
-/** The page with its reads: projects (3 s) and machines (30 s, for names). */
+/** The page with its reads: projects and orders (3 s), machines (30 s). */
 export default function ListaProyectos() {
   const api = useLectura<{ proyectos: Proyecto[] }>(
     "/api/v1/proyectos-creados",
@@ -139,11 +149,18 @@ export default function ListaProyectos() {
     "/api/v1/proyectos-creados/maquinas",
     30000,
   );
+  const ord = useLectura<{ ordenes: Orden[] }>(
+    "/api/v1/ordenes?estado=por_aprobar",
+    3000,
+  );
+  const ahora = useAhora();
   return (
     <ListaVista
       proyectos={api.datos?.proyectos ?? null}
       maquinas={maq.datos?.maquinas ?? null}
       error={api.error}
+      ordenes={ord.datos?.ordenes ?? null}
+      ahora={ahora}
     />
   );
 }

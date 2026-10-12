@@ -666,6 +666,391 @@
   gap: 10px;
 }
 
+/* -- orders and chat (Prompt 38) ------------------------------------------------ */
+
+.botonMorado,
+.botonPeligro {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: #ffffff;
+}
+
+.botonMorado {
+  background: var(--morado);
+  border: 1px solid var(--morado);
+}
+
+.botonMorado:hover:not(:disabled) {
+  background: #48318a;
+}
+
+.botonPeligro {
+  background: var(--rojo);
+  border: 1px solid var(--rojo);
+}
+
+.botonPeligro:hover:not(:disabled) {
+  background: #7f2316;
+}
+
+.botonMorado:disabled,
+.botonPeligro:disabled {
+  cursor: not-allowed;
+  background: var(--suave);
+  border-color: var(--borde);
+  color: var(--gris);
+}
+
+.botonTexto {
+  min-height: 44px;
+  align-self: flex-start;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--morado);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.botonMorado:focus-visible,
+.botonPeligro:focus-visible,
+.botonTexto:focus-visible,
+.chatLista:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.area {
+  min-height: 0;
+  padding: 10px 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.hora {
+  margin: 0;
+  font-size: 12px;
+  color: var(--gris);
+}
+
+/* order card */
+
+.orden {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid #c9bdea;
+  border-left: 4px solid var(--morado);
+  border-radius: 10px;
+  background: #ffffff;
+  min-width: 0;
+}
+
+.ordenPendiente {
+  background: var(--morado-suave);
+  border-color: var(--morado);
+}
+
+.ordenCabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.ordenTitulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--morado);
+  overflow-wrap: anywhere;
+}
+
+.ordenDatos {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--tinta-2);
+}
+
+.ordenEditada {
+  font-weight: 600;
+  color: var(--morado);
+}
+
+.ordenTexto {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--tinta);
+}
+
+.ordenRecortada {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+}
+
+.ordenNota {
+  margin: 0;
+  color: var(--tinta-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ordenNotaTitulo {
+  font-weight: 600;
+}
+
+.ordenFalla {
+  margin: 0;
+  color: var(--rojo);
+  font-weight: 500;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.decidir {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.decidirForm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.botonesOrden {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* chat */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chatLista {
+  list-style: none;
+  margin: 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(62vh, 680px);
+  max-height: min(62dvh, 680px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.burbujaMia,
+.burbujaOrq {
+  max-width: min(78%, 620px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  min-width: 0;
+}
+
+.burbujaMia {
+  align-self: flex-end;
+  background: var(--azul-suave);
+  border: 1px solid #b9cdf2;
+  border-bottom-right-radius: 4px;
+}
+
+.burbujaOrq {
+  align-self: flex-start;
+  background: var(--suave);
+  border: 1px solid var(--linea);
+  border-bottom-left-radius: 4px;
+}
+
+.burbujaMia .hora {
+  align-self: flex-end;
+}
+
+.burbujaAutor {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gris);
+}
+
+.burbujaMia .burbujaAutor {
+  color: var(--azul);
+}
+
+.burbujaTexto {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chatOrden {
+  align-self: stretch;
+  max-width: 720px;
+}
+
+.chatForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chatPie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+/* inbox of decisions over the list */
+
+.decisiones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 2px solid var(--morado);
+  border-radius: 12px;
+  background: var(--morado-suave);
+}
+
+.decisiones .subtitulo {
+  color: var(--morado);
+}
+
+.decision {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid #c9bdea;
+  border-left: 4px solid var(--morado);
+  border-radius: 10px;
+  background: #ffffff;
+  min-width: 0;
+}
+
+.decisionCabeza {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.decisionTexto {
+  margin: 0;
+  color: var(--tinta-2);
+  overflow-wrap: anywhere;
+}
+
+/* history of orders */
+
+.historial {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historialFila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+}
+
+.historialPendiente {
+  border-color: var(--morado);
+  border-left: 4px solid var(--morado);
+  padding-left: 9px;
+  background: var(--morado-suave);
+}
+
+.historialTitulo {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.historialResto {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* confirmation dialog */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(31, 35, 41, 0.45);
+}
+
+.dialogo {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--tinta);
+  box-shadow: 0 12px 40px rgba(31, 35, 41, 0.25);
+}
+
+.dialogoTexto {
+  margin: 0;
+  color: var(--tinta-2);
+}
+
+.dialogoBotones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 /* -- phones ---------------------------------------------------------------------- */
 
 @media (max-width: 699px) {
@@ -688,8 +1073,28 @@
   }
 
   .fila,
-  .miembro {
+  .miembro,
+  .historialFila {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .burbujaMia,
+  .burbujaOrq {
+    max-width: 92%;
+  }
+
+  .chatLista {
+    padding: 10px;
+  }
+
+  .orden,
+  .decision {
+    padding: 12px;
+  }
+
+  .botonesOrden > *,
+  .dialogoBotones > * {
+    flex: 1 1 auto;
   }
 
   .bloque {

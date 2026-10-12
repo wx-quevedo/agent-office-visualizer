@@ -2,7 +2,9 @@
  * Pure logic of the projects created from the office (Prompt 37): types of the
  * API, name validation, the folder that will be created, readable names of
  * model and effort, the state text and colour, and the body of the POST.
- * No React, no fetch: tested in tests/proyectos.test.tsx.
+ * Prompt 38 adds the chat with the orchestrator and its orders to the code
+ * agents (mixing, state texts, who decided, the body of approve/reject).
+ * No React, no fetch: tested in tests/proyectos.test.tsx and tests/chat.test.tsx.
  */
 
 // -- API (/api/v1/proyectos-creados) ------------------------------------------------
@@ -12,7 +14,14 @@ export type Plantilla = "web" | "unity" | "expo" | "vacia";
 export type Modelo = "opus" | "sonnet" | "haiku" | "fable";
 export type Esfuerzo = "low" | "medium" | "high" | "xhigh" | "max";
 export type EstadoProyecto =
-  "creando" | "activo" | "pausando" | "pausado" | "reanudando" | "error";
+  | "creando"
+  | "activo"
+  | "pausando"
+  | "pausado"
+  | "reanudando"
+  | "deteniendo"
+  | "detenido"
+  | "error";
 export type EstadoMiembro =
   "pendiente" | "activo" | "pausado" | "detenido" | "error";
 
@@ -198,6 +207,8 @@ const ESTADOS: Record<EstadoProyecto, EstadoVista> = {
   pausando: { texto: "Pausando", tono: "azul" },
   pausado: { texto: "En pausa", tono: "gris" },
   reanudando: { texto: "Reanudando", tono: "azul" },
+  deteniendo: { texto: "Deteniendo", tono: "azul" },
+  detenido: { texto: "Detenido", tono: "gris" },
   error: { texto: "Con error", tono: "rojo" },
 };
 
@@ -239,8 +250,12 @@ export function haciendoDe(
       return "Pausando el equipo…";
     case "reanudando":
       return "Reanudando el equipo…";
+    case "deteniendo":
+      return "Deteniendo el equipo…";
     case "pausado":
       return "En pausa";
+    case "detenido":
+      return "Detenido";
     case "activo":
       // Nadie trabaja: el equipo espera que alguien le escriba.
       return "En espera";
@@ -264,13 +279,19 @@ export function resumenEquipo(equipo: Miembro[]): string {
 export function accionesDe(estado: EstadoProyecto): {
   pausar: boolean;
   reanudar: boolean;
+  detener: boolean;
   ocupado: boolean;
 } {
   const ocupado =
-    estado === "creando" || estado === "pausando" || estado === "reanudando";
+    estado === "creando" ||
+    estado === "pausando" ||
+    estado === "reanudando" ||
+    estado === "deteniendo";
   return {
     pausar: estado === "activo" || estado === "error",
-    reanudar: estado === "pausado" || estado === "error",
+    reanudar:
+      estado === "pausado" || estado === "detenido" || estado === "error",
+    detener: estado === "activo" || estado === "pausado" || estado === "error",
     ocupado,
   };
 }
@@ -349,4 +370,213 @@ export function enlaceProyecto(id: string, seccion?: string): string {
   const q = new URLSearchParams({ id });
   if (seccion) q.set("seccion", seccion);
   return `/proyectos/ver?${q.toString()}`;
+}
+
+// -- chat and orders (Prompt 38) -------------------------------------------------------
+
+export type EstadoOrden =
+  | "por_aprobar"
+  | "aprobada"
+  | "rechazada"
+  | "en_curso"
+  | "terminada"
+  | "fallida";
+
+export type Dispositivo = "web" | "app" | "celular" | "pc";
+
+export interface Orden {
+  id: string;
+  proyecto_id: string;
+  proyecto: string;
+  numero: number;
+  agente: string;
+  texto_propuesto: string;
+  texto_final: string | null;
+  texto: string;
+  editada: boolean;
+  estimado: string | null;
+  dificultad: string | null;
+  estado: EstadoOrden;
+  motivo: string | null;
+  decidido_por: Dispositivo | "automatico" | null;
+  decidido: string | null;
+  resumen: string | null;
+  creado: string;
+  actualizado: string;
+}
+
+export interface Mensaje {
+  id: string;
+  autor: "washington" | "orquestador";
+  texto: string;
+  creado: string;
+}
+
+export interface Chat {
+  mensajes: Mensaje[];
+  ordenes: Orden[];
+}
+
+/** One element of the conversation: a bubble or an order card. */
+export type ItemChat =
+  | { tipo: "mensaje"; id: string; creado: string; mensaje: Mensaje }
+  | { tipo: "orden"; id: string; creado: string; orden: Orden };
+
+export const MAX_MENSAJE = 8000;
+export const MAX_MOTIVO = 500;
+
+function tiempo(iso: string): number {
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/**
+ * Messages and orders in chronological order by `creado`. Stable: on a tie
+ * the message goes first (the orchestrator explains, then proposes).
+ */
+export function mezclarChat(mensajes: Mensaje[], ordenes: Orden[]): ItemChat[] {
+  const items: ItemChat[] = [
+    ...mensajes.map((m): ItemChat => ({
+      tipo: "mensaje",
+      id: `m-${m.id}`,
+      creado: m.creado,
+      mensaje: m,
+    })),
+    ...ordenes.map((o): ItemChat => ({
+      tipo: "orden",
+      id: `o-${o.id}`,
+      creado: o.creado,
+      orden: o,
+    })),
+  ];
+  return items
+    .map((x, i) => ({ x, i }))
+    .sort(
+      (a, b) =>
+        tiempo(a.x.creado) - tiempo(b.x.creado) ||
+        (a.x.tipo === b.x.tipo ? 0 : a.x.tipo === "mensaje" ? -1 : 1) ||
+        a.i - b.i,
+    )
+    .map(({ x }) => x);
+}
+
+/**
+ * The read messages plus the ones sent from here that the read does not bring
+ * yet (by id), and the optimistic ones still on their way at the end.
+ */
+export function unirMensajes(
+  leidos: Mensaje[],
+  enviados: Mensaje[],
+  pendientes: Mensaje[] = [],
+): Mensaje[] {
+  const ids = new Set(leidos.map((m) => m.id));
+  return [...leidos, ...enviados.filter((m) => !ids.has(m.id)), ...pendientes];
+}
+
+/** Each read order replaced by the local answer when that one is newer. */
+export function unirOrdenes(
+  leidas: Orden[],
+  locales: Record<string, Orden>,
+): Orden[] {
+  return leidas.map((o) => {
+    const l = locales[o.id];
+    return l && tiempo(l.actualizado) >= tiempo(o.actualizado) ? l : o;
+  });
+}
+
+const ESTADOS_ORDEN: Record<EstadoOrden, EstadoVista> = {
+  por_aprobar: { texto: "Por aprobar", tono: "morado" },
+  aprobada: { texto: "Aprobada (en cola)", tono: "azul" },
+  rechazada: { texto: "Rechazada", tono: "gris" },
+  en_curso: { texto: "En curso", tono: "azul" },
+  terminada: { texto: "Terminada", tono: "verde" },
+  fallida: { texto: "Fallida", tono: "rojo" },
+};
+
+export function estadoOrden(estado: EstadoOrden): EstadoVista {
+  return ESTADOS_ORDEN[estado] ?? { texto: estado, tono: "gris" };
+}
+
+/** "Orden 3 para agente-2". */
+export function tituloOrden(o: Pick<Orden, "numero" | "agente">): string {
+  return `Orden ${o.numero} para ${o.agente}`;
+}
+
+/** Who decided the order, in words (null while nobody did). */
+export function quienDecidio(
+  por: Orden["decidido_por"] | undefined,
+): string | null {
+  switch (por) {
+    case "web":
+      return "Tú desde la web";
+    case "app":
+      return "Tú desde la app";
+    case "celular":
+      return "Tú desde el celular";
+    case "pc":
+      return "Tú desde la PC";
+    case "automatico":
+      return "Automático";
+    default:
+      return null;
+  }
+}
+
+/** Whether the order was edited when approving it. */
+export function fueEditada(o: Pick<Orden, "editada" | "texto_final">): boolean {
+  return o.editada || o.texto_final !== null;
+}
+
+/** Whether the text deserves "Ver la orden completa" (about 6 lines). */
+export function ordenLarga(texto: string): boolean {
+  return texto.split("\n").length > 6 || texto.length > 420;
+}
+
+/** The text in one line, cut at `max` characters (lists and inbox). */
+export function textoCorto(texto: string, max = 140): string {
+  const limpio = texto.trim().replace(/\s+/g, " ");
+  return limpio.length > max
+    ? `${limpio.slice(0, max - 1).trimEnd()}…`
+    : limpio;
+}
+
+/** Body of POST /ordenes/{id}/aprobar: `texto` only when it really changed. */
+export function cuerpoAprobar(
+  o: Pick<Orden, "texto_propuesto">,
+  texto?: string | null,
+): { texto?: string; dispositivo: "web" } {
+  const t = texto?.trim();
+  if (t && t !== o.texto_propuesto.trim())
+    return { texto: t, dispositivo: "web" };
+  return { dispositivo: "web" };
+}
+
+/** Body of POST /ordenes/{id}/rechazar; null when the reason is missing. */
+export function cuerpoRechazar(
+  motivo: string,
+): { motivo: string; dispositivo: "web" } | null {
+  const m = motivo.trim();
+  if (!m) return null;
+  return { motivo: m.slice(0, MAX_MOTIVO), dispositivo: "web" };
+}
+
+/** Orders of the project for the history, the newest first. */
+export function historialOrdenes(ordenes: Orden[]): Orden[] {
+  return [...ordenes].sort(
+    (a, b) => tiempo(b.creado) - tiempo(a.creado) || b.numero - a.numero,
+  );
+}
+
+/** Note over the chat when the team is not running, or null. */
+export function notaChat(estado: EstadoProyecto): string | null {
+  if (estado === "pausado")
+    return "El equipo está pausado: el orquestador leerá tus mensajes cuando lo reanudes.";
+  if (estado === "detenido")
+    return "El equipo está detenido: el orquestador leerá tus mensajes cuando lo reanudes.";
+  return null;
+}
+
+/** Number of code agents of the team. */
+export function cuantosAgentes(equipo: Miembro[]): number {
+  return equipo.filter((m) => m.rol === "agente").length;
 }
