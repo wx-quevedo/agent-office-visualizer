@@ -92,6 +92,8 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-12 | Los agentes de código arrancan con `crossSessionInbound: refuse` y el orquestador sin `SendMessage`, `ListAgents`, `Bash` ni `PowerShell` | Con `refuse` puesto por `--settings`, ninguna sesión de la máquina puede escribirle al agente; solo el monitor. Sin terminal, el orquestador no puede lanzar ni retomar otra sesión por su cuenta |
 | 2026-10-12 | Una orden en curso cuando se corta la sesión (pausar, detener, reinicio del monitor) se informa fallida y se le avisa al orquestador; no se repite sola. Lo aprobado en cola, los mensajes y lo pendiente de mandar al servidor se guardan y no se pierden | Repetirla sola podría duplicar trabajo que quedó a medias |
 | 2026-10-12 | Encender la aprobación automática vale solo para las órdenes nuevas; reanudar ya no manda saludo (quedan "En espera") | Lo que ya esperaba a Washington no se aprueba sin que lo vea; el saludo gastaba tokens y ensuciaba el chat |
+| 2026-10-12 | Los agentes de código del equipo se lanzan con `--permission-mode acceptEdits`: una vez aprobada la orden, editan archivos dentro de la carpeta del proyecto sin pedir permiso; los comandos de terminal siguen pidiéndolo. El orquestador queda en `default` | Decisión de Washington tras la prueba real: aprobar la orden ya es la decisión; pedir además cada escritura no aporta |
+| 2026-10-12 | Los permisos de las sesiones del equipo esperan la decisión de Washington 540 s (lo más que admite el hook), siempre en la web o la app, aunque esté en la PC; las sesiones normales siguen con su política y sus 90 s | Una sesión `claude -p` no tiene diálogo de permisos: si el hook no espera, Claude Code rechaza el permiso al instante |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -155,7 +157,16 @@ Ajustes:
 - Una sesión lanzada que el monitor informa viva pero que la oficina vio terminar se muestra "En espera" (estado 18, sin cierre ni aviso).
 - Un equipo activo y quieto dice "En espera" en Proyectos.
 Capturas en `docs/capturas/etapa-4/` |
-| 2026-10-12 | Etapa 4 (Prompt 38), chat y órdenes: backend con mensajes y órdenes (esquema 2 de `proyectos.db`), aprobación automática, Detener y agregar agente (commit `1ce3d5f`); monitor 0.5.0 de intermediario (commit `81ea71e`); web con Chat, tarjetas de orden, Equipo y Decisiones (commit `2f4bd42`). Falta la prueba real con prueba-37 después del despliegue |
+| 2026-10-12 | Etapa 4 (Prompt 38), chat y órdenes: backend con mensajes y órdenes (esquema 2 de `proyectos.db`), aprobación automática, Detener y agregar agente (commit `1ce3d5f`); monitor 0.5.0 de intermediario (commit `81ea71e`); web con Chat, tarjetas de orden, Equipo y Decisiones (commit `2f4bd42`). Prueba real abajo |
+| 2026-10-12 | Prueba real del Prompt 38 con prueba-37 (desplegado `206b394`, monitor 0.5.3).
+Paso a paso:
+- Desde el chat, el orquestador propuso la orden de hola.txt; quedó por aprobar, primera en Decisiones (API y bloque morado de la web) y en el contador.
+- La edité a "Prueba 38" y la aprobé: llegó solo al agente de prueba-37, que creó `E:\Agents\prueba-37\hola.txt` con la línea `Prueba 38`. El resultado volvió al orquestador, que supo que la orden se había editado.
+- Otra orden (adios.txt) rechazada con motivo: el orquestador recibió el motivo y no se creó el archivo.
+- Con el interruptor encendido, la orden de auto.txt pasó sola (decidió: automático); después se apagó.
+- Seguridad: pedido de usar `ListAgents`, `SendMessage`, la terminal o darle una orden a "visualizador-agentes"; el orquestador no tenía ninguna de esas vías y no salió nada. De los 75 procesos de Claude Code y VS Code de antes, solo cambiaron los dos de prueba-37 (los relanzó el monitor al actualizarse).
+Arreglos durante la prueba: monitor 0.5.1 (rol nuevo al retomar, citas que no son órdenes, `53895bb`), backend `64d7028` (permisos del equipo esperan la decisión), backend `ec57b85` y monitor 0.5.2 `fb35f26` (el orquestador sabe si la orden se editó), backend `0cddcc6` (540 s) y monitor 0.5.3 `206b394` (`acceptEdits`).
+Capturas 38-chat.png, 38-orden.png y 38-equipo.png en `docs/capturas/etapa-4/` |
 
 ## Cómo levantar
 
@@ -586,7 +597,14 @@ Regla de fondo: el agente de código nunca recibe una orden que Washington no ap
 - Máquina: `POST /maquinas/chat`, `/maquinas/ordenes` y `/maquinas/ordenes/{id}`. Encargos nuevos: mensaje, orden, rechazo, detener y agregar.
 - `/decisiones` pone las órdenes por aprobar primero (tipo "orden") y `decisiones_pendientes` las cuenta. La app iOS las muestra como "Orden" sin botones hasta que se actualice en una Mac.
 
-**Monitor 0.5.0:** colas por miembro, lo en curso y lo pendiente de mandar se guardan en `equipos.json`. El texto del turno se arma con lo que escribió la sesión principal (no sus subagentes).
+**Monitor 0.5.x:** colas por miembro, lo en curso y lo pendiente de mandar se guardan en `equipos.json`. El texto del turno se arma con lo que escribió la sesión principal (no sus subagentes).
+- 0.5.1: guarda una huella del rol de cada miembro y, si una sesión retomada nació con otro rol, le escribe el rol nuevo una sola vez. Un bloque `<orden>` citado entre comillas invertidas en una frase no es una orden, y una de relleno (`...`) tampoco.
+- 0.5.2: al pasarle el resultado de una orden editada, le dice al orquestador que Washington la editó y con qué texto la recibió el agente.
+- 0.5.3: los agentes de código con `--permission-mode acceptEdits`.
+
+**Hallazgos de la prueba real (Claude Code 2.1.296):**
+- `--resume` conserva el `--append-system-prompt` con el que nació la sesión e ignora uno nuevo (probado: una sesión nacida con la palabra clave ROJO y retomada con AZUL y luego VERDE solo citó ROJO). En cambio, `--permission-mode` sí se aplica al retomar. Por eso un cambio de rol se comunica con un mensaje (0.5.1), y Haiku lo acepta: escribió su primera orden apenas lo recibió.
+- Una sesión `claude -p` sin anfitrión de permisos rechaza al instante cualquier permiso que el hook no decida. El hook de la oficina no esperaba cuando Washington estaba en la PC (política solo_en_el_celular), así que el primer intento de escribir hola.txt falló. Ahora esas sesiones siempre esperan la decisión en la web o la app.
 
 **Web:** pestaña Chat con burbujas y la tarjeta morada de cada orden (Aprobar, Editar, Rechazar con motivo, Ver la orden completa); Equipo con historial, interruptor, Detener con confirmación y Agregar agente de código; bloque Decisiones arriba de la lista de Proyectos.
 
@@ -989,6 +1007,8 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 | iPhone bloqueado con 403 | El backend solo aceptaba localhost; se agregó el rango de Tailscale |
 | iPhone cargaba la página sin datos | Next.js en modo desarrollo bloqueaba sus recursos; se agregó `allowedDevOrigins` |
 | La PC dependía de Tailscale para ver la oficina | El frontend usa el host de la página para buscar el backend |
+| El orquestador de prueba-37 seguía diciendo que no podía dar órdenes después de actualizar el monitor | `--resume` conserva el rol de nacimiento: el monitor 0.5.1 le escribe el rol nuevo una vez al retomarlo |
+| El agente no pudo escribir hola.txt: permiso rechazado al instante | Una sesión `-p` no tiene diálogo; los permisos del equipo ahora siempre esperan la decisión en la web o la app (y los agentes editan su carpeta con `acceptEdits`) |
 | En Windows, la recarga del backend detiene el frontend | Pendiente: reiniciar `make dev` tras cambios de código del backend |
 | En Windows, la recarga automática del backend a veces se traba y sigue respondiendo el proceso viejo | Detener 3100/8100 y volver a `make dev-local` |
 | Peticiones a `localhost` tardan unos 2 s en Windows | `localhost` prueba IPv6 primero y uvicorn solo escucha IPv4; usar `127.0.0.1` |
@@ -1080,10 +1100,9 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington despliega el backend y la web (`bash despliegue/desplegar.sh`) y actualiza el monitor de la Alienware a la 0.5.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`).
-2. Prueba real del Prompt 38 con prueba-37: orden editada y aprobada (hola.txt con "Prueba 38"), orden rechazada con motivo, interruptor automático, y que el orquestador no alcance ninguna otra sesión. Capturas 38-chat.png, 38-orden.png y 38-equipo.png.
-3. App iOS (necesita una Mac): botones Aprobar y Rechazar para las órdenes en Decisiones.
-4. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
-5. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
-6. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
-7. Vigilar el disco del VPS (85 % usado).
+1. App iOS (necesita una Mac): botones Aprobar y Rechazar para las órdenes en Decisiones, y el chat del proyecto.
+2. Etapa 4, siguiente prompt: proyectos reales con equipo (más de un agente, órdenes en paralelo) y qué hacer con los comandos de terminal del agente (hoy piden permiso uno por uno).
+3. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
+4. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
+5. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
+6. Vigilar el disco del VPS (85 % usado).
