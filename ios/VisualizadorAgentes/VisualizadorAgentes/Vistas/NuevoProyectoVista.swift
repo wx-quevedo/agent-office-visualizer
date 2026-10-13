@@ -16,6 +16,7 @@ struct NuevoProyectoVista: View {
     @State private var orquestador = NuevoProyecto.Config(modelo: "opus", esfuerzo: "high")
     @State private var agentes = [NuevoProyecto.Config(modelo: "sonnet", esfuerzo: "medium")]
     @State private var autoAprobar = false
+    @State private var prueba = false
     @State private var editando: Int? // -1 orquestador, 0... agentes
     @State private var creando = false
     @State private var error: String?
@@ -34,6 +35,17 @@ struct NuevoProyectoVista: View {
                                 Text("Aprobar órdenes automáticamente").font(.system(size: 15))
                                 Text(autoAprobar ? "Encendido: las órdenes llegan al agente sin pasar por ti."
                                      : "Apagado: apruebas cada orden del orquestador al agente.")
+                                    .font(.system(size: 12)).foregroundStyle(Color.texto2)
+                            }
+                        }
+                        .tint(.verde)
+                        .padding(.horizontal, 14).padding(.vertical, 12)
+                    }
+                    Tarjeta {
+                        Toggle(isOn: $prueba) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Proyecto de prueba").font(.system(size: 15))
+                                Text("Sin avisos ni Decisiones; se detiene solo tras 30 min sin actividad. Se marca sola si el nombre empieza con \"prueba-\".")
                                     .font(.system(size: 12)).foregroundStyle(Color.texto2)
                             }
                         }
@@ -69,6 +81,8 @@ struct NuevoProyectoVista: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { cerrar() } } }
             .task { await leerMaquinas() }
+            // "prueba-..." marca la casilla sola (la misma regla que el servidor).
+            .onChange(of: LogicaAvisos.esNombrePrueba(nombre)) { _, esPrueba in if esPrueba { prueba = true } }
             .sheet(item: Binding(get: { editando.map(Editando.init) }, set: { editando = $0?.indice })) { e in
                 ElegirModelo(titulo: e.indice < 0 ? "Orquestador" : "Agente de código",
                              config: e.indice < 0 ? orquestador
@@ -240,7 +254,8 @@ struct NuevoProyectoVista: View {
         error = nil
         let cuerpo = NuevoProyecto(nombre: nombre.trimmingCharacters(in: .whitespaces), maquina: maquina, cuenta: cuenta,
                                    plantilla: plantilla, orquestador: orquestador,
-                                   agentes: Array(agentes.prefix(LogicaProyectos.maxAgentes)), auto_aprobar: autoAprobar)
+                                   agentes: Array(agentes.prefix(LogicaProyectos.maxAgentes)), auto_aprobar: autoAprobar,
+                                   prueba: prueba || LogicaAvisos.esNombrePrueba(nombre))
         Task {
             defer { creando = false }
             do {

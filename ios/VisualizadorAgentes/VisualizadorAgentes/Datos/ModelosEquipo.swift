@@ -38,6 +38,12 @@ struct ProyectoEquipo: Codable, Equatable, Identifiable, Sendable {
     var haciendo: String?
     var ordenes_por_aprobar: Int?
     var equipo: [Miembro]
+    /// Proyecto de prueba: sin avisos ni Decisiones; se detiene solo (Prompt 43).
+    var prueba: Bool?
+    /// La entrada de "Dónde quedamos" (`GET /proyectos`) de este proyecto, o null (Prompt 42).
+    var donde_quedamos_id: String?
+
+    var esPrueba: Bool { prueba ?? false }
 }
 
 struct ProyectosEquipoRespuesta: Codable, Equatable, Sendable {
@@ -72,6 +78,7 @@ struct NuevoProyecto: Codable, Equatable, Sendable {
     var orquestador: Config
     var agentes: [Config]
     var auto_aprobar: Bool
+    var prueba: Bool? = nil
 }
 
 // MARK: - Chat y órdenes
@@ -92,6 +99,9 @@ struct Orden: Codable, Equatable, Identifiable, Sendable {
     var texto_propuesto: String
     var texto_final: String?
     var texto: String
+    /// Título corto (Prompt 42); `titulo_propio` dice si lo escribió el orquestador.
+    var titulo: String?
+    var titulo_propio: Bool?
     var editada: Bool?
     var estimado: String?
     var dificultad: String?
@@ -102,6 +112,34 @@ struct Orden: Codable, Equatable, Identifiable, Sendable {
     var resumen: String?
     var creado: String
     var actualizado: String?
+}
+
+struct OrdenesRespuesta: Codable, Equatable, Sendable {
+    var ordenes: [Orden]
+}
+
+// MARK: - Avisos de los orquestadores (Prompt 43)
+
+/// Una orden por aprobar o la última pregunta del orquestador sin respuesta.
+struct AvisoOrquestador: Codable, Equatable, Identifiable, Sendable {
+    /// "orden:<id>" o "mensaje:<id>": estable, la misma pregunta no se anuncia dos veces.
+    var clave: String
+    var tipo: String // orden, pregunta
+    var proyecto_id: String
+    var proyecto: String
+    var maquina: String?
+    var cuenta: String?
+    var texto: String
+    var desde: String
+    var hace_s: Double?
+    var mensaje_id: String?
+    var orden: Orden?
+
+    var id: String { clave }
+}
+
+struct AvisosRespuesta: Codable, Equatable, Sendable {
+    var avisos: [AvisoOrquestador]
 }
 
 struct ChatRespuesta: Codable, Equatable, Sendable {

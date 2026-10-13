@@ -26,6 +26,13 @@ final class ModeloApp {
     private(set) var consumo: Consumo?
     private(set) var errorProyectos: String?
 
+    // Avisos de los orquestadores (Prompt 43): los que se pueden atender y el que se
+    // anuncia ahora (cada clave una sola vez).
+    private(set) var avisos: [AvisoOrquestador] = []
+    var avisoNuevo: AvisoOrquestador?
+    @ObservationIgnored private var ultimaLecturaAvisos: Date = .distantPast
+    @ObservationIgnored private var avisosLeidos = false
+
     // Datos en vivo
     private(set) var estado: EstadoOficina?
     private(set) var sinConexion = false
@@ -51,8 +58,11 @@ final class ModeloApp {
 
     var visibles: [Agente] { Logica.filtrar(agentes, cuenta: .todas, ahora: ahora) }
 
-    /// Insignia de Decisiones: el conteo de la bandeja que trae /agents/state.
-    var pendientes: Int { estado?.decisiones_pendientes ?? Logica.pendientes(visibles) }
+    /// Insignia de Decisiones: lo que tiene una acción posible (la bandeja del servidor,
+    /// que ya cuenta las órdenes, más las preguntas de los orquestadores).
+    var pendientes: Int {
+        LogicaAvisos.insignia(pendientes: estado?.decisiones_pendientes ?? Logica.pendientes(visibles), avisos: avisos)
+    }
 
     func agente(_ id: String) -> Agente? { agentes.first { $0.id == id } }
 
@@ -89,6 +99,9 @@ final class ModeloApp {
         estado = nil
         rutaOficina = []
         rutaProyectos = []
+        avisos = []
+        avisoNuevo = nil
+        avisosLeidos = false
         proyectosEquipo = nil
         proyectosMonitor = nil
         bloqueada = false
@@ -145,6 +158,7 @@ final class ModeloApp {
                 try? await api.presencia(cliente: cliente)
             }
             if configPermisos == nil { configPermisos = try? await api.configPermisos() }
+            if Date().timeIntervalSince(ultimaLecturaAvisos) >= 5 { await leerAvisos() }
             return true
         } catch ErrorAPI.sinSesion {
             sesionVencida()
@@ -208,9 +222,42 @@ final class ModeloApp {
         rutaProyectos = p.map { [RutaProyecto(id: $0.id, seccion: .donde)] } ?? []
     }
 
-    func abrirProyecto(equipo id: String, seccion: SeccionProyecto = .chat) {
+    func abrirProyecto(equipo id: String, seccion: SeccionProyecto = .chat, aviso: String? = nil) {
         pestana = .proyectos
-        rutaProyectos = [RutaProyecto(id: "e-" + id, seccion: seccion)]
+        rutaProyectos = [RutaProyecto(id: "e-" + id, seccion: seccion, aviso: aviso)]
+    }
+
+    // MARK: - Avisos de los orquestadores
+
+    /// Lee los avisos y anuncia (una vez) los que no se habían visto. En la primera
+    /// lectura solo se anotan, como la web al cargar la página.
+    func leerAvisos() async {
+        guard let api else { return }
+        ultimaLecturaAvisos = Date()
+        guard let lista = try? await api.avisosOrquestador() else { return }
+        avisos = lista
+        let r = LogicaAvisos.revisar(lista.map(\.clave), avisadas: LogicaAvisos.leerAvisadas(), primera: !avisosLeidos)
+        avisosLeidos = true
+        LogicaAvisos.guardarAvisadas(r.avisadas)
+        if let primera = r.nuevas.first, let a = lista.first(where: { $0.clave == primera }) {
+            avisoNuevo = a
+        }
+        if let n = avisoNuevo, !lista.contains(where: { $0.clave == n.clave }) { avisoNuevo = nil }
+    }
+
+    /// Responder: el chat del proyecto con la pregunta (o la orden) a la vista.
+    func responder(_ a: AvisoOrquestador) {
+        avisoNuevo = nil
+        abrirProyecto(equipo: a.proyecto_id, seccion: .chat, aviso: a.clave)
+    }
+
+    /// Ignorar o Esperar, guardado en el servidor.
+    func atender(_ a: AvisoOrquestador, _ accion: AccionAviso) async throws {
+        guard let api else { throw ErrorAPI.sinSesion }
+        if avisoNuevo?.clave == a.clave { avisoNuevo = nil }
+        try await api.accionAviso(a.clave, accion)
+        avisos.removeAll { $0.clave == a.clave }
+        await leerAvisos()
     }
 
     // MARK: - Proyectos

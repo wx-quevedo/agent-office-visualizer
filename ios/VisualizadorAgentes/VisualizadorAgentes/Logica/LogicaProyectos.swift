@@ -43,6 +43,8 @@ struct ProyectoLista: Identifiable, Equatable {
 struct RutaProyecto: Hashable {
     var id: String
     var seccion: SeccionProyecto
+    /// Clave del aviso que se responde ("mensaje:<id>" u "orden:<id>"): el chat la deja a la vista.
+    var aviso: String? = nil
 }
 
 enum SeccionProyecto: String, CaseIterable, Identifiable, Hashable {
@@ -109,9 +111,15 @@ enum LogicaProyectos {
         var usados = Set<String>()
         var salida: [ProyectoLista] = []
         for p in equipos {
-            let d = donde.first { v in
-                !usados.contains(v.id) && (LogicaDonde.mismaCarpeta(v.datos.carpeta, p.ruta)
-                    || (v.nombre.lowercased() == p.nombre.lowercased() && (v.datos.maquina == nil || v.datos.maquina == p.maquina)))
+            // Primero el id que da el servidor; por carpeta o por nombre solo si viene null.
+            let d: ProyectoVista?
+            if let idDonde = p.donde_quedamos_id {
+                d = donde.first { $0.datos.id == idDonde }
+            } else {
+                d = donde.first { v in
+                    !usados.contains(v.id) && (LogicaDonde.mismaCarpeta(v.datos.carpeta, p.ruta)
+                        || (v.nombre.lowercased() == p.nombre.lowercased() && (v.datos.maquina == nil || v.datos.maquina == p.maquina)))
+                }
             }
             if let d { usados.insert(d.id) }
             let sesiones = Set(p.equipo.compactMap(\.session_id))
@@ -259,6 +267,12 @@ enum LogicaProyectos {
     }
 
     static func tituloOrden(_ o: Orden) -> String { "Orden \(o.numero) para \(o.agente)" }
+
+    /// El título corto de la orden (Prompt 42), o "Orden N" si el servidor no lo trae.
+    static func tituloCorto(_ o: Orden) -> String {
+        let t = o.titulo?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return t.isEmpty ? "Orden \(o.numero)" : t
+    }
 
     /// "Estimado: 1 h a 1 h 30 min · dificultad 4 de 10".
     static func estimadoYDificultad(_ o: Orden) -> String? {

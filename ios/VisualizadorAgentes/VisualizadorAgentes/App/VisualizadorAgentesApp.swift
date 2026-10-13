@@ -58,6 +58,15 @@ struct Pestanas: View {
                 IdeasVista()
             }
         }
+        // El aviso de un orquestador sale una sola vez por mensaje, sobre cualquier pestaña.
+        .overlay(alignment: .top) {
+            if let a = modelo.avisoNuevo {
+                BannerAviso(aviso: a)
+                    .padding(.top, 4)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.default, value: modelo.avisoNuevo?.clave)
     }
 }
 

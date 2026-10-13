@@ -262,6 +262,27 @@ final class ClienteAPI: @unchecked Sendable {
                                                ["motivo": motivo, "dispositivo": "app"]))
     }
 
+    /// Solo las órdenes del proyecto (las más nuevas primero), sin los mensajes del chat.
+    func ordenes(_ id: String) async throws -> [Orden] {
+        let r: OrdenesRespuesta = try await leer("/api/v1/proyectos-creados/\(Self.ruta(id))/ordenes")
+        return r.ordenes
+    }
+
+    /// Marca o desmarca un proyecto de prueba.
+    func marcarPrueba(_ id: String, prueba: Bool) async throws -> ProyectoEquipo {
+        try Self.decodificar(try await cambiar("/api/v1/proyectos-creados/\(Self.ruta(id))/prueba", "POST", ["prueba": prueba]))
+    }
+
+    func avisosOrquestador() async throws -> [AvisoOrquestador] {
+        let r: AvisosRespuesta = try await leer("/api/v1/avisos-orquestador")
+        return r.avisos
+    }
+
+    /// Ignorar o Esperar un aviso (se guarda en el servidor).
+    func accionAviso(_ clave: String, _ accion: AccionAviso) async throws {
+        _ = try await cambiar("/api/v1/avisos-orquestador/\(accion.rawValue)", "POST", ["clave": clave])
+    }
+
     func reglasDe(_ id: String) async throws -> ReglasDeProyecto {
         try await leer("/api/v1/proyectos-creados/\(Self.ruta(id))/reglas")
     }

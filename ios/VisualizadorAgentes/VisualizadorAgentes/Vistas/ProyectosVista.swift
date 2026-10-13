@@ -13,7 +13,7 @@ struct ProyectosVista: View {
                 .navigationTitle("Proyectos")
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: RutaProyecto.self) { r in
-                    ProyectoDetalle(id: r.id, seccionInicial: r.seccion)
+                    ProyectoDetalle(id: r.id, seccionInicial: r.seccion, aviso: r.aviso)
                 }
                 .navigationDestination(for: String.self) { id in FichaVista(id: id) }
         }
@@ -101,6 +101,7 @@ struct FilaProyecto: View {
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Color.separador, in: RoundedRectangle(cornerRadius: 5))
                 Text(estado.texto).font(.system(size: 12, weight: .semibold)).foregroundStyle(estado.tono.color)
+                if proyecto.equipo?.esPrueba == true { EtiquetaPrueba() }
             }
         }
         .padding(14)
@@ -120,6 +121,7 @@ struct ProyectoDetalle: View {
     @Environment(ModeloApp.self) private var modelo
     let id: String
     let seccionInicial: SeccionProyecto
+    var aviso: String? = nil
     @State private var seccion: SeccionProyecto?
 
     var body: some View {
@@ -138,7 +140,7 @@ struct ProyectoDetalle: View {
                 }
                 switch actual {
                 case .chat:
-                    if let e = p.equipo { ChatProyecto(proyecto: e) }
+                    if let e = p.equipo { ChatProyecto(proyecto: e, destacar: aviso) }
                 case .equipo:
                     if let e = p.equipo { EquipoVista(proyecto: e, agentes: p.agentes) }
                 case .donde:
@@ -180,7 +182,10 @@ struct ProyectoDetalle: View {
 struct ChatProyecto: View {
     @Environment(ModeloApp.self) private var modelo
     let proyecto: ProyectoEquipo
+    /// Clave del aviso que se responde: el mensaje o la orden quedan a la vista.
+    var destacar: String? = nil
     @State private var chat: ChatRespuesta?
+    @State private var yaDestacado = false
     @State private var locales: [String: Orden] = [:]
     @State private var enviados: [MensajeChat] = []
     @State private var texto = ""
@@ -206,6 +211,7 @@ struct ChatProyecto: View {
                                     .frame(maxWidth: .infinity).padding(.top, 24)
                             }
                             ForEach(items) { item in fila(item).id(item.id) }
+                                .onAppear { mostrarAviso(lector) }
                         } else {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
                         }
@@ -216,7 +222,9 @@ struct ChatProyecto: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .defaultScrollAnchor(.bottom)
-                .onChange(of: items?.count) { lector.scrollTo("fin", anchor: .bottom) }
+                .onChange(of: items?.count) {
+                    if yaDestacado || destacar == nil { lector.scrollTo("fin", anchor: .bottom) } else { mostrarAviso(lector) }
+                }
             }
             barra
         }
@@ -239,8 +247,20 @@ struct ChatProyecto: View {
         return LogicaProyectos.mezclar(mensajes, ordenes)
     }
 
+    /// Responder: lleva a la pregunta (o la orden) y deja el campo listo para escribir.
+    private func mostrarAviso(_ lector: ScrollViewProxy) {
+        guard !yaDestacado, let objetivo = LogicaAvisos.itemChat(destacar),
+              items?.contains(where: { $0.id == objetivo }) == true else { return }
+        yaDestacado = true
+        DispatchQueue.main.async {
+            withAnimation { lector.scrollTo(objetivo, anchor: .center) }
+            if objetivo.hasPrefix("m-") { escribiendo = true }
+        }
+    }
+
     @ViewBuilder
     private func fila(_ item: LogicaProyectos.ItemChat) -> some View {
+        let resaltada = LogicaAvisos.itemChat(destacar) == item.id
         switch item {
         case .mensaje(let m):
             let mio = m.autor == "washington"
@@ -252,13 +272,13 @@ struct ChatProyecto: View {
                                                            bottomTrailingRadius: mio ? 4 : 16, topTrailingRadius: 16))
                     .overlay(UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: mio ? 16 : 4,
                                                     bottomTrailingRadius: mio ? 4 : 16, topTrailingRadius: 16)
-                        .strokeBorder(mio ? Color.clear : Color.borde))
+                        .strokeBorder(mio ? Color.clear : (resaltada ? Color.morado : Color.borde), lineWidth: resaltada ? 2 : 1))
                 Text(Logica.horaMinuto(m.creado)).font(.system(size: 11)).foregroundStyle(Color.texto2)
             }
             .frame(maxWidth: 330, alignment: mio ? .trailing : .leading)
             .frame(maxWidth: .infinity, alignment: mio ? .trailing : .leading)
         case .orden(let o):
-            TarjetaOrden(orden: o) { nueva in locales[nueva.id] = nueva }
+            TarjetaOrden(orden: o, resaltada: resaltada) { nueva in locales[nueva.id] = nueva }
         }
     }
 
@@ -364,6 +384,7 @@ struct EquipoVista: View {
     @State private var confirmarAuto = false
     @State private var agregar = false
     @State private var reglas = false
+    @State private var confirmarDetener = false
 
     var body: some View {
         let nAgentes = proyecto.equipo.filter { $0.rol == "agente" }.count
@@ -400,6 +421,20 @@ struct EquipoVista: View {
                     .disabled(ocupado)
                     .padding(.horizontal, 14).padding(.vertical, 12)
                 }
+                Tarjeta {
+                    Toggle(isOn: Binding(get: { proyecto.esPrueba }, set: { nuevo in
+                        accion { api in try await api.marcarPrueba(proyecto.id, prueba: nuevo) }
+                    })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Proyecto de prueba").font(.system(size: 15))
+                            Text("Sin avisos ni Decisiones; se detiene solo tras 30 min sin actividad.")
+                                .font(.system(size: 12)).foregroundStyle(Color.texto2)
+                        }
+                    }
+                    .tint(.verde)
+                    .disabled(ocupado)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                }
                 if let error { Text(error).font(.system(size: 13)).foregroundStyle(Color.rojo) }
                 HStack(spacing: 8) {
                     botonPausa
@@ -412,6 +447,16 @@ struct EquipoVista: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.top, 2)
+                if ["activo", "pausado", "error"].contains(proyecto.estado) {
+                    Button(role: .destructive) { confirmarDetener = true } label: {
+                        Text("Detener el equipo").font(.system(size: 15, weight: .medium)).foregroundStyle(Color.rojo)
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.bordeRojo))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(ocupado)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
@@ -429,6 +474,14 @@ struct EquipoVista: View {
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("Las órdenes del orquestador llegarán a los agentes sin pasar por ti. Los permisos peligrosos siguen pidiendo tu aprobación.")
+        }
+        .alert("Detener el equipo", isPresented: $confirmarDetener) {
+            Button("Detener", role: .destructive) {
+                accion { api in try await api.accionEquipo(proyecto.id, "detener") }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Se cierran el orquestador y los agentes de \(proyecto.nombre). Se puede reanudar después.")
         }
         .sheet(isPresented: $agregar) {
             AgregarAgente { modelo, esfuerzo in
@@ -486,7 +539,7 @@ struct EquipoVista: View {
                         Divider().overlay(Color.separador)
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text(Logica.horaMinuto(o.creado)).font(.mono(12)).foregroundStyle(Color.texto2).frame(width: 42, alignment: .leading)
-                            Text(Logica.recortar(MarkdownLigero.sinHTML(o.texto), 90)).font(.system(size: 14)).lineLimit(2)
+                            Text(Logica.recortar(MarkdownLigero.sinHTML(LogicaProyectos.tituloCorto(o)), 90)).font(.system(size: 14)).lineLimit(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Text(e.texto.prefix(1).uppercased() + e.texto.dropFirst())
                                 .font(.system(size: 12, weight: .semibold)).foregroundStyle(e.tono.color)
@@ -520,8 +573,8 @@ struct EquipoVista: View {
 
     private func leerOrdenes() async {
         guard let api = modelo.api else { return }
-        if let c = try? await api.chat(proyecto.id) {
-            ordenes = c.ordenes.sorted { (FechaISO.leer($0.creado) ?? .distantPast) > (FechaISO.leer($1.creado) ?? .distantPast) }
+        if let o = try? await api.ordenes(proyecto.id) {
+            ordenes = o.sorted { (FechaISO.leer($0.creado) ?? .distantPast) > (FechaISO.leer($1.creado) ?? .distantPast) }
         }
     }
 
@@ -575,5 +628,16 @@ struct AgregarAgente: View {
                 }
             }
         }
+    }
+}
+
+/// Etiqueta "Prueba" de los proyectos de prueba.
+struct EtiquetaPrueba: View {
+    var body: some View {
+        Text("Prueba")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Color.texto2)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.bordeCampo))
     }
 }

@@ -73,6 +73,8 @@ struct TextoMarkdown: View {
 struct TarjetaOrden: View {
     @Environment(ModeloApp.self) private var modelo
     let orden: Orden
+    /// Se llegó desde su aviso (Responder): la tarjeta se resalta.
+    var resaltada = false
     /// Lo que devolvió el servidor tras decidir (para mostrarlo al instante).
     var alCambiar: (Orden) -> Void = { _ in }
 
@@ -88,14 +90,16 @@ struct TarjetaOrden: View {
         let porAprobar = orden.estado == "por_aprobar"
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text("ORDEN PARA \(orden.agente.uppercased())")
+                Text("ORDEN \(orden.numero) PARA \(orden.agente.uppercased())")
                     .font(.system(size: 12, weight: .bold)).tracking(0.4)
                     .foregroundStyle(porAprobar ? Color.morado : Color.texto2)
                     .lineLimit(1)
                 Spacer(minLength: 6)
                 Text(estado.texto).font(.system(size: 12, weight: .medium)).foregroundStyle(estado.tono.color)
             }
-            Text("Orden \(orden.numero)").font(.system(size: 15, weight: .semibold))
+            Text(LogicaProyectos.tituloCorto(orden))
+                .font(.system(size: 15, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             TextoMarkdown(texto: orden.texto, tamano: 14, color: .texto3)
                 .lineLimit(completa ? nil : 6)
                 .frame(maxHeight: completa ? nil : 150, alignment: .top)
@@ -129,8 +133,11 @@ struct TarjetaOrden: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(porAprobar ? Color.morado : Color.borde, lineWidth: porAprobar ? 2 : 1))
+        .background(RoundedRectangle(cornerRadius: 17).fill(resaltada ? Color.bordeMorado : Color.clear).padding(-3))
         .alert("Rechazar la orden", isPresented: $rechazando) {
             TextField("Motivo", text: $motivo)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
             Button("Rechazar", role: .destructive) {
                 if let m = LogicaProyectos.motivoValido(motivo) { rechazar(m) } else { error = "Escribe el motivo para rechazarla." }
             }

@@ -354,6 +354,8 @@ struct ProyectoApi: Codable, Equatable, Sendable {
         var ultimo_turno: Turno?
     }
 
+    /// Id estable de la entrada (máquina y carpeta), el `donde_quedamos_id` de un proyecto con equipo.
+    var id: String?
     var carpeta: String
     var maquina: String?
     var tiene_project_md: Bool
@@ -368,12 +370,13 @@ struct ProyectoApi: Codable, Equatable, Sendable {
     var prompts_turnos: [PromptTurnos]?
 
     init(
-        carpeta: String, maquina: String? = nil, tiene_project_md: Bool = false,
+        id: String? = nil, carpeta: String, maquina: String? = nil, tiene_project_md: Bool = false,
         titulo: String? = nil, plan: [ItemPlan] = [], posicion: String? = nil,
         siguiente_paso: String? = nil, espera_decision: [String] = [],
         ultimo_commit: UltimoCommit? = nil, ultima_actividad: UltimaActividad? = nil,
         prompts: [PromptPlan]? = nil, prompts_turnos: [PromptTurnos]? = nil
     ) {
+        self.id = id
         self.carpeta = carpeta
         self.maquina = maquina
         self.tiene_project_md = tiene_project_md
@@ -390,6 +393,7 @@ struct ProyectoApi: Codable, Equatable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id)
         carpeta = try c.decode(String.self, forKey: .carpeta)
         maquina = try c.decodeIfPresent(String.self, forKey: .maquina)
         tiene_project_md = try c.decodeIfPresent(Bool.self, forKey: .tiene_project_md) ?? false

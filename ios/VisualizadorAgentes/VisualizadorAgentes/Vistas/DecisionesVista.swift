@@ -30,7 +30,9 @@ struct DecisionesVista: View {
 
                 if let b = bandeja {
                     let items = LogicaBandejas.ordenar(b.pendientes)
-                    if items.isEmpty {
+                    let preguntas = LogicaAvisos.preguntas(modelo.avisos)
+                    ForEach(preguntas) { a in TarjetaAviso(aviso: a) }
+                    if items.isEmpty && preguntas.isEmpty {
                         Tarjeta {
                             Text("Nada espera por ti ahora.")
                                 .font(.system(size: 15)).foregroundStyle(Color.texto2)
@@ -48,6 +50,9 @@ struct DecisionesVista: View {
                                         .font(.system(size: 13)).foregroundStyle(Color.texto2)
                                 }
                                 TarjetaOrden(orden: o) { _ in Task { await leer() } }
+                                if let a = LogicaAvisos.deOrden(modelo.avisos, o.id) {
+                                    BotonesAviso(aviso: a)
+                                }
                             }
                         } else {
                             tarjeta(d)
@@ -71,6 +76,8 @@ struct DecisionesVista: View {
         .onChange(of: modelo.pendientes) { Task { await leer() } }
         .alert("Rechazar el permiso", isPresented: Binding(get: { rechazando != nil }, set: { if !$0 { rechazando = nil } })) {
             TextField("Motivo (opcional)", text: $motivo)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
             Button("Rechazar", role: .destructive) {
                 if let d = rechazando { decidir(d, aprobar: false, motivo: motivo) }
                 rechazando = nil
@@ -305,5 +312,111 @@ struct DecisionesVista: View {
             await leer()
             await modelo.leerUnaVez()
         }
+    }
+}
+
+// MARK: - Avisos de los orquestadores (Prompt 43)
+
+/// La pregunta de un orquestador que nadie contestó, con Responder, Ignorar y Esperar.
+struct TarjetaAviso: View {
+    @Environment(ModeloApp.self) private var modelo
+    let aviso: AvisoOrquestador
+
+    var body: some View {
+        Tarjeta(borde: .bordeMorado, grosor: 1) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("ORQUESTADOR · \(aviso.proyecto.uppercased())")
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(Color.morado).lineLimit(1)
+                    Spacer()
+                    Text(Logica.tiempoCorto(Logica.segundosDesde(aviso.desde, ahora: modelo.ahora) ?? aviso.hace_s))
+                        .font(.system(size: 13)).foregroundStyle(Color.texto2)
+                }
+                Text("Te hizo una pregunta").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.texto2)
+                Text(aviso.texto).font(.system(size: 15)).fixedSize(horizontal: false, vertical: true)
+                BotonesAviso(aviso: aviso)
+            }
+            .padding(14)
+        }
+    }
+}
+
+/// Responder (al chat, con la pregunta o la orden a la vista), Ignorar y Esperar
+/// (hasta el siguiente mensaje del orquestador), guardados en el servidor.
+struct BotonesAviso: View {
+    @Environment(ModeloApp.self) private var modelo
+    let aviso: AvisoOrquestador
+    @State private var enviando = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                boton("Responder", lleno: true) { modelo.responder(aviso) }
+                boton("Ignorar") { atender(.ignorar) }
+                boton("Esperar") { atender(.esperar) }
+            }
+            .disabled(enviando)
+            .opacity(enviando ? 0.6 : 1)
+            if let error { Text(error).font(.system(size: 12)).foregroundStyle(Color.rojo) }
+        }
+    }
+
+    private func boton(_ t: String, lleno: Bool = false, accion: @escaping () -> Void) -> some View {
+        Button(action: accion) {
+            Text(t)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .foregroundStyle(lleno ? Color.white : Color.texto)
+                .background(lleno ? Color.acento : Color.white, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(lleno ? Color.clear : Color.grisBoton))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(t == "Esperar" ? "Se silencia hasta el siguiente mensaje del orquestador" : "")
+    }
+
+    private func atender(_ accion: AccionAviso) {
+        enviando = true
+        error = nil
+        Task {
+            defer { enviando = false }
+            do {
+                try await modelo.atender(aviso, accion)
+            } catch let e as ErrorAPI {
+                error = e.mensaje
+            } catch {}
+        }
+    }
+}
+
+/// El aviso nuevo, una sola vez por mensaje, arriba de cualquier pestaña.
+struct BannerAviso: View {
+    @Environment(ModeloApp.self) private var modelo
+    let aviso: AvisoOrquestador
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: aviso.tipo == "orden" ? "doc.text" : "questionmark.bubble")
+                .font(.system(size: 18, weight: .semibold)).foregroundStyle(Color.morado)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(LogicaAvisos.titulo(aviso)).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                Text(Logica.recortar(aviso.texto, 140)).font(.system(size: 13)).foregroundStyle(Color.texto3).lineLimit(2)
+                Button("Responder") { modelo.responder(aviso) }
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.acento)
+                    .padding(.top, 2)
+            }
+            Spacer(minLength: 0)
+            Button { modelo.avisoNuevo = nil } label: {
+                Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.texto2)
+                    .frame(width: 32, height: 32)
+            }
+            .accessibilityLabel("Cerrar el aviso")
+        }
+        .padding(12)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.bordeMorado))
+        .shadow(color: .black.opacity(0.12), radius: 14, y: 4)
+        .foregroundStyle(Color.texto)
+        .padding(.horizontal, 12)
     }
 }
