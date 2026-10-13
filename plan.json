@@ -1244,7 +1244,7 @@
           "id": "P46",
           "type": "prompt",
           "title": "Chat vivo y notificaciones nativas en el iPhone",
-          "status": "in_progress",
+          "status": "done",
           "estimate_min": [120, 180],
           "difficulty": 6,
           "work_log": [
@@ -1261,7 +1261,7 @@
               "note": "Revisión"
             }
           ],
-          "summary": "Código listo (530f96b); falta la prueba real y la instalación",
+          "summary": "Chat vivo (Enviado, Leído, tres puntos y texto en vivo por SSE) y notificaciones nativas probados en el simulador; build 317 instalado en el iPhone",
           "steps": [],
           "notes": "Trabajado en la Mac: sus sesiones no están en la Alienware, así que no tiene tramos del agente. Pendiente: correr tiempos desde la Mac."
         },
