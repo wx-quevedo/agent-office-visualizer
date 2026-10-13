@@ -454,11 +454,35 @@ export interface Mensaje {
   autor: "washington" | "orquestador";
   texto: string;
   creado: string;
+  /**
+   * Washington's messages (Prompt 45): sent, read by the orchestrator or being
+   * answered. Null for the orchestrator's; missing with an older backend.
+   */
+  estado?: EstadoMensaje | null;
+  /** When the orchestrator read it (ISO), null while it did not. */
+  leido?: string | null;
+}
+
+export type EstadoMensaje = "enviado" | "leido" | "respondiendo";
+
+/**
+ * Answer of the orchestrator in progress (Prompt 45). "respondiendo" with an
+ * empty `parcial` is working without text yet; `parcial` is the markdown of
+ * the answer as it grows. "libre": no answer in progress.
+ */
+export interface EnVivo {
+  estado: "libre" | "leido" | "respondiendo";
+  parcial: string;
+  mensaje_id: string | null;
+  desde: string | null;
+  actualizado: string | null;
 }
 
 export interface Chat {
   mensajes: Mensaje[];
   ordenes: Orden[];
+  /** Live state of the answer (Prompt 45); missing with an older backend. */
+  en_vivo?: EnVivo;
 }
 
 /** One element of the conversation: a bubble or an order card. */

@@ -10,6 +10,11 @@
  * Prompt 43: `aviso` (from "Responder" of an orchestrator alert) scrolls to
  * that message or order and marks it for a moment; for a message the text
  * field gets the focus, ready to answer.
+ * Prompt 45: under each of Washington's bubbles "Enviado" and then "Leído";
+ * while the orchestrator answers, a bubble of his at the end with three dots
+ * or the text as it is written (`enVivo`, from useChatEnVivo). The recent
+ * messages of the live state join the read ones by id, so the final answer
+ * replaces the partial one in the same render.
  */
 
 import { objetivoAviso } from "@/components/avisos/logicaOrquestador";
@@ -29,10 +34,12 @@ import {
   unirMensajes,
   unirOrdenes,
   type Chat,
+  type EnVivo,
   type Mensaje,
   type Orden,
   type Proyecto,
 } from "./logica";
+import { burbujaEnVivo, marcaMensaje, unirRecientes } from "./logicaEnVivo";
 import { Markdown } from "./Markdown";
 import { TarjetaOrden } from "./TarjetaOrden";
 import s from "./proyectos.module.css";
@@ -61,6 +68,10 @@ export interface PropsChat {
   ordenesLocales?: Record<string, Orden>;
   /** Alert opened with "Responder": "mensaje:<id>" or "orden:<id>". */
   aviso?: string | null;
+  /** Live state of the answer (useChatEnVivo); else `chat.en_vivo`. */
+  enVivo?: EnVivo | null;
+  /** Last messages of the live state, fresher than `chat.mensajes`. */
+  recientes?: Mensaje[];
 }
 
 export function ChatVista({
@@ -71,6 +82,8 @@ export function ChatVista({
   cambioOrden,
   ordenesLocales,
   aviso = null,
+  enVivo = null,
+  recientes,
 }: PropsChat) {
   const [enviados, setEnviados] = useState<Mensaje[]>([]);
   const [pendientes, setPendientes] = useState<Mensaje[]>([]);
@@ -86,18 +99,25 @@ export function ChatVista({
   const [avisoVisto, setAvisoVisto] = useState<string | null>(null);
 
   const locales = { ...propias, ...ordenesLocales };
-  const items = chat
-    ? mezclarChat(
-        unirMensajes(chat.mensajes, enviados, pendientes),
-        unirOrdenes(chat.ordenes, locales),
+  const mensajes = chat
+    ? unirMensajes(
+        unirRecientes(chat.mensajes, recientes),
+        enviados,
+        pendientes,
       )
     : [];
+  const items = chat
+    ? mezclarChat(mensajes, unirOrdenes(chat.ordenes, locales))
+    : [];
   const ultimo = items.length ? items[items.length - 1].id : "";
+  const vivo = burbujaEnVivo(enVivo ?? chat?.en_vivo, mensajes);
+  const largoVivo = vivo ? (vivo.tipo === "texto" ? vivo.texto.length : 0) : -1;
 
+  // Follows new items and the partial text as it grows (when at the end).
   useLayoutEffect(() => {
     const el = lista.current;
     if (el && abajo.current) el.scrollTop = el.scrollHeight;
-  }, [items.length, ultimo]);
+  }, [items.length, ultimo, largoVivo]);
 
   // The alert's message or order: scroll the list to it once it is there.
   const idAviso = itemDeAviso(aviso);
@@ -197,13 +217,13 @@ export function ChatVista({
           No se pudo leer el chat ({error}); se reintenta solo.
         </p>
       )}
-      {chat && items.length === 0 && (
+      {chat && items.length === 0 && !vivo && (
         <p className={s.aviso}>
           Todavía no hay mensajes. Cuéntale al orquestador qué quieres hacer y
           él reparte el trabajo entre los agentes de código.
         </p>
       )}
-      {items.length > 0 && (
+      {(items.length > 0 || vivo) && (
         <ol
           ref={lista}
           className={s.chatLista}
@@ -231,6 +251,7 @@ export function ChatVista({
             const m = x.mensaje;
             const mio = m.autor === "washington";
             const pendiente = idsPendientes.has(m.id);
+            const marca = marcaMensaje(m, pendiente);
             return (
               <li
                 key={x.id}
@@ -259,10 +280,42 @@ export function ChatVista({
                   ) : (
                     <time dateTime={m.creado}>{horaMinuto(m.creado)}</time>
                   )}
+                  {marca && !pendiente && (
+                    <span className={s.marca} data-marca={marca}>
+                      {marca}
+                    </span>
+                  )}
                 </span>
               </li>
             );
           })}
+          {vivo && (
+            <li
+              key="en-vivo"
+              data-en-vivo={vivo.tipo}
+              className={s.burbujaOrq}
+              aria-busy="true"
+              aria-live="off"
+            >
+              <span className={s.burbujaAutor}>Orquestador</span>
+              {vivo.tipo === "texto" ? (
+                <>
+                  <Markdown texto={vivo.texto} />
+                  <span className={s.hora}>Escribiendo…</span>
+                </>
+              ) : (
+                <span
+                  className={s.puntos}
+                  role="img"
+                  aria-label="El orquestador está escribiendo"
+                >
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              )}
+            </li>
+          )}
         </ol>
       )}
       {error && chat && (

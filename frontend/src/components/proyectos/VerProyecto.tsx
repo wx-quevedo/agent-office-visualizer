@@ -23,6 +23,7 @@ import DondeQuedamos from "@/components/donde/DondeQuedamos";
 import { useLectura } from "@/utils/useLectura";
 import { enviarJson, mensajeDe, useAhora } from "./acciones";
 import { ChatVista } from "./Chat";
+import { useChatEnVivo, type DatosEnVivo } from "./useChatEnVivo";
 import Dialogo from "./Dialogo";
 import { Estado, nombreMaquina } from "./ListaProyectos";
 import { ReglasProyectoVista } from "./Reglas";
@@ -526,6 +527,8 @@ export interface PropsVista {
   /** Chat of the project (messages and orders), null while it is read. */
   chat?: Chat | null;
   errorChat?: string | null;
+  /** Live state of the chat (Prompt 45): answer in progress and recent messages. */
+  vivo?: DatosEnVivo | null;
   ahora?: number;
   autoAprobar?: (activo: boolean) => Promise<void>;
   agregarAgente?: (c: ConfigModelo) => Promise<void>;
@@ -549,6 +552,7 @@ export function ProyectoVista({
   accion,
   chat = null,
   errorChat = null,
+  vivo = null,
   ahora = 0,
   autoAprobar,
   agregarAgente,
@@ -623,6 +627,8 @@ export function ProyectoVista({
                 cambioOrden={cambioOrden}
                 ordenesLocales={locales}
                 aviso={aviso}
+                enVivo={vivo?.enVivo}
+                recientes={vivo?.recientes}
               />
             )}
             {seccion === "equipo" && (
@@ -649,7 +655,8 @@ export function ProyectoVista({
 
 /**
  * The page with its reads: project, chat and rules of the project (3 s),
- * machines (30 s).
+ * machines (30 s), and the live state of the chat (Server-Sent Events,
+ * useChatEnVivo) while the Chat section is open.
  */
 export default function VerProyecto() {
   const params = useSearchParams();
@@ -665,6 +672,7 @@ export default function VerProyecto() {
     base && seccion !== "donde" ? `${base}/chat` : null,
     3000,
   );
+  const vivo = useChatEnVivo(id && seccion === "chat" ? id : null);
   const maq = useLectura<{ maquinas: Maquina[] }>(
     "/api/v1/proyectos-creados/maquinas",
     30000,
@@ -741,6 +749,7 @@ export default function VerProyecto() {
         accion={accion}
         chat={chat.datos}
         errorChat={chat.error}
+        vivo={vivo}
         ahora={ahora}
         autoAprobar={autoAprobar}
         agregarAgente={agregarAgente}
