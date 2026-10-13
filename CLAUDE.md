@@ -53,6 +53,8 @@ See `.claude/skills/*/SKILL.md` for details.
 
 **Commit after every batch of work:** Always commit after completing each logical unit.
 
+**Test projects:** when you (or another agent) create a project with a team only to test something, always name it `prueba-<algo>` (the server then marks it as a test project: no alerts, no Decisiones, and it stops itself after 30 min without activity) and stop it (Detener) when you finish.
+
 **Use subagents for validation:** Spawn a Bash subagent to run `make checkall` and commit:
 ```
 "Run 'make checkall' from the project root. If successful, commit with message: '<message>'"

@@ -105,6 +105,10 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-12 | Cada entrada de "Dónde quedamos" (`GET /proyectos`) tiene un `id` estable (máquina y carpeta normalizada) y cada proyecto con equipo devuelve `donde_quedamos_id` con esa entrada, o null | La app los unía por carpeta o por nombre; ahora la unión la hace el servidor, igual que la comparación de carpetas del resto de la oficina |
 | 2026-10-12 | Las sesiones del equipo se lanzan con `--system-prompt-snapshot off` cuando Claude Code es 2.1.257 o posterior (el monitor lo comprueba con `claude --version`); el aviso de rol queda solo como respaldo para versiones anteriores | Probado con Claude real: una sesión retomada sin la opción respondió con su rol de nacimiento y con la opción, con el rol nuevo, sin ningún aviso |
 | 2026-10-12 | El rol del orquestador dice que Washington es la persona con quien habla y que nunca se presenta con su nombre; el saludo le pide presentarse como el orquestador del proyecto | Con Haiku se presentó dos veces como "Washington" (Prompt 41); con el texto nuevo, 6 de 6 saludos reales fueron correctos |
+| 2026-10-12 | Los avisos de los orquestadores los arma el servidor a partir del chat (`GET /avisos-orquestador`): una orden por aprobar o la última pregunta del orquestador sin respuesta de Washington, cada uno con una clave estable (`orden:<id>` o `mensaje:<id>`). Cada aviso trae Responder, Ignorar y Esperar; Ignorar y Esperar se guardan en el servidor (tabla `avisos_orquestador`) | Así el aviso existe solo si hay algo que hacer, vale igual en la web y en la app, y la misma pregunta no se vuelve a anunciar porque la clave no cambia. El aviso viejo salía del estado 14 de la sesión, que no se puede contestar desde la ficha y en el que un orquestador queda indefinidamente |
+| 2026-10-12 | Esperar silencia el aviso hasta el siguiente mensaje del orquestador (guarda el id de su último mensaje); Ignorar descarta ese aviso para siempre. La notificación del navegador y la voz suenan una sola vez por clave (recordadas en el navegador) | Pedido del Prompt 43; con la clave por mensaje, "una vez por mensaje" no depende de temporizadores |
+| 2026-10-12 | Decisiones ya no lista las preguntas de las sesiones del equipo (no se podían contestar desde ahí) ni nada de proyectos de prueba; `decisiones_pendientes` tampoco las cuenta | Para eso están los avisos del orquestador, que llevan al chat. La insignia de la app contaba esperas que no tenían acción |
+| 2026-10-12 | Proyectos de prueba: campo `prueba` (casilla en Nuevo proyecto e interruptor en Equipo); un nombre que empieza con "prueba-" lo marca solo, también los existentes (migración 5). No avisan, no entran en Decisiones y se detienen solos tras 30 min sin actividad del equipo; el chat funciona igual | prueba-39 avisaba como un proyecto real. La detención la hace el servidor cuando el monitor consulta sus encargos, así no hizo falta cambiar el monitor |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -202,6 +206,14 @@ Prueba real con Claude (Haiku, esfuerzo bajo) y un monitor de prueba con el cód
 - Presentación: 6 de 6 saludos reales dijeron "Hola, Washington. Soy el orquestador del proyecto …".
 - Web y backend locales: el orquestador propuso la primera orden con su título ("Fase 1 · Prompt 1: crear proyecto Next.js base", `titulo_propio: true`); `donde_quedamos_id` coincidió con el `id` de su entrada en `GET /proyectos`.
 Captura 42-orden-titulo.png en `docs/capturas/etapa-4/` |
+| 2026-10-12 | Etapa 4 (Prompt 43), avisos de los orquestadores que se pueden atender y proyectos de prueba: backend con esquema 5 (`proyectos.prueba` y `avisos_orquestador`), `GET /avisos-orquestador`, Ignorar y Esperar, detención de las pruebas inactivas y Decisiones sin preguntas del equipo ni pruebas (commit `b9253ce`); web con la pila de avisos (Responder, Ignorar, Esperar) en Proyectos y la oficina, el chat que resalta la pregunta y deja el campo listo, la casilla y la etiqueta "Prueba", y los avisos de voz que ya no anuncian sesiones del equipo (`733e644`). El monitor no cambió (sigue 0.7.1). Diagnóstico en "Avisos de los orquestadores".
+Prueba real en local (localhost:3100 y 8100) con un monitor de prueba y Claude (Haiku), con dos proyectos creados por la API: avisos-43 (normal) y prueba-43 (marcado solo por el nombre).
+- Los dos orquestadores saludaron con preguntas; `GET /avisos-orquestador` devolvió un solo aviso, el de avisos-43, y la web lo mostró una vez con los tres botones.
+- Responder abrió el chat de avisos-43 con la pregunta a la vista y el campo con el foco; la respuesta llegó y el orquestador contestó con otra pregunta, que generó un aviso nuevo.
+- Esperar lo quitó (también al recargar: el servidor devolvió la lista vacía) hasta que el orquestador escribió otra pregunta, y entonces volvió a salir. Ignorar lo descartó.
+- prueba-43 tuvo su pregunta en el chat y ningún aviso.
+- Pruebas automáticas: backend 457 (9 nuevas en `test_avisos_orquestador.py`; fallan solo las 3 viejas de `path_utils`), web 307 (15 nuevas en `avisos-orquestador.test.tsx`).
+Capturas 43-aviso-botones.png, 43-responder.png y 43-prueba-silenciosa.png en `docs/capturas/etapa-4/` |
 
 ## Cómo levantar
 
@@ -632,7 +644,7 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
 
 **Rol al retomar (Prompt 42, monitor 0.7.1):** con Claude Code 2.1.257 o posterior, las sesiones se lanzan con `--system-prompt-snapshot off`: el system prompt se arma de nuevo en cada pedido, también al retomar, así que una sesión retomada toma el `--append-system-prompt` vigente y el monitor solo pone al día la huella del rol. Con una versión anterior (o si no puede leer la versión), sigue mandando el aviso de rol del Prompt 38.
 
-**Datos nuevos para la app (Prompt 43, sin cambiar ios/ todavía):**
+**Datos nuevos para la app (Prompts 42 y 43; la app iOS los usará en el Prompt 44, en la Mac):**
 - **Órdenes** (en `GET /proyectos-creados/{id}/chat`, `GET /proyectos-creados/{id}/ordenes`, `GET /ordenes` y el campo `orden` de `GET /decisiones`):
   - `titulo`: título corto para la tarjeta, como en el boceto Chat;
   - `titulo_propio`: `true` si lo escribió el orquestador, `false` si se sacó de la primera línea del texto.
@@ -642,6 +654,15 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
   - `GET /proyectos` trae un `id` en cada entrada;
   - `GET /proyectos-creados` y `GET /proyectos-creados/{id}` traen `donde_quedamos_id` (o `null` mientras el monitor no haya informado ese PROJECT.md).
   - La app debe unir por ese id y dejar de comparar carpeta o nombre.
+- **Avisos de los orquestadores (Prompt 43):**
+  - `GET /avisos-orquestador`: `{"avisos": [...]}` ordenados del más viejo al más nuevo. Cada uno trae `clave` (`orden:<id>` o `mensaje:<id>`), `tipo` (`orden` o `pregunta`), `proyecto_id`, `proyecto`, `maquina`, `cuenta`, `texto` (la pregunta o "Orden N para agente: <titulo>"), `desde`, `hace_s`, `mensaje_id` (en preguntas) y `orden` (la orden completa, en órdenes). Ya vienen sin los ignorados, los que esperan y los de proyectos de prueba.
+  - `POST /avisos-orquestador/ignorar` y `POST /avisos-orquestador/esperar` con `{"clave": "..."}`. Ignorar lo descarta; Esperar lo silencia hasta el siguiente mensaje del orquestador.
+  - Responder: para `pregunta`, abrir el chat del proyecto en ese mensaje con el campo listo; para `orden`, mostrar la tarjeta de la orden con Aprobar, Editar y Rechazar.
+  - Push: una sola notificación por `clave`.
+- **Proyectos de prueba (Prompt 43):**
+  - `prueba` (bool) en `GET /proyectos-creados` y `GET /proyectos-creados/{id}`; `POST /proyectos-creados` acepta `prueba` (si falta, se marca solo cuando el nombre empieza con "prueba-").
+  - `POST /proyectos-creados/{id}/prueba` con `{"prueba": true|false}` para cambiarlo.
+  - Las órdenes traen `proyecto_prueba`. `GET /decisiones` ya no trae las preguntas de las sesiones del equipo ni nada de proyectos de prueba, y `decisiones_pendientes` (en `/agents/state`) tampoco las cuenta.
 
 **Markdown en el chat:** los mensajes del orquestador se muestran con formato (negritas, cursivas, código, listas, encabezados, citas y enlaces); los de Washington siguen como texto plano.
 
@@ -649,6 +670,20 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
 - `git status`, `git diff`, `git log` y consultas como `node --version` ya son de solo lectura para Claude Code: nunca piden permiso, estén o no en la lista. Para probar la lista hace falta un comando que ejecute algo (`node -p 1+1` sí pidió permiso).
 - Las sesiones del equipo también usan las 629 reglas de permiso de la configuración de usuario (por ejemplo `Bash(npm run:*)`): lo que Washington ya permitió en general corre sin preguntar también en los proyectos. Queda como pendiente de seguridad.
 - La primera vez que se apagó una regla desde la web el cambio no quedó guardado (el servidor respondió una página HTML en ese momento); al repetirlo funcionó. Si vuelve a pasar, revisar el registro del VPS.
+
+## Avisos de los orquestadores (etapa 4, Prompt 43)
+
+**Qué se repetía (diagnóstico):** en la web, la espera de un orquestador aparecía en varios lugares:
+- Avisos de voz y notificaciones de Windows (`avisos/deteccion.ts`): avisaban cada vez que una sesión entraba al estado 14 ("Te espera: respuesta") y, mientras siguiera ahí, recordaban cada 5 min ("Sigue esperando: …"). Como el orquestador cierra casi todos sus turnos con una pregunta, quedaba en 14 indefinidamente y el recordatorio no paraba. Este era el aviso que se repetía.
+- No había cómo filtrarlo ni atenderlo: el filtro de pruebas comparaba "prueba-" contra el `session_id` (un UUID), así que nunca reconocía prueba-39; y el clic en la notificación abría la ficha del agente, donde una sesión `-p` del equipo no se puede contestar.
+- Decisiones (backend) sumaba las sesiones del equipo en 14 como "pregunta" de solo lectura y las contaba en `decisiones_pendientes`, la insignia de la app.
+- Otros lugares solo informan y no avisan: la marca "Te hizo una pregunta" de "Dónde quedamos", la burbuja de la oficina, la ficha del agente y el texto "haciendo" de Proyectos.
+
+**Cómo queda:**
+- Los avisos de voz y Windows de siempre ya no anuncian sesiones del equipo ni proyectos "prueba-"; sus esperas las cubren los avisos del orquestador.
+- Pila de avisos abajo a la derecha en Proyectos y en la oficina (2D y 3D, no en el modo app): proyecto, qué pasó, la pregunta o la orden, hace cuánto, y Responder, Ignorar y Esperar. Consulta el servidor cada 5 s; la notificación y la voz salen una vez por clave.
+- Responder abre `/proyectos/ver?id=…&seccion=chat&aviso=<clave>`: el chat lleva el mensaje a la vista, lo resalta 4 s y pone el foco en el campo; para una orden, lleva y resalta su tarjeta con sus botones.
+- Una orden por aprobar avisa hasta que se decide; una pregunta deja de avisar en cuanto Washington escribe en el chat.
 
 ## Chat y órdenes (etapa 4, Prompt 38)
 
@@ -1174,10 +1209,10 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington despliega el backend y la web (`bash despliegue/desplegar.sh`) y actualiza el monitor a la 0.7.1 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`). Al arrancar, prueba-37 y prueba-39 se retoman con `--system-prompt-snapshot off` y el rol nuevo, sin aviso.
-2. Prompt 43 (app iOS, en la Mac): usar `titulo` en la tarjeta de orden, `GET /proyectos-creados/{id}/ordenes` en Equipo y `donde_quedamos_id` para unir los proyectos (ver "Datos nuevos para la app").
-3. Lo que sigue anotado del Prompt 40: una forma de marcar que un mensaje del orquestador espera respuesta (para destacarlo y contarlo en Decisiones).
-4. prueba-39 tiene la orden 3 (crear el proyecto Next.js) por aprobar: aprobarla o rechazarla.
+1. Washington despliega el backend y la web del Prompt 43 (`bash despliegue/desplegar.sh`); el monitor sigue en la 0.7.1. Al arrancar, la migración 5 marca prueba-37 y prueba-39 como pruebas: dejan de avisar y, si llevan 30 min sin actividad, se detienen solas.
+2. Prompt 44 (app iOS, en la Mac): título de las órdenes, `GET /proyectos-creados/{id}/ordenes`, `donde_quedamos_id`, los avisos del orquestador con sus tres botones y el campo `prueba` (ver "Datos nuevos para la app").
+3. Del Prompt 40: la marca de "espera respuesta" quedó resuelta con los avisos del orquestador (la última pregunta sin respuesta de Washington).
+4. prueba-39 tiene la orden 3 (crear el proyecto Next.js) por aprobar: como es de prueba ya no avisa; rechazarla o dejarla.
 5. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
 6. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
 7. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
