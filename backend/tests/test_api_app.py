@@ -102,7 +102,7 @@ def test_migracion_4_conserva_las_ordenes(tmp_path: Path) -> None:
     db.commit()
     db.close()
     r = ProyectosEquipo(tmp_path, clock=lambda: T0)
-    assert r.version() == 5
+    assert r.version() == 6
     [o] = r.ordenes("p1")
     assert o["titulo"] == "Hacer la portada" and o["titulo_propio"] is False
 

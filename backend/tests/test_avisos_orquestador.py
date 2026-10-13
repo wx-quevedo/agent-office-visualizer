@@ -72,7 +72,7 @@ def test_migracion_5_marca_los_prueba_existentes(tmp_path: Path) -> None:
     db.commit()
     db.close()
     r = ProyectosEquipo(tmp_path, clock=lambda: T0)
-    assert r.version() == 5
+    assert r.version() == 6
     assert r.ids_de_prueba() == {"p0", "p1"}
 
 

@@ -21,6 +21,11 @@ Estados de un miembro: pendiente, activo, pausado, detenido, error.
 Estados de un encargo: pendiente, en_curso, hecho, error.
 Estados de una orden: por_aprobar, aprobada, rechazada, en_curso, terminada, fallida.
 
+Prompt 45, respuesta en vivo: el monitor informa cuándo entregó cada mensaje de
+Washington a la sesión (leído), cuándo el orquestador empezó a responder y el texto
+parcial de la respuesta en curso. El parcial vive solo en memoria (un proceso de
+uvicorn) y el mensaje final lo reemplaza; los avisos salen solo del mensaje final.
+
 Todo vive en ``proyectos.db`` junto a los demás datos del backend (el respaldo
 copia cada ``.db``), con versión de esquema (``PRAGMA user_version``).
 """
@@ -31,13 +36,14 @@ import json
 import re
 import sqlite3
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-ESQUEMA = 5
+ESQUEMA = 6
 # Nombre de un proyecto: la carpeta que se crea. Minúsculas, números y guiones,
 # sin empezar ni terminar con guion, sin puntos ni barras (nunca una ruta).
 NOMBRE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$")
@@ -215,6 +221,25 @@ _MIGRACIONES: dict[int, list[str]] = {
             clave TEXT PRIMARY KEY, proyecto_id TEXT NOT NULL, estado TEXT NOT NULL,
             hasta_mensaje TEXT, actualizado TEXT NOT NULL)""",
     ],
+    # Prompt 45: cuándo el monitor entregó cada mensaje de Washington a la sesión.
+    6: ["ALTER TABLE mensajes ADD COLUMN leido TEXT"],
+}
+
+# Respuesta en vivo (Prompt 45). Sin noticias del monitor en este tiempo, una respuesta
+# en curso se da por terminada (el monitor manda un pulso cada 15 s mientras dura).
+VIGENCIA_EN_VIVO = timedelta(seconds=60)
+MAX_PARCIAL = 20000
+# Turnos ya cerrados que se recuerdan por proyecto (un parcial atrasado no revive).
+MAX_CERRADOS = 50
+# Mensajes que acompañan cada novedad en vivo (el final llega junto con el "libre").
+RECIENTES = 5
+EstadoEnVivo = Literal["libre", "leido", "respondiendo"]
+LIBRE: dict[str, Any] = {
+    "estado": "libre",
+    "parcial": "",
+    "mensaje_id": None,
+    "desde": None,
+    "actualizado": None,
 }
 
 # Un proyecto de prueba sin actividad del equipo se detiene solo.
@@ -310,6 +335,12 @@ class ProyectosEquipo:
         self.ruta = carpeta / "proyectos.db"
         self.clock = clock or (lambda: datetime.now(UTC))
         self._lock = threading.Lock()
+        # Respuesta en vivo por proyecto (Prompt 45): solo en memoria.
+        self._vivo_lock = threading.Lock()
+        self._en_vivo: dict[str, dict[str, Any]] = {}
+        self._cerrados: dict[str, list[str]] = {}
+        self._versiones: dict[str, int] = {}
+        self._inicio = f"{int(time.time() * 1000):x}"
         self._migrar()
 
     def _db(self) -> sqlite3.Connection:
@@ -563,6 +594,11 @@ class ProyectosEquipo:
                 (nuevo, _iso(self.clock()), id_),
             )
             self._encargar(db, r["maquina"], id_, tipo)
+        if tipo in ("pausar", "detener"):
+            # Lo que estaba en curso se corta con las sesiones.
+            with self._vivo_lock:
+                self._en_vivo.pop(id_, None)
+            self._cambio(id_)
         p = self.proyecto(id_)
         assert p is not None
         return p
@@ -764,13 +800,28 @@ class ProyectosEquipo:
     # -- chat -------------------------------------------------------------------------------
 
     def mensajes(self, proyecto_id: str, limite: int = MAX_MENSAJES) -> list[dict[str, Any]]:
+        """Los mensajes del chat, del más viejo al más nuevo. Los de Washington traen
+        ``estado`` (enviado, leido o respondiendo) y ``leido`` (cuándo el monitor se lo
+        entregó a la sesión); los del orquestador, los dos en null."""
         with self._db() as db:
             filas = db.execute(
-                """SELECT id, autor, texto, creado FROM mensajes WHERE proyecto_id = ?
+                """SELECT id, autor, texto, creado, leido FROM mensajes WHERE proyecto_id = ?
                 ORDER BY creado DESC, rowid DESC LIMIT ?""",
                 (proyecto_id, limite),
             ).fetchall()
-        return [dict(f) for f in reversed(filas)]
+        vivo = self.en_vivo(proyecto_id)
+        salida: list[dict[str, Any]] = []
+        for f in reversed(filas):
+            m = dict(f)
+            if m["autor"] == "washington":
+                if vivo["estado"] == "respondiendo" and vivo["mensaje_id"] == m["id"]:
+                    m["estado"] = "respondiendo"
+                else:
+                    m["estado"] = "leido" if m["leido"] else "enviado"
+            else:
+                m["estado"] = None
+            salida.append(m)
+        return salida
 
     def escribir(self, proyecto_id: str, texto: str) -> dict[str, Any]:
         """Un mensaje de Washington al orquestador: queda en el chat y sale como encargo.
@@ -793,7 +844,15 @@ class ProyectosEquipo:
             self._encargar(
                 db, r["maquina"], proyecto_id, "mensaje", {"mensaje_id": id_, "texto": texto}
             )
-        return {"id": id_, "autor": "washington", "texto": texto, "creado": ahora}
+        self._cambio(proyecto_id)
+        return {
+            "id": id_,
+            "autor": "washington",
+            "texto": texto,
+            "creado": ahora,
+            "leido": None,
+            "estado": "enviado",
+        }
 
     def _de_mi_maquina(self, db: sqlite3.Connection, maquina: str, proyecto_id: str) -> sqlite3.Row:
         r = db.execute("SELECT * FROM proyectos WHERE id = ?", (proyecto_id,)).fetchone()
@@ -802,9 +861,16 @@ class ProyectosEquipo:
         return r
 
     def respuesta_orquestador(
-        self, maquina: str, proyecto_id: str, origen_id: str, texto: str
+        self,
+        maquina: str,
+        proyecto_id: str,
+        origen_id: str,
+        texto: str,
+        turno: str | None = None,
     ) -> dict[str, Any]:
-        """Lo que respondió el orquestador (lo manda el monitor; repetirlo no duplica)."""
+        """Lo que respondió el orquestador (lo manda el monitor; repetirlo no duplica).
+        Con ``turno`` (Prompt 45), el mensaje final reemplaza al parcial de ese turno en
+        el mismo instante: quien mira el chat ve el final donde estaba el parcial."""
         with self._lock, self._db() as db:
             self._de_mi_maquina(db, maquina, proyecto_id)
             previo = db.execute(
@@ -818,7 +884,93 @@ class ProyectosEquipo:
                 VALUES (?,?,?,?,?,?)""",
                 (id_, proyecto_id, "orquestador", texto, _iso(self.clock()), origen_id),
             )
+        if turno:
+            self._cerrar_turno(proyecto_id, turno)
+        self._cambio(proyecto_id)
         return {"id": id_, "repetido": False}
+
+    # -- respuesta en vivo (Prompt 45) ----------------------------------------------------------
+
+    def _cambio(self, proyecto_id: str) -> None:
+        with self._vivo_lock:
+            self._versiones[proyecto_id] = self._versiones.get(proyecto_id, 0) + 1
+
+    def version_chat(self, proyecto_id: str) -> str:
+        """Cambia con cada mensaje nuevo, entrega o novedad de la respuesta en curso
+        (también tras reiniciar el backend: lleva la hora de arranque)."""
+        with self._vivo_lock:
+            return f"{self._inicio}-{self._versiones.get(proyecto_id, 0)}"
+
+    def _cerrar_turno(self, proyecto_id: str, turno: str) -> None:
+        with self._vivo_lock:
+            cerrados = self._cerrados.setdefault(proyecto_id, [])
+            if turno not in cerrados:
+                cerrados.append(turno)
+                del cerrados[:-MAX_CERRADOS]
+            actual = self._en_vivo.get(proyecto_id)
+            if actual is not None and actual.get("turno") == turno:
+                del self._en_vivo[proyecto_id]
+
+    def informar_en_vivo(
+        self,
+        maquina: str,
+        proyecto_id: str,
+        turno: str,
+        estado: str,
+        parcial: str = "",
+        mensaje_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Lo que el monitor cuenta de la respuesta en curso: ``leido`` (entregó el
+        mensaje a la sesión), ``respondiendo`` (la sesión empezó a trabajar, con el texto
+        parcial) o ``libre`` (terminó). Un parcial de un turno ya cerrado se ignora."""
+        ahora = _iso(self.clock())
+        with self._lock, self._db() as db:
+            self._de_mi_maquina(db, maquina, proyecto_id)
+            if mensaje_id:
+                db.execute(
+                    """UPDATE mensajes SET leido = ? WHERE id = ? AND proyecto_id = ?
+                    AND autor = 'washington' AND leido IS NULL""",
+                    (ahora, mensaje_id, proyecto_id),
+                )
+        if estado == "libre":
+            self._cerrar_turno(proyecto_id, turno)
+            self._cambio(proyecto_id)
+            return {"estado": "libre"}
+        with self._vivo_lock:
+            if turno in self._cerrados.get(proyecto_id, []):
+                return {"estado": "libre", "ignorado": True}
+            previo = self._en_vivo.get(proyecto_id)
+            mismo = previo is not None and previo.get("turno") == turno
+            self._en_vivo[proyecto_id] = {
+                "turno": turno,
+                "estado": estado,
+                "parcial": parcial[:MAX_PARCIAL],
+                "mensaje_id": mensaje_id or (previo["mensaje_id"] if mismo and previo else None),
+                "desde": previo["desde"] if mismo and previo else ahora,
+                "actualizado": ahora,
+            }
+        self._cambio(proyecto_id)
+        return {"estado": estado}
+
+    def en_vivo(self, proyecto_id: str) -> dict[str, Any]:
+        """La respuesta en curso del orquestador del proyecto, o ``libre``."""
+        with self._vivo_lock:
+            v = self._en_vivo.get(proyecto_id)
+            if v is None:
+                return dict(LIBRE)
+            if self.clock() - _fecha_utc(v["actualizado"]) > VIGENCIA_EN_VIVO:
+                del self._en_vivo[proyecto_id]
+                return dict(LIBRE)
+            return {k: v[k] for k in LIBRE}
+
+    def chat_en_vivo(self, proyecto_id: str) -> dict[str, Any]:
+        """Lo liviano para seguir el chat: versión, respuesta en curso y los últimos
+        mensajes (el final llega en la misma lectura en que el parcial pasa a libre)."""
+        return {
+            "version": self.version_chat(proyecto_id),
+            "en_vivo": self.en_vivo(proyecto_id),
+            "recientes": self.mensajes(proyecto_id, RECIENTES),
+        }
 
     # -- órdenes ------------------------------------------------------------------------------
 

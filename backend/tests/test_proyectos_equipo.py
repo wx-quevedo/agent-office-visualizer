@@ -72,7 +72,7 @@ def _registro(tmp_path: Path, reloj: list[datetime]) -> ProyectosEquipo:
 def test_crear_y_ciclo_de_encargos(tmp_path: Path) -> None:
     reloj = [T0]
     r = _registro(tmp_path, reloj)
-    assert r.version() == 5
+    assert r.version() == 6
     p = r.crear("prueba-37", "alienware", "personal", "vacia", ORQ, [AGENTE], False, "E:\\Agents")
     assert p["estado"] == "creando" and p["ruta"] == "E:\\Agents\\prueba-37"
     assert [

@@ -65,6 +65,8 @@ _INGESTA: tuple[tuple[str, re.Pattern[str]], ...] = (
     # Prompt 38: respuestas del orquestador, órdenes que propone (quedan por aprobar:
     # la máquina nunca aprueba) y el avance de las aprobadas.
     ("POST", re.compile(rf"{_API}/maquinas/chat")),
+    # Prompt 45: leído, respondiendo y el texto parcial de la respuesta en curso.
+    ("POST", re.compile(rf"{_API}/maquinas/chat/en-vivo")),
     ("POST", re.compile(rf"{_API}/maquinas/ordenes")),
     ("POST", re.compile(rf"{_API}/maquinas/ordenes/[A-Za-z0-9]+")),
 )

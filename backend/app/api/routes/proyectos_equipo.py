@@ -9,6 +9,8 @@ Usuario:
 - POST /proyectos-creados/{id}/auto-aprobar: el interruptor de aprobación automática.
 - POST /proyectos-creados/{id}/agentes: agrega un agente de código.
 - GET  /proyectos-creados/{id}/chat: mensajes y órdenes; POST: un mensaje al orquestador.
+- GET  /proyectos-creados/{id}/chat/en-vivo: respuesta en curso y últimos mensajes
+  (Prompt 45); /chat/eventos: lo mismo como Server-Sent Events.
 - GET  /ordenes (?estado=por_aprobar); POST /ordenes/{id}/aprobar y /rechazar.
 
 Máquina (token de máquina):
@@ -16,15 +18,21 @@ Máquina (token de máquina):
 - POST /maquinas/encargos/{id}: resultado de un encargo.
 - POST /maquinas/equipos: estado de las sesiones que tiene lanzadas.
 - POST /maquinas/chat: una respuesta del orquestador.
+- POST /maquinas/chat/en-vivo: leído, respondiendo (con el texto parcial) o libre.
 - POST /maquinas/ordenes: una orden que propuso el orquestador (queda por aprobar).
 - POST /maquinas/ordenes/{id}: en curso, terminada o fallida, con el resumen.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
+import time
+from collections.abc import AsyncIterator
 from typing import Any, Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
@@ -409,7 +417,70 @@ async def chat(id_: str) -> dict[str, Any]:
     reg = get_proyectos_equipo()
     if reg.proyecto(id_) is None:
         raise HTTPException(status_code=404, detail="No existe ese proyecto.")
-    return {"mensajes": reg.mensajes(id_), "ordenes": list(reversed(reg.ordenes(id_)))}
+    return {
+        "mensajes": reg.mensajes(id_),
+        "ordenes": list(reversed(reg.ordenes(id_))),
+        "en_vivo": reg.en_vivo(id_),
+    }
+
+
+# Server-Sent Events del chat (Prompt 45): cada cuánto se mira si cambió algo, cada
+# cuánto va un comentario para que nadie corte la conexión, y cuánto dura cada una
+# (EventSource reconecta solo al cerrarse).
+MIRAR_S = 0.2
+PULSO_S = 15.0
+DURACION_S = 300.0
+
+
+@router.get("/proyectos-creados/{id_}/chat/en-vivo")
+async def chat_en_vivo(id_: str) -> dict[str, Any]:
+    """Lo liviano para seguir una respuesta: versión, respuesta en curso (estado, texto
+    parcial) y los últimos mensajes. Para quien no puede usar /chat/eventos."""
+    reg = get_proyectos_equipo()
+    if reg.proyecto(id_) is None:
+        raise HTTPException(status_code=404, detail="No existe ese proyecto.")
+    return reg.chat_en_vivo(id_)
+
+
+async def eventos_chat(
+    request: Request,
+    id_: str,
+    duracion: float = DURACION_S,
+    mirar: float = MIRAR_S,
+    pulso: float = PULSO_S,
+) -> AsyncIterator[str]:
+    """Un evento ``chat`` (el JSON de /chat/en-vivo) al conectar y en cada cambio."""
+    reg = get_proyectos_equipo()
+    yield "retry: 1000\n\n"
+    visto = ""
+    fin = time.monotonic() + duracion
+    ultimo = time.monotonic()
+    while time.monotonic() < fin:
+        version = reg.version_chat(id_)
+        if version != visto:
+            visto = version
+            datos = json.dumps(reg.chat_en_vivo(id_), ensure_ascii=False)
+            yield f"event: chat\ndata: {datos}\n\n"
+            ultimo = time.monotonic()
+        elif time.monotonic() - ultimo >= pulso:
+            yield ": pulso\n\n"
+            ultimo = time.monotonic()
+        if await request.is_disconnected():
+            return
+        await asyncio.sleep(mirar)
+
+
+@router.get("/proyectos-creados/{id_}/chat/eventos")
+async def chat_eventos(request: Request, id_: str) -> StreamingResponse:
+    """La respuesta en curso como Server-Sent Events. nginx no la guarda en búfer
+    (proxy_buffering off en /api/ y X-Accel-Buffering: no) ni la comprime."""
+    if get_proyectos_equipo().proyecto(id_) is None:
+        raise HTTPException(status_code=404, detail="No existe ese proyecto.")
+    return StreamingResponse(
+        eventos_chat(request, id_),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 class NuevoMensaje(BaseModel):
@@ -528,13 +599,40 @@ class RespuestaOrquestador(BaseModel):
     proyecto_id: str = Field(min_length=1, max_length=64)
     origen_id: str = Field(min_length=8, max_length=64)
     texto: str = Field(min_length=1, max_length=20000)
+    # Prompt 45: el turno cuya respuesta en curso reemplaza este mensaje final.
+    turno: str | None = Field(default=None, min_length=8, max_length=64)
 
 
 @router.post("/maquinas/chat")
 async def respuesta_orquestador(request: Request, body: RespuestaOrquestador) -> dict[str, Any]:
     try:
         return get_proyectos_equipo().respuesta_orquestador(
-            _maquina(request), body.proyecto_id, body.origen_id, body.texto
+            _maquina(request), body.proyecto_id, body.origen_id, body.texto, body.turno
+        )
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+class EnVivo(BaseModel):
+    proyecto_id: str = Field(min_length=1, max_length=64)
+    turno: str = Field(min_length=8, max_length=64)
+    estado: Literal["leido", "respondiendo", "libre"]
+    parcial: str = Field(default="", max_length=40000)
+    mensaje_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+
+@router.post("/maquinas/chat/en-vivo")
+async def en_vivo(request: Request, body: EnVivo) -> dict[str, Any]:
+    """La respuesta en curso del orquestador (Prompt 45): el monitor la manda agrupada
+    cada 300 a 500 ms. Nunca genera avisos: esos salen solo del mensaje final."""
+    try:
+        return get_proyectos_equipo().informar_en_vivo(
+            _maquina(request),
+            body.proyecto_id,
+            body.turno,
+            body.estado,
+            body.parcial,
+            body.mensaje_id,
         )
     except ProyectoError as e:
         raise _error(e) from None
