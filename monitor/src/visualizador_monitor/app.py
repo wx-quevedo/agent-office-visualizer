@@ -16,7 +16,7 @@ from visualizador_monitor.auxiliar import Auxiliar, es_de_auxiliar
 from visualizador_monitor.cliente import Servidor
 from visualizador_monitor.cola import Cola
 from visualizador_monitor.config import Configuracion
-from visualizador_monitor.equipos import Equipos, HiloEncargos
+from visualizador_monitor.equipos import Equipos, HiloEncargos, HiloEnVivo
 from visualizador_monitor.lector import Lector
 from visualizador_monitor.reenvio import EstadoConexion, Reenviador
 from visualizador_monitor.registro import logger
@@ -45,6 +45,8 @@ class Monitor:
         self.lector.ruta_proyectos = str(ruta_proyectos)
         self.equipos = Equipos(base, ruta_proyectos, cfg.cuentas)
         self.encargos = HiloEncargos(self.servidor, self.equipos)
+        # Prompt 45: leído, respondiendo y el texto parcial de los orquestadores.
+        self.en_vivo = HiloEnVivo(self.servidor, self.equipos)
         self.inicio = datetime.now(UTC).isoformat()
         self.parar = threading.Event()
         self.http: Any = None
@@ -119,6 +121,7 @@ class Monitor:
         self.reenviador.start()
         self.resumidor.start()
         self.encargos.start()
+        self.en_vivo.start()
         (self.base / "monitor.pid").write_text(str(os.getpid()), encoding="ascii")
         logger.info(
             "Monitor %s escuchando en 127.0.0.1:%s; servidor %s; cuentas %s",
@@ -162,6 +165,7 @@ class Monitor:
         self.reenviador.parar.set()
         self.resumidor.parar.set()
         self.encargos.parar.set()
+        self.en_vivo.parar.set()
         self.resumidor.hay_nuevo.set()
         self.reenviador.hay_nuevo.set()
         if self.http is not None:

@@ -1,4 +1,10 @@
-"""Equipos de proyectos (etapa 4, Prompts 37 a 42).
+"""Equipos de proyectos (etapa 4, Prompts 37 a 45).
+
+Prompt 45 (monitor 0.8.0): el orquestador corre con ``--include-partial-messages``. Cada
+turno tiene un id; el monitor cuenta al servidor cuándo entregó el mensaje de Washington
+a la sesión (leído), cuándo la sesión empezó a trabajar (respondiendo) y el texto parcial
+de la respuesta, agrupado cada 400 ms (``HiloEnVivo``). El mensaje final va con el id del
+turno y lo reemplaza; después sale "libre". Los avisos salen solo del mensaje final.
 
 Prompt 42: con Claude Code 2.1.257 o posterior, las sesiones se lanzan con
 ``--system-prompt-snapshot off``: una sesión retomada toma el rol vigente sin aviso (el
@@ -92,6 +98,13 @@ ARRANQUE = 3.0  # segundos que una sesión recién lanzada debe seguir viva
 MAX_CHAT = 20000  # caracteres de una respuesta del orquestador al chat
 MAX_RESUMEN = 3000  # caracteres del resumen del resultado de una orden
 MAX_VISTOS = 500  # ids de encargos ya encolados que se recuerdan (reentregas)
+# Respuesta en vivo (Prompt 45): cada cuánto se agrupa el texto parcial, cada cuánto va
+# un pulso aunque no cambie (el servidor la da por terminada al minuto sin noticias) y
+# cuánto se calla el hilo si el servidor todavía no conoce la ruta.
+CADA_EN_VIVO = 0.4
+PULSO_EN_VIVO = 15.0
+SIN_RUTA_EN_VIVO = 600.0
+RUTA_EN_VIVO = "/api/v1/maquinas/chat/en-vivo"
 # Lo que el orquestador no puede usar: mensajes a otras sesiones y la terminal (con la
 # terminal podría lanzar o retomar otra sesión por su cuenta).
 BLOQUEADAS_ORQUESTADOR = "SendMessage,ListAgents,Bash,PowerShell"
@@ -409,6 +422,20 @@ def extraer_ordenes(texto: str) -> tuple[list[dict[str, str | None]], str]:
     return ordenes, limpio
 
 
+def parcial_visible(texto: str) -> str:
+    """El texto parcial que se muestra en el chat: sin los bloques de orden (van a su
+    tarjeta cuando termina el turno), tampoco el que se está escribiendo."""
+    _, limpio = extraer_ordenes(texto)
+    corte = re.search(r"<orden\b", limpio, re.IGNORECASE)
+    if corte is not None:
+        limpio = limpio[: corte.start()]
+    # Un "<ord" al final todavía puede ser el comienzo de un bloque.
+    final = re.search(r"<[a-zA-Z]{0,5}$", limpio)
+    if final is not None and "<orden"[: len(final.group(0))] == final.group(0).lower():
+        limpio = limpio[: final.start()]
+    return limpio.rstrip()
+
+
 # -- sesiones -----------------------------------------------------------------------------
 
 
@@ -593,6 +620,8 @@ def comando_sesion(
     cmd += ["--setting-sources", FUENTES_DE_AJUSTES]
     cmd += ["--settings", ajustes or json.dumps(ajustes_sesion(m, {}))]
     if m.rol == "orquestador":
+        # La respuesta se ve mientras se escribe (Prompt 45).
+        cmd += ["--include-partial-messages"]
         # Sus órdenes salen solo por el monitor (bloque <orden>), con la aprobación de Washington.
         cmd += ["--disallowedTools", BLOQUEADAS_ORQUESTADOR]
     else:
@@ -651,7 +680,11 @@ def reglas_de(e: dict[str, Any]) -> tuple[list[str] | None, list[str] | None, bo
 
 class Sesion:
     """Un proceso ``claude -p`` lanzado por este monitor. Junta el texto de cada turno
-    (lo que escribió la sesión principal, no sus subagentes) hasta su ``result``."""
+    (lo que escribió la sesión principal, no sus subagentes) hasta su ``result``.
+
+    Prompt 45: cada mensaje escrito abre un turno con su id. Mientras dura, ``en_vivo()``
+    dice si la sesión ya empezó a trabajar y el texto parcial (con
+    ``--include-partial-messages``, de los ``stream_event``)."""
 
     def __init__(self, cmd: list[str], cwd: Path, env: dict[str, str]) -> None:
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
@@ -669,6 +702,8 @@ class Sesion:
         self.enviados = 0
         self._textos: list[str] = []
         self._turnos: list[dict[str, Any]] = []
+        # Turnos escritos que todavía no terminaron (el primero es el que corre).
+        self._vivos: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._lector = threading.Thread(target=self._leer, daemon=True)
         self._lector.start()
@@ -684,6 +719,20 @@ class Sesion:
         """Tiene un mensaje escrito cuyo turno todavía no terminó."""
         with self._lock:
             return self.enviados > self.resultados
+
+    def en_vivo(self) -> dict[str, Any] | None:
+        """El turno que corre: id, estado (leido o respondiendo), texto parcial y el
+        mensaje de Washington que lo abrió (si fue uno). None si no hay ninguno."""
+        with self._lock:
+            if not self._vivos:
+                return None
+            v = self._vivos[0]
+            return {
+                "turno": v["turno"],
+                "estado": v["estado"],
+                "parcial": "\n\n".join(b.strip() for b in v["bloques"] if b.strip()),
+                "mensaje_id": v["mensaje_id"],
+            }
 
     def tomar_turnos(self) -> list[dict[str, Any]]:
         """Los turnos terminados desde la última vez (texto, resultado, es_error)."""
@@ -701,6 +750,8 @@ class Sesion:
             if not isinstance(d, dict):
                 continue
             tipo = d.get("type")
+            if tipo in ("stream_event", "assistant", "user"):
+                self._trabajando(d)
             if tipo == "assistant" and not d.get("parent_tool_use_id"):
                 contenido = (d.get("message") or {}).get("content") or []
                 for b in contenido if isinstance(contenido, list) else []:
@@ -715,22 +766,61 @@ class Sesion:
                     self._textos = []
                     self.resultados += 1
                     self.ultimo = {"texto": resultado[:2000], "es_error": es_error}
+                    vivo = self._vivos.pop(0) if self._vivos else None
                     self._turnos.append(
-                        {"texto": texto or resultado, "resultado": resultado, "es_error": es_error}
+                        {
+                            "texto": texto or resultado,
+                            "resultado": resultado,
+                            "es_error": es_error,
+                            "turno": vivo["turno"] if vivo else None,
+                            "mensaje_id": vivo["mensaje_id"] if vivo else None,
+                        }
                     )
 
-    def enviar(self, texto: str) -> None:
+    def _trabajando(self, d: dict[str, Any]) -> None:
+        """La sesión trabaja en el turno que corre; el texto de la sesión principal se
+        suma al parcial a medida que llega."""
+        with self._lock:
+            if not self._vivos:
+                return
+            v = self._vivos[0]
+            v["estado"] = "respondiendo"
+            if d.get("type") != "stream_event" or d.get("parent_tool_use_id"):
+                return
+            ev = d.get("event")
+            if not isinstance(ev, dict):
+                return
+            if ev.get("type") == "content_block_start":
+                bloque = ev.get("content_block")
+                if isinstance(bloque, dict) and bloque.get("type") == "text":
+                    v["bloques"].append(str(bloque.get("text") or ""))
+            elif ev.get("type") == "content_block_delta":
+                delta = ev.get("delta")
+                if isinstance(delta, dict) and delta.get("type") == "text_delta":
+                    if not v["bloques"]:
+                        v["bloques"].append("")
+                    v["bloques"][-1] += str(delta.get("text") or "")
+
+    def enviar(self, texto: str, mensaje_id: str | None = None) -> str:
+        """Escribe un mensaje a la sesión y abre su turno; devuelve el id del turno.
+        ``mensaje_id``: el mensaje de Washington que se entrega (queda leído)."""
         if self.proceso.stdin is None or not self.viva():
             raise EquipoError("La sesión no está corriendo.")
+        turno = uuid.uuid4().hex
+        vivo = {"turno": turno, "estado": "leido", "bloques": [], "mensaje_id": mensaje_id}
         with self._lock:
             self.enviados += 1
+            self._vivos.append(vivo)
         try:
             self.proceso.stdin.write(mensaje(texto))
             self.proceso.stdin.flush()
         except OSError:
             with self._lock:
                 self.enviados -= 1
+                if vivo in self._vivos:
+                    self._vivos.remove(vivo)
             raise
+        return turno
 
     def cerrar(self, espera: float = ESPERA_CIERRE) -> None:
         """Cierra la entrada (la sesión termina sola) y, si no termina, la detiene."""
@@ -1069,7 +1159,9 @@ class Equipos:
         if orq is None:
             raise EquipoError("El proyecto no tiene orquestador.")
         if not self._ya_visto(p, f"mensaje:{mid}"):
-            p.colas.setdefault(orq.nombre, []).append({"tipo": "mensaje", "texto": texto})
+            p.colas.setdefault(orq.nombre, []).append(
+                {"tipo": "mensaje", "texto": texto, "mensaje_id": mid}
+            )
             self._guardar()
         return p
 
@@ -1191,7 +1283,23 @@ class Equipos:
             # Si insiste con un destino inválido justo después del aviso, no se le vuelve
             # a avisar (evita un ida y vuelta sin fin entre el monitor y el orquestador).
             insiste = bool(item and item.get("clase") == "destino")
-            self._respuesta_orquestador(p, str(turno.get("texto") or ""), avisar=not insiste)
+            self._respuesta_orquestador(
+                p, str(turno.get("texto") or ""), avisar=not insiste, turno=turno.get("turno")
+            )
+            if turno.get("turno"):
+                # Después del final (en orden, por la misma salida): la respuesta terminó.
+                # Con el mensaje: si el hilo en vivo no alcanzó a contarlo, queda leído.
+                self._al_servidor(
+                    "en_vivo",
+                    RUTA_EN_VIVO,
+                    {
+                        "proyecto_id": p.id,
+                        "turno": turno["turno"],
+                        "estado": "libre",
+                        "mensaje_id": turno.get("mensaje_id"),
+                    },
+                    p,
+                )
             return
         if item is None or item.get("tipo") != "orden":
             return  # el saludo al arrancar
@@ -1212,15 +1320,19 @@ class Equipos:
             aviso = EDITADA.format(texto=item.get("texto") or "") + aviso
         self._avisar_orquestador(p, aviso)
 
-    def _respuesta_orquestador(self, p: Proyecto, texto: str, avisar: bool = True) -> None:
+    def _respuesta_orquestador(
+        self, p: Proyecto, texto: str, avisar: bool = True, turno: str | None = None
+    ) -> None:
         ordenes, limpio = extraer_ordenes(texto)
         if limpio:
-            self._al_servidor(
-                "chat",
-                "/api/v1/maquinas/chat",
-                {"proyecto_id": p.id, "origen_id": uuid.uuid4().hex, "texto": limpio[:MAX_CHAT]},
-                p,
-            )
+            datos: dict[str, Any] = {
+                "proyecto_id": p.id,
+                "origen_id": uuid.uuid4().hex,
+                "texto": limpio[:MAX_CHAT],
+            }
+            if turno:
+                datos["turno"] = turno  # el final reemplaza al parcial de ese turno
+            self._al_servidor("chat", "/api/v1/maquinas/chat", datos, p)
         for o in ordenes:
             agente = str(o["agente"] or "")
             if p.agente(agente) is None or not o["texto"]:
@@ -1256,7 +1368,8 @@ class Equipos:
             texto = ORDEN_AL_AGENTE.format(numero=item.get("numero"), texto=item["texto"])
         else:
             texto = str(item.get("texto") or "")
-        s.enviar(texto)
+        mid = item.get("mensaje_id") if item.get("tipo") == "mensaje" else None
+        s.enviar(texto, mensaje_id=mid if isinstance(mid, str) else None)
         p.en_curso[m.nombre] = item
         if item.get("tipo") == "orden":
             self._al_servidor(
@@ -1455,6 +1568,27 @@ class Equipos:
             salida.append({"nombre": m.nombre, "estado": estado})
         return salida
 
+    def en_vivo(self) -> list[dict[str, Any]]:
+        """La respuesta en curso de cada orquestador que está trabajando (Prompt 45)."""
+        salida: list[dict[str, Any]] = []
+        with self._lock:
+            for p in self.proyectos.values():
+                orq = p.orquestador()
+                s = self.sesiones.get(orq.session_id) if orq is not None else None
+                v = s.en_vivo() if s is not None and s.viva() else None
+                if v is None:
+                    continue
+                datos: dict[str, Any] = {
+                    "proyecto_id": p.id,
+                    "turno": v["turno"],
+                    "estado": v["estado"],
+                    "parcial": parcial_visible(v["parcial"])[:MAX_CHAT],
+                }
+                if v["mensaje_id"]:
+                    datos["mensaje_id"] = v["mensaje_id"]
+                salida.append(datos)
+        return salida
+
     def estado_equipos(self) -> list[dict[str, Any]]:
         with self._lock:
             return [
@@ -1472,7 +1606,8 @@ class HiloEncargos(threading.Thread):
         self,
         servidor: Servidor,
         equipos: Equipos,
-        cada: float = 3.0,
+        # Cada 1,5 s (antes 3): un mensaje de Washington llega antes y se ve "Leído" antes.
+        cada: float = 1.5,
         informe: float = 15.0,
         pulso: float = 1.0,
     ) -> None:
@@ -1538,3 +1673,69 @@ class HiloEncargos(threading.Thread):
                     )
                 hechos += 1
         return hechos
+
+
+class HiloEnVivo(threading.Thread):
+    """Cada 400 ms manda al servidor lo nuevo de cada respuesta en curso de los
+    orquestadores: leído, respondiendo y el texto parcial (Prompt 45). Lo que no cambió
+    no se manda, salvo un pulso cada 15 s. El final y el "libre" no van por aquí: salen
+    en orden por la salida de ``Equipos`` (el servidor ignora un parcial atrasado)."""
+
+    def __init__(
+        self,
+        servidor: Servidor,
+        equipos: Equipos,
+        cada: float = CADA_EN_VIVO,
+        pulso: float = PULSO_EN_VIVO,
+        sin_ruta: float = SIN_RUTA_EN_VIVO,
+    ) -> None:
+        super().__init__(name="en-vivo", daemon=True)
+        self.servidor = servidor
+        self.equipos = equipos
+        self.cada = cada
+        self.pulso = pulso
+        self.sin_ruta = sin_ruta
+        self.parar = threading.Event()
+        self._enviado: dict[str, tuple[Any, ...]] = {}
+        self._cuando: dict[str, float] = {}
+        self._callado_hasta = 0.0
+
+    def run(self) -> None:
+        while not self.parar.is_set():
+            try:
+                self.ronda()
+            except Exception:
+                logger.exception("Error en la respuesta en vivo")
+            self.parar.wait(self.cada)
+
+    def ronda(self) -> int:
+        """Manda lo que cambió; devuelve cuántos mandó."""
+        ahora = time.monotonic()
+        if ahora < self._callado_hasta:
+            return 0
+        vivos = self.equipos.en_vivo()
+        activos = {v["proyecto_id"] for v in vivos}
+        for pid_ in list(self._enviado):
+            if pid_ not in activos:
+                del self._enviado[pid_]
+                self._cuando.pop(pid_, None)
+        enviados = 0
+        for v in vivos:
+            pid_ = v["proyecto_id"]
+            clave = (v["turno"], v["estado"], v["parcial"], v.get("mensaje_id"))
+            if self._enviado.get(pid_) == clave and ahora - self._cuando.get(pid_, 0) < self.pulso:
+                continue
+            try:
+                r = self.servidor.post_json(RUTA_EN_VIVO, v, timeout=5.0)
+            except SinConexion:
+                return enviados
+            detalle = r.cuerpo.get("detail") if isinstance(r.cuerpo, dict) else None
+            if r.status == 405 or (r.status == 404 and detalle == "Not Found"):
+                # Un servidor anterior al Prompt 45: sin respuesta en vivo por un rato.
+                logger.info("El servidor no conoce la respuesta en vivo; se reintenta luego")
+                self._callado_hasta = ahora + self.sin_ruta
+                return enviados
+            self._enviado[pid_] = clave
+            self._cuando[pid_] = ahora
+            enviados += 1
+        return enviados
