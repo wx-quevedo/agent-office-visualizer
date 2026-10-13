@@ -109,6 +109,9 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-12 | Esperar silencia el aviso hasta el siguiente mensaje del orquestador (guarda el id de su último mensaje); Ignorar descarta ese aviso para siempre. La notificación del navegador y la voz suenan una sola vez por clave (recordadas en el navegador) | Pedido del Prompt 43; con la clave por mensaje, "una vez por mensaje" no depende de temporizadores |
 | 2026-10-12 | Decisiones ya no lista las preguntas de las sesiones del equipo (no se podían contestar desde ahí) ni nada de proyectos de prueba; `decisiones_pendientes` tampoco las cuenta | Para eso están los avisos del orquestador, que llevan al chat. La insignia de la app contaba esperas que no tenían acción |
 | 2026-10-12 | Proyectos de prueba: campo `prueba` (casilla en Nuevo proyecto e interruptor en Equipo); un nombre que empieza con "prueba-" lo marca solo, también los existentes (migración 5). No avisan, no entran en Decisiones y se detienen solos tras 30 min sin actividad del equipo; el chat funciona igual | prueba-39 avisaba como un proyecto real. La detención la hace el servidor cuando el monitor consulta sus encargos, así no hizo falta cambiar el monitor |
+| 2026-10-13 | Respuesta en vivo por Server-Sent Events (`GET /proyectos-creados/{id}/chat/eventos`) y, de respaldo, una ruta liviana (`/chat/en-vivo`) para consultar cada segundo | nginx ya tiene `proxy_buffering off` en `/api/` y no comprime `text/event-stream` (no está en `gzip_types`): los eventos pasan sin búfer y no hubo que cambiar nginx ni el despliegue. La web se autentica con su cookie (EventSource con `withCredentials`) y el backend corre en un solo proceso de uvicorn, así que el parcial puede vivir en memoria. La ruta liviana cubre a quien no pueda mantener la conexión (la app en segundo plano, una red que la corte) |
+| 2026-10-13 | El texto parcial no se guarda en la base: vive en memoria del backend, por proyecto, con el id del turno. El mensaje final llega con ese id y lo reemplaza en el mismo instante (también en los `recientes` del evento); un parcial atrasado de un turno cerrado se ignora; sin noticias del monitor durante 60 s, la respuesta en curso se da por terminada | El parcial es efímero y llega cada 400 ms: guardarlo sería escribir en disco sin ganancia. Con el final y el "libre" en la misma lectura, la burbuja pasa de parcial a final sin salto. Los avisos salen solo de los mensajes guardados, así que nunca de un parcial |
+| 2026-10-13 | Monitor 0.8.0: el orquestador corre con `--include-partial-messages`; un hilo propio (`HiloEnVivo`) manda cada 400 ms lo que cambió (leído, respondiendo, texto parcial sin bloques de orden) y un pulso cada 15 s; el final y el "libre" salen en orden por la cola que ya existía. Los encargos se consultan cada 1,5 s (antes 3) | Separar el hilo en vivo evita que el texto parcial espere a la ronda de encargos y no toca la cola persistente (un parcial perdido no importa; el final sí). Con 1,5 s el mensaje de Washington llega antes a la sesión y "Leído" aparece en 1 a 2 s |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -214,6 +217,9 @@ Prueba real en local (localhost:3100 y 8100) con un monitor de prueba y Claude (
 - prueba-43 tuvo su pregunta en el chat y ningún aviso.
 - Pruebas automáticas: backend 457 (9 nuevas en `test_avisos_orquestador.py`; fallan solo las 3 viejas de `path_utils`), web 307 (15 nuevas en `avisos-orquestador.test.tsx`).
 Capturas 43-aviso-botones.png, 43-responder.png y 43-prueba-silenciosa.png en `docs/capturas/etapa-4/` |
+| 2026-10-13 | Etapa 4 (Prompt 45), respuesta del orquestador que se va escribiendo, con leído y escribiendo: backend con esquema 6 (`mensajes.leido`), la respuesta en curso en memoria, `POST /maquinas/chat/en-vivo`, `GET /chat/en-vivo` y `GET /chat/eventos` (SSE) (commit `49e4f76`); monitor 0.8.0 con `--include-partial-messages` en el orquestador, `HiloEnVivo` y encargos cada 1,5 s, instalador recompilado sin instalar (`7336ddf`); web con Enviado y Leído, tres puntos, el parcial con markdown y el respaldo a la consulta (`1daca17`). nginx no cambió (ya tenía `proxy_buffering off`).
+Pruebas automáticas: backend 474 (8 nuevas en `test_chat_en_vivo.py`; fallan solo las 3 viejas de `path_utils`), monitor 206 (4 nuevas en `test_en_vivo.py`; el claude falso ahora manda `stream_event`), web 320 (13 nuevas en `chat-en-vivo.test.tsx`). Prueba real con prueba-45: ver "Respuesta en vivo del orquestador".
+Hallazgo: pyright 1.1.414 marca cientos de errores en archivos que no se tocaron (`middleware.py`, `permisos.py`, pruebas viejas), con o sin estos cambios. Los archivos del Prompt 45 no tienen ninguno; queda como deuda técnica. `path_utils.py` tiene una línea de más de 100 caracteres desde un commit anterior (ruff E501). |
 
 ## Cómo levantar
 
@@ -644,7 +650,7 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
 
 **Rol al retomar (Prompt 42, monitor 0.7.1):** con Claude Code 2.1.257 o posterior, las sesiones se lanzan con `--system-prompt-snapshot off`: el system prompt se arma de nuevo en cada pedido, también al retomar, así que una sesión retomada toma el `--append-system-prompt` vigente y el monitor solo pone al día la huella del rol. Con una versión anterior (o si no puede leer la versión), sigue mandando el aviso de rol del Prompt 38.
 
-**Datos nuevos para la app (Prompts 42 y 43; la app iOS los usará en el Prompt 44, en la Mac):**
+**Datos nuevos para la app (Prompts 42 y 43, usados en el Prompt 44; Prompt 45, para el Prompt 46):**
 - **Órdenes** (en `GET /proyectos-creados/{id}/chat`, `GET /proyectos-creados/{id}/ordenes`, `GET /ordenes` y el campo `orden` de `GET /decisiones`):
   - `titulo`: título corto para la tarjeta, como en el boceto Chat;
   - `titulo_propio`: `true` si lo escribió el orquestador, `false` si se sacó de la primera línea del texto.
@@ -663,6 +669,12 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
   - `prueba` (bool) en `GET /proyectos-creados` y `GET /proyectos-creados/{id}`; `POST /proyectos-creados` acepta `prueba` (si falta, se marca solo cuando el nombre empieza con "prueba-").
   - `POST /proyectos-creados/{id}/prueba` con `{"prueba": true|false}` para cambiarlo.
   - Las órdenes traen `proyecto_prueba`. `GET /decisiones` ya no trae las preguntas de las sesiones del equipo ni nada de proyectos de prueba, y `decisiones_pendientes` (en `/agents/state`) tampoco las cuenta.
+- **Respuesta en vivo (Prompt 45, para el Prompt 46):**
+  - Cada mensaje de `GET /proyectos-creados/{id}/chat` trae `estado` y `leido`. En los de Washington, `estado` es `enviado`, `leido` o `respondiendo` y `leido` es la hora ISO en que el monitor se lo entregó a la sesión (o null). En los del orquestador, los dos son null. El POST del chat ya devuelve `estado: "enviado"`.
+  - `GET /proyectos-creados/{id}/chat` trae además `en_vivo`: `{"estado": "libre" | "leido" | "respondiendo", "parcial": "<markdown>", "mensaje_id", "desde", "actualizado"}`. `respondiendo` con `parcial` vacío = trabajando (tres puntos); con texto = la respuesta que se va escribiendo.
+  - `GET /proyectos-creados/{id}/chat/en-vivo`: `{"version", "en_vivo", "recientes"}`, con los últimos 5 mensajes en la misma forma. Al terminar una respuesta, `en_vivo` pasa a `libre` y el mensaje final ya está en `recientes` en la misma lectura: unir por id y la burbuja no salta. `version` cambia con cada novedad.
+  - `GET /proyectos-creados/{id}/chat/eventos`: el mismo JSON como Server-Sent Events (evento `chat`). Sale uno al conectar y otro en cada cambio, con un comentario `: pulso` cada 15 s. Cierra a los 5 min y pide `retry: 1000`. La app lo abre con su token (`Authorization: Bearer vap_…`) mientras el chat esté a la vista. Si la conexión falla, consulta `/chat/en-vivo` cada segundo, solo mientras `en_vivo.estado` no sea `libre` o haya un mensaje suyo sin leer.
+  - Los avisos y el push siguen saliendo solo de los mensajes finales.
 
 **Markdown en el chat:** los mensajes del orquestador se muestran con formato (negritas, cursivas, código, listas, encabezados, citas y enlaces); los de Washington siguen como texto plano.
 
@@ -670,6 +682,28 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
 - `git status`, `git diff`, `git log` y consultas como `node --version` ya son de solo lectura para Claude Code: nunca piden permiso, estén o no en la lista. Para probar la lista hace falta un comando que ejecute algo (`node -p 1+1` sí pidió permiso).
 - Las sesiones del equipo también usan las 629 reglas de permiso de la configuración de usuario (por ejemplo `Bash(npm run:*)`): lo que Washington ya permitió en general corre sin preguntar también en los proyectos. Queda como pendiente de seguridad.
 - La primera vez que se apagó una regla desde la web el cambio no quedó guardado (el servidor respondió una página HTML en ese momento); al repetirlo funcionó. Si vuelve a pasar, revisar el registro del VPS.
+
+## Respuesta en vivo del orquestador (etapa 4, Prompt 45)
+
+**Cómo viaja:**
+- Washington escribe: el servidor guarda el mensaje (Enviado) y deja el encargo.
+- El monitor lo toma (cada 1,5 s) y lo escribe a la sesión del orquestador: abre un turno con id y cuenta "leido" con el id del mensaje, que queda con su hora en `mensajes.leido` (esquema 6).
+- La sesión empieza a trabajar (primer evento del turno): "respondiendo". Con `--include-partial-messages`, cada `stream_event` con `text_delta` de la sesión principal suma al texto parcial; el monitor lo manda agrupado cada 400 ms a `POST /maquinas/chat/en-vivo`, sin los bloques `<orden>` (ni uno a medio escribir).
+- Al terminar, el final va a `POST /maquinas/chat` con el id del turno (reemplaza al parcial) y después sale "libre" con el id del mensaje (por si el hilo en vivo no alcanzó a contar el leído).
+- La web abre `/chat/eventos` mientras la sección Chat está a la vista; si EventSource falla 3 veces seguidas sin recibir nada, consulta `/chat/en-vivo` cada segundo.
+
+**En la web:** debajo de cada mensaje de Washington, "Enviado" y luego "Leído" junto a la hora; mientras el orquestador trabaja sin texto, una burbuja suya con tres puntos animados (quietos con movimiento reducido); el texto parcial aparece en esa burbuja con formato markdown y "Escribiendo…" donde va la hora. El final ocupa la misma burbuja sin salto.
+
+**Prueba real (2026-10-13):** local (localhost:3100 y 8100), monitor de prueba 0.8.0 con el código del repo, Claude Haiku, proyecto prueba-45 (detenido al terminar). Tiempos medidos consultando `/chat/en-vivo` cada 100 ms, desde que el servidor guardó el mensaje:
+
+| Pedido | Leído | Primer texto parcial | Final | Parciales distintos |
+| --- | --- | --- | --- | --- |
+| "Explícame en 10 puntos los riesgos…" (3147 caracteres) | 1,43 s | 2,30 s | 9,28 s | 16 (uno cada ~0,44 s) |
+
+- El último parcial tenía el largo exacto del final: la burbuja no saltó.
+- La primera medición ("Explícame en 10 puntos cómo organizarías este proyecto", la de las capturas) no sirve para la tabla: el medidor usaba `localhost` y en Windows Python tarda ~2 s en resolverlo. Con `127.0.0.1`, la segunda salió bien. En el navegador no pasa.
+- La web abrió una sola conexión `/chat/eventos` y no cayó al respaldo; el monitor mandó 14 novedades en vivo entre el saludo y la respuesta.
+- Capturas 45-enviado.png, 45-escribiendo.png y 45-final.png en `docs/capturas/etapa-4/`.
 
 ## Avisos de los orquestadores (etapa 4, Prompt 43)
 
@@ -1209,9 +1243,9 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington despliega el backend y la web del Prompt 43 (`bash despliegue/desplegar.sh`); el monitor sigue en la 0.7.1. Al arrancar, la migración 5 marca prueba-37 y prueba-39 como pruebas: dejan de avisar y, si llevan 30 min sin actividad, se detienen solas.
-2. Prompt 44 (app iOS, en la Mac): título de las órdenes, `GET /proyectos-creados/{id}/ordenes`, `donde_quedamos_id`, los avisos del orquestador con sus tres botones y el campo `prueba` (ver "Datos nuevos para la app").
-3. Del Prompt 40: la marca de "espera respuesta" quedó resuelta con los avisos del orquestador (la última pregunta sin respuesta de Washington).
+1. Washington despliega el backend y la web del Prompt 45 (`bash despliegue/desplegar.sh`; nginx no cambia) y actualiza el monitor a la 0.8.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`). En ese orden: un monitor 0.8.0 con el servidor anterior se calla la respuesta en vivo por 10 min y lo vuelve a intentar.
+2. Comprobar en el VPS que `/chat/eventos` llega sin búfer detrás de nginx y https (la burbuja crece de a poco, no de golpe); si no, la web cae sola a la consulta cada segundo.
+3. Prompt 46 (app iOS, en la Mac): Enviado y Leído, tres puntos y el texto parcial con `/chat/eventos` o `/chat/en-vivo` (ver "Datos nuevos para la app").
 4. prueba-39 tiene la orden 3 (crear el proyecto Next.js) por aprobar: como es de prueba ya no avisa; rechazarla o dejarla.
 5. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
 6. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
