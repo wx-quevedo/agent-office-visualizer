@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BotonSalir from "@/components/acceso/BotonSalir";
+import AvisosOrquestador from "@/components/avisos/AvisosOrquestador";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
 import { useVisitaOficina } from "@/components/donde/visita";
 import FichaAgente from "@/components/ficha/FichaAgente";
@@ -304,6 +305,13 @@ export default function Oficina3D() {
           <div className={s.aviso}>{t("barra.sinAgentes")}</div>
         )}
         {!editando && !app && <div className={s.ayuda}>{t("barra.ayuda")}</div>}
+        {/* Questions and orders of the orchestrators (Prompt 43); the app has its own. */}
+        {!app && (
+          <AvisosOrquestador
+            irA={(url) => router.push(url)}
+            oculta={editando}
+          />
+        )}
         {panel && !app && (
           <FichaAgente
             agente={agentePanel}

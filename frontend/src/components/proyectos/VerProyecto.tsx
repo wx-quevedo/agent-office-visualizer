@@ -9,11 +9,16 @@
  * quedamos" reuses that view fixed to this project. Prompt 39 adds to Equipo
  * the house rules and safe commands of the project, each with its switch, and
  * the switch note says what happens in its current state. Refreshed every 3 s.
+ * Prompt 43: `aviso` in the URL (from "Responder" of an orchestrator alert)
+ * goes to that message or order of the chat; the grey "Prueba" tag and the
+ * "Proyecto de prueba" switch in Equipo; the floating alerts of the other
+ * projects (AvisosOrquestador, without the ones of this project).
  */
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
+import AvisosOrquestador from "@/components/avisos/AvisosOrquestador";
 import DondeQuedamos from "@/components/donde/DondeQuedamos";
 import { useLectura } from "@/utils/useLectura";
 import { enviarJson, mensajeDe, useAhora } from "./acciones";
@@ -38,6 +43,7 @@ import {
   nombreModelo,
   nombrePlantilla,
   nombreRol,
+  TEXTO_PRUEBA,
   textoAuto,
   textoCorto,
   textoDificultad,
@@ -262,6 +268,8 @@ export interface PropsEquipo {
   cambiarRegla?: (id: string, activa: boolean) => Promise<void>;
   /** POST .../comandos/{id}; rejects with the message of the server. */
   cambiarComando?: (id: string, activo: boolean) => Promise<void>;
+  /** POST .../prueba; rejects with the message of the server. */
+  cambiarPrueba?: (prueba: boolean) => Promise<void>;
 }
 
 const nada = async () => {};
@@ -277,6 +285,7 @@ export function EquipoVista({
   errorReglas = null,
   cambiarRegla = nada,
   cambiarComando = nada,
+  cambiarPrueba = nada,
 }: PropsEquipo) {
   const id = useId();
   const [enviando, setEnviando] = useState<Accion | null>(null);
@@ -284,6 +293,8 @@ export function EquipoVista({
   const [confirmar, setConfirmar] = useState(false);
   const [auto, setAuto] = useState<boolean | null>(null);
   const [errorAuto, setErrorAuto] = useState<string | null>(null);
+  const [prueba, setPrueba] = useState<boolean | null>(null);
+  const [errorPrueba, setErrorPrueba] = useState<string | null>(null);
   const a = accionesDe(p.estado);
   const hacer = async (tipo: Accion) => {
     setEnviando(tipo);
@@ -306,6 +317,18 @@ export function EquipoVista({
       setErrorAuto(mensajeDe(e));
     } finally {
       setAuto(null);
+    }
+  };
+  const alternarPrueba = async () => {
+    const nuevo = !(prueba ?? Boolean(p.prueba));
+    setPrueba(nuevo);
+    setErrorPrueba(null);
+    try {
+      await cambiarPrueba(nuevo);
+    } catch (e) {
+      setErrorPrueba(mensajeDe(e));
+    } finally {
+      setPrueba(null);
     }
   };
   const equipo = [...p.equipo].sort(
@@ -405,6 +428,31 @@ export function EquipoVista({
           </p>
         )}
       </div>
+      <div className={s.bloque}>
+        <div className={s.interruptorFila}>
+          <button
+            type="button"
+            role="switch"
+            className={s.interruptor}
+            aria-checked={prueba ?? Boolean(p.prueba)}
+            aria-labelledby={`${id}-prueba-t`}
+            aria-describedby={`${id}-prueba-n`}
+            disabled={prueba !== null}
+            onClick={() => void alternarPrueba()}
+          />
+          <span id={`${id}-prueba-t`} className={s.campoTitulo}>
+            Proyecto de prueba
+          </span>
+        </div>
+        <p id={`${id}-prueba-n`} className={s.nota}>
+          {TEXTO_PRUEBA}
+        </p>
+        {errorPrueba && (
+          <p className={s.avisoError} role="alert">
+            {errorPrueba}
+          </p>
+        )}
+      </div>
       {equipo.length === 0 ? (
         <p className={s.aviso}>El equipo todavía no está armado.</p>
       ) : (
@@ -485,6 +533,9 @@ export interface PropsVista {
   errorReglas?: string | null;
   cambiarRegla?: (id: string, activa: boolean) => Promise<void>;
   cambiarComando?: (id: string, activo: boolean) => Promise<void>;
+  cambiarPrueba?: (prueba: boolean) => Promise<void>;
+  /** Alert opened with "Responder" ("mensaje:<id>" or "orden:<id>"). */
+  aviso?: string | null;
   /** "Dónde quedamos" of the project (injected: tests do not read the API). */
   donde?: (nombre: string) => ReactNode;
 }
@@ -505,6 +556,8 @@ export function ProyectoVista({
   errorReglas,
   cambiarRegla,
   cambiarComando,
+  cambiarPrueba,
+  aviso = null,
   donde,
 }: PropsVista) {
   // Orders decided here: the chat and the Equipo history show them at once.
@@ -536,6 +589,7 @@ export function ProyectoVista({
                 <h1 className={s.titulo}>{p.nombre}</h1>
                 <p className={`${s.secundario} ${s.mono}`}>{p.ruta}</p>
                 <p className={s.datos}>
+                  {p.prueba && <span className={s.prueba}>Prueba</span>}
                   <span>{nombreCuenta(p.cuenta)}</span>
                   <span>{nombreMaquina(p.maquina, maquinas)}</span>
                   <span>Plantilla {nombrePlantilla(p.plantilla)}</span>
@@ -568,6 +622,7 @@ export function ProyectoVista({
                 ahora={ahora}
                 cambioOrden={cambioOrden}
                 ordenesLocales={locales}
+                aviso={aviso}
               />
             )}
             {seccion === "equipo" && (
@@ -581,6 +636,7 @@ export function ProyectoVista({
                 errorReglas={errorReglas}
                 cambiarRegla={cambiarRegla}
                 cambiarComando={cambiarComando}
+                cambiarPrueba={cambiarPrueba}
               />
             )}
             {seccion === "donde" && donde?.(p.nombre)}
@@ -597,7 +653,9 @@ export function ProyectoVista({
  */
 export default function VerProyecto() {
   const params = useSearchParams();
+  const router = useRouter();
   const id = params.get("id");
+  const aviso = params.get("aviso");
   const seccion = seccionDe(params.get("seccion"));
   const base = id
     ? `/api/v1/proyectos-creados/${encodeURIComponent(id)}`
@@ -647,6 +705,10 @@ export default function VerProyecto() {
     if (!base) return;
     setLocal(await enviarJson<Proyecto>(`${base}/auto-aprobar`, { activo }));
   };
+  const cambiarPrueba = async (prueba: boolean) => {
+    if (!base) return;
+    setLocal(await enviarJson<Proyecto>(`${base}/prueba`, { prueba }));
+  };
   const agregarAgente = async (c: ConfigModelo) => {
     if (!base) return;
     setLocal(
@@ -670,24 +732,29 @@ export default function VerProyecto() {
       </div>
     );
   return (
-    <ProyectoVista
-      proyecto={masNuevo(api.datos, local)}
-      seccion={seccion}
-      maquinas={maq.datos?.maquinas ?? null}
-      error={api.error}
-      accion={accion}
-      chat={chat.datos}
-      errorChat={chat.error}
-      ahora={ahora}
-      autoAprobar={autoAprobar}
-      agregarAgente={agregarAgente}
-      reglas={reglas}
-      errorReglas={leidas.error}
-      cambiarRegla={(rid, activa) => cambiarAjuste("reglas", rid, { activa })}
-      cambiarComando={(cid, activo) =>
-        cambiarAjuste("comandos", cid, { activo })
-      }
-      donde={(nombre) => <DondeQuedamos proyecto={nombre} />}
-    />
+    <>
+      <ProyectoVista
+        proyecto={masNuevo(api.datos, local)}
+        seccion={seccion}
+        maquinas={maq.datos?.maquinas ?? null}
+        error={api.error}
+        accion={accion}
+        chat={chat.datos}
+        errorChat={chat.error}
+        ahora={ahora}
+        autoAprobar={autoAprobar}
+        agregarAgente={agregarAgente}
+        reglas={reglas}
+        errorReglas={leidas.error}
+        cambiarRegla={(rid, activa) => cambiarAjuste("reglas", rid, { activa })}
+        cambiarComando={(cid, activo) =>
+          cambiarAjuste("comandos", cid, { activo })
+        }
+        cambiarPrueba={cambiarPrueba}
+        aviso={aviso}
+        donde={(nombre) => <DondeQuedamos proyecto={nombre} />}
+      />
+      <AvisosOrquestador proyectoActual={id} irA={(url) => router.push(url)} />
+    </>
   );
 }

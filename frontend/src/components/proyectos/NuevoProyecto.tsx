@@ -4,7 +4,8 @@
  * /proyectos/nuevo (Prompt 37): name (with the folder that will be created),
  * machine, account, template, the team (orchestrator and 1 to 4 code agents)
  * and the switch to approve orders automatically. On creating, goes to the
- * project.
+ * project. Prompt 43: the "Proyecto de prueba" checkbox, checked by itself
+ * while the name starts with "prueba-" and the user has not touched it.
  */
 
 import Link from "next/link";
@@ -17,12 +18,14 @@ import {
   CUENTAS,
   MAX_AGENTES,
   PLANTILLAS,
+  TEXTO_PRUEBA,
   borradorInicial,
   cuerpoCrear,
   detalleError,
   enlaceProyecto,
   errorNombre,
   primeraDisponible,
+  pruebaEfectiva,
   puedeCrear,
   rutaNueva,
   textoAuto,
@@ -77,6 +80,8 @@ export function FormularioNuevo({
 }: PropsFormulario) {
   const [b, setB] = useState<Borrador>(() => borradorInicial());
   const [tocado, setTocado] = useState(false);
+  // null while the checkbox follows the name; the user's choice once touched.
+  const [pruebaElegida, setPruebaElegida] = useState<boolean | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const idNombre = useId();
@@ -85,7 +90,8 @@ export function FormularioNuevo({
   const elegida =
     maquinas?.find((m) => m.id === b.maquina && m.disponible)?.id ??
     primeraDisponible(maquinas);
-  const borrador: Borrador = { ...b, maquina: elegida };
+  const prueba = pruebaEfectiva(b.nombre, pruebaElegida);
+  const borrador: Borrador = { ...b, maquina: elegida, prueba };
   const maquina = maquinas?.find((m) => m.id === elegida) ?? null;
   const nombre = b.nombre.trim();
   const errNombre = errorNombre(nombre);
@@ -314,6 +320,21 @@ export function FormularioNuevo({
             </div>
             <p id={`${idNombre}-auto-n`} className={s.nota}>
               {textoAuto(b.auto_aprobar)}
+            </p>
+          </div>
+
+          <div className={s.bloque}>
+            <label className={s.casilla}>
+              <input
+                type="checkbox"
+                checked={prueba}
+                onChange={(e) => setPruebaElegida(e.target.checked)}
+                aria-describedby={`${idNombre}-prueba-n`}
+              />
+              <span className={s.campoTitulo}>Proyecto de prueba</span>
+            </label>
+            <p id={`${idNombre}-prueba-n`} className={s.nota}>
+              {TEXTO_PRUEBA}
             </p>
           </div>
 

@@ -65,6 +65,8 @@ export interface Agente {
     cuenta: string | null;
     maquina?: string | null;
     modelo?: string | null;
+    /** Id of the office project whose monitor launched this session (Prompt 43). */
+    proyecto_equipo?: string | null;
   };
   espera_detalle?: EsperaDetalle | null;
   atasco?: Atasco | null;

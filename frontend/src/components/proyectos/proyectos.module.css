@@ -1152,7 +1152,7 @@
 .velo {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 2000; /* above the orchestrator alert stack (1500) */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1339,4 +1339,63 @@
   .pie > * {
     flex: 1 1 auto;
   }
+}
+
+/* -- Prompt 43: alert opened from "Responder", test projects ---------------------- */
+
+/* The message or order of the alert, marked for a moment (no animation). */
+.resaltado {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
+  background: #fff7d6;
+}
+
+.resaltadoOrden > * {
+  outline: 3px solid var(--morado);
+  outline-offset: 2px;
+}
+
+/* Grey "Prueba" tag of a test project. */
+.prueba {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--borde-control);
+  border-radius: 999px;
+  background: var(--suave);
+  color: var(--gris);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.datos > .prueba {
+  margin-left: 0;
+}
+
+/* "Proyecto de prueba" checkbox of the new project form. */
+.casilla {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.casilla input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--azul);
+  cursor: pointer;
+}
+
+.casilla input:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
 }

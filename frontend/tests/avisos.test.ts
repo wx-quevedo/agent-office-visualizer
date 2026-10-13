@@ -4,6 +4,7 @@ import {
   ColaVoz,
   DetectorAvisos,
   EsperaResumenes,
+  avisable,
   construirAviso,
   elegirVoz,
   nombreAviso,
@@ -189,6 +190,69 @@ describe("detección de avisos", () => {
     const d = new DetectorAvisos();
     d.observar([agente("prueba-x", 6)], T0, ACTIVOS);
     expect(correr(d, [permiso("prueba-x")], 1000, 10 * 60_000)).toEqual([]);
+  });
+
+  it("nunca avisa de un proyecto prueba- aunque el id sea un UUID (Prompt 43)", () => {
+    const id = "3f1c2a9e-8b7d-4c6e-9a1f-0d2b3c4e5f60";
+    const conPregunta = (n: number) =>
+      agente(id, n, {
+        proyecto: "E:/proyectos/prueba-chat",
+        pregunta_pendiente: n === 14 ? "¿Sigo?" : null,
+      });
+    expect(avisable(conPregunta(14))).toBe(false);
+    const d = new DetectorAvisos();
+    d.observar([conPregunta(6)], T0, ACTIVOS);
+    expect(correr(d, [conPregunta(14)], 1000, 10 * 60_000)).toEqual([]);
+    // the same session in a normal project does alert
+    const otro = agente(id, 14, {
+      proyecto: "E:/proyectos/mi-prueba",
+      pregunta_pendiente: "¿Sigo?",
+    });
+    expect(avisable(otro)).toBe(true);
+    const d2 = new DetectorAvisos();
+    d2.observar(
+      [agente(id, 6, { proyecto: "E:/proyectos/mi-prueba" })],
+      T0,
+      ACTIVOS,
+    );
+    expect(correr(d2, [otro], 1000, 5000).map((x) => x.tipo)).toEqual([
+      "pregunta",
+    ]);
+  });
+
+  it("no avisa por las sesiones del equipo: ni estado 14, ni permiso, ni recordatorios (Prompt 43)", () => {
+    const delEquipo = (n: number, extra: Partial<Agente> = {}): Agente => {
+      const a = agente("orq-1", n, {
+        proyecto: "E:/proyectos/tienda-web",
+        pregunta_pendiente: n === 14 ? "¿Qué catálogo uso?" : null,
+        ...extra,
+      });
+      return { ...a, agente: { ...a.agente, proyecto_equipo: "p1" } };
+    };
+    expect(avisable(delEquipo(14))).toBe(false);
+    const d = new DetectorAvisos();
+    d.observar([delEquipo(6)], T0, ACTIVOS);
+    expect(correr(d, [delEquipo(14)], 1000, 20 * 60_000)).toEqual([]);
+    const d2 = new DetectorAvisos();
+    d2.observar([delEquipo(6)], T0, ACTIVOS);
+    const pide = delEquipo(13, {
+      espera: {
+        tipo: "tu_permiso",
+        evidencia: { herramienta: "Bash", comando: "git push" },
+      },
+    });
+    expect(correr(d2, [pide], 1000, 20 * 60_000)).toEqual([]);
+    // the same agent without proyecto_equipo alerts as before
+    const d3 = new DetectorAvisos();
+    d3.observar([agente("orq-1", 6)], T0, ACTIVOS);
+    expect(
+      correr(
+        d3,
+        [agente("orq-1", 14, { pregunta_pendiente: "¿Sigo?" })],
+        1000,
+        5000,
+      ).map((x) => x.tipo),
+    ).toEqual(["pregunta"]);
   });
 
   it("no avisa con los avisos desactivados ni con el evento apagado", () => {

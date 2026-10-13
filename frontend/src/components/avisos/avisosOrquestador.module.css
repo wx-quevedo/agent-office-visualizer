@@ -1,0 +1,211 @@
+/* Floating alerts of the orchestrators (Prompt 43): light theme, IBM Plex,
+   blue for questions, purple for orders. Bottom right on desktop, full width
+   at the bottom on phones. */
+
+.pila {
+  --tinta: #1f2329;
+  --gris: #4a505c;
+  --borde: #d5d9df;
+  --borde-control: #8a919c;
+  --suave: #eef0f3;
+  --azul: #1d4faf;
+  --azul-oscuro: #173f8c;
+  --azul-suave: #e3ecfb;
+  --morado: #5b3fa8;
+  --morado-oscuro: #48318a;
+  --morado-suave: #ece7f8;
+  --rojo: #9b2c1e;
+  --rojo-suave: #f8e7e4;
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  /* above the agent labels of the 3D scene (drei Html, up to 1000), below
+     the alerts panel (2000) and the agent card (2001) */
+  z-index: 1500;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--tinta);
+  font-family: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-left: 4px solid var(--azul);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 6px 20px rgba(31, 35, 41, 0.16);
+  min-width: 0;
+}
+
+.tarjetaOrden {
+  border-color: #c9bdea;
+  border-left-color: var(--morado);
+}
+
+.cabeza {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.proyecto {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.hace {
+  flex-shrink: 0;
+  font-family: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--gris);
+}
+
+.tipo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--azul);
+}
+
+.tipoOrden {
+  color: var(--morado);
+}
+
+.texto {
+  margin: 0;
+  color: var(--tinta);
+  overflow-wrap: anywhere;
+}
+
+.botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.responder,
+.boton {
+  min-height: 44px;
+  min-width: 44px;
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--borde-control);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--tinta);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.responder {
+  background: var(--azul);
+  border-color: var(--azul);
+  color: #ffffff;
+}
+
+.responder:hover {
+  background: var(--azul-oscuro);
+}
+
+.responderOrden {
+  background: var(--morado);
+  border-color: var(--morado);
+}
+
+.responderOrden:hover {
+  background: var(--morado-oscuro);
+}
+
+.boton:hover {
+  background: var(--suave);
+}
+
+.responder:focus-visible,
+.boton:focus-visible {
+  outline: 3px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--rojo);
+  border-radius: 10px;
+  background: var(--rojo-suave);
+  color: var(--rojo);
+  box-shadow: 0 6px 20px rgba(31, 35, 41, 0.16);
+}
+
+.errorTexto {
+  margin: 0;
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+.error .boton {
+  flex: 0 0 auto;
+}
+
+.oculto {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* -- phones ---------------------------------------------------------------------- */
+
+@media (max-width: 699px) {
+  .pila {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 55vh;
+    max-height: 55dvh;
+    padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .tarjeta {
+    padding: 10px 12px;
+  }
+}

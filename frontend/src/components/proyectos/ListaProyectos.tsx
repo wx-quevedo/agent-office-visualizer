@@ -5,9 +5,13 @@
  * machine, what they are doing, the team and the state. Prompt 38 adds the
  * "Decisiones" block on top (orders waiting for approval). Prompt 39 adds the
  * link to /ajustes (house rules and safe commands). Refreshed every 3 s.
+ * Prompt 43: the grey "Prueba" tag of test projects and the floating alerts
+ * of the orchestrators (AvisosOrquestador).
  */
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import AvisosOrquestador from "@/components/avisos/AvisosOrquestador";
 import { useLectura } from "@/utils/useLectura";
 import { useAhora } from "./acciones";
 import { DecisionesVista } from "./Decisiones";
@@ -107,7 +111,10 @@ export function ListaVista({
                       e.tono === "morado" ? `${s.fila} ${s.filaFuerte}` : s.fila
                     }
                   >
-                    <span className={s.filaNombre}>{p.nombre}</span>
+                    <span className={s.filaNombre}>
+                      {p.nombre}
+                      {p.prueba && <span className={s.prueba}>Prueba</span>}
+                    </span>
                     <span className={`${s.estado} ${s[e.tono]}`}>
                       {e.texto}
                     </span>
@@ -145,6 +152,7 @@ export function ListaVista({
 
 /** The page with its reads: projects and orders (3 s), machines (30 s). */
 export default function ListaProyectos() {
+  const router = useRouter();
   const api = useLectura<{ proyectos: Proyecto[] }>(
     "/api/v1/proyectos-creados",
     3000,
@@ -159,12 +167,15 @@ export default function ListaProyectos() {
   );
   const ahora = useAhora();
   return (
-    <ListaVista
-      proyectos={api.datos?.proyectos ?? null}
-      maquinas={maq.datos?.maquinas ?? null}
-      error={api.error}
-      ordenes={ord.datos?.ordenes ?? null}
-      ahora={ahora}
-    />
+    <>
+      <ListaVista
+        proyectos={api.datos?.proyectos ?? null}
+        maquinas={maq.datos?.maquinas ?? null}
+        error={api.error}
+        ordenes={ord.datos?.ordenes ?? null}
+        ahora={ahora}
+      />
+      <AvisosOrquestador irA={(url) => router.push(url)} />
+    </>
   );
 }

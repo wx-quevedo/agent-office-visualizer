@@ -5,11 +5,14 @@ import {
   borradorInicial,
   cuerpoCrear,
   errorNombre,
+  esNombrePrueba,
   estadoDe,
   haciendoDe,
   nombreEsfuerzo,
   nombreModelo,
   nombreValido,
+  ordenesParaDecidir,
+  pruebaEfectiva,
   puedeCrear,
   resumenEquipo,
   rutaNueva,
@@ -292,6 +295,7 @@ describe("lógica de proyectos", () => {
       orquestador: { modelo: "opus", esfuerzo: "high" },
       agentes: [{ modelo: "sonnet", esfuerzo: "medium" }],
       auto_aprobar: false,
+      prueba: false,
     });
     const cinco = { ...b, agentes: Array(5).fill(b.agentes[0]) };
     expect(cuerpoCrear(cinco).agentes).toHaveLength(4);
@@ -737,5 +741,170 @@ describe("equipo: detener, aprobar solo y agregar agente (Prompt 38)", () => {
     );
     expect(botonCon(el, "Agregar agente de código")?.disabled).toBe(true);
     expect(texto(el)).toContain("Ya tiene 4 agentes de código, el máximo.");
+  });
+});
+
+describe("proyectos de prueba (Prompt 43)", () => {
+  it("el nombre prueba- marca la casilla mientras no se toque", () => {
+    expect(esNombrePrueba("prueba-chat")).toBe(true);
+    expect(esNombrePrueba(" prueba-x ")).toBe(true);
+    expect(esNombrePrueba("mi-prueba")).toBe(false);
+    expect(esNombrePrueba("prueba")).toBe(false);
+    expect(pruebaEfectiva("prueba-chat", null)).toBe(true);
+    expect(pruebaEfectiva("tienda", null)).toBe(false);
+    expect(pruebaEfectiva("prueba-chat", false)).toBe(false);
+    expect(pruebaEfectiva("tienda", true)).toBe(true);
+    const base = {
+      estado: "por_aprobar" as const,
+      proyecto_prueba: false,
+    };
+    const ordenes = [
+      { ...base, id: "a" },
+      { ...base, id: "b", proyecto_prueba: true },
+      { ...base, id: "c", estado: "aprobada" as const },
+    ] as unknown as Parameters<typeof ordenesParaDecidir>[0];
+    expect(ordenesParaDecidir(ordenes).map((o) => o.id)).toEqual(["a"]);
+  });
+
+  it("casilla automática con el nombre y se manda prueba en el cuerpo", async () => {
+    const enviados: Borrador[] = [];
+    const el = await montar(
+      React.createElement(FormularioNuevo, {
+        maquinas: MAQUINAS,
+        crear: async (b: Borrador) => {
+          enviados.push(b);
+        },
+      }),
+    );
+    const casilla = el.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    )!;
+    expect(casilla.checked).toBe(false);
+    expect(texto(el)).toContain("Proyecto de prueba");
+    expect(texto(el)).toContain(
+      "No avisa ni entra en Decisiones, y se detiene solo tras 30 min sin actividad.",
+    );
+    const nombre = el.querySelector<HTMLInputElement>("input:not([type])")!;
+    await escribir(nombre, "prueba-chat");
+    expect(casilla.checked).toBe(true);
+    await escribir(nombre, "tienda");
+    expect(casilla.checked).toBe(false);
+    await escribir(nombre, "prueba-chat");
+
+    // once touched it keeps the user's choice
+    await React.act(async () => casilla.click());
+    expect(casilla.checked).toBe(false);
+    await escribir(nombre, "prueba-otra");
+    expect(casilla.checked).toBe(false);
+    await React.act(async () => casilla.click());
+    expect(casilla.checked).toBe(true);
+    await React.act(async () => botonCon(el, "Crear proyecto")!.click());
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0].prueba).toBe(true);
+    expect(enviados[0].nombre).toBe("prueba-otra");
+  });
+
+  it("marcada a mano sin el prefijo también se manda", async () => {
+    const enviados: Borrador[] = [];
+    const el = await montar(
+      React.createElement(FormularioNuevo, {
+        maquinas: MAQUINAS,
+        crear: async (b: Borrador) => {
+          enviados.push(b);
+        },
+      }),
+    );
+    const nombre = el.querySelector<HTMLInputElement>("input:not([type])")!;
+    await escribir(nombre, "tienda-web");
+    const casilla = el.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    )!;
+    expect(casilla.checked).toBe(false);
+    await React.act(async () => casilla.click());
+    expect(casilla.checked).toBe(true);
+    await React.act(async () => botonCon(el, "Crear proyecto")!.click());
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0].prueba).toBe(true);
+  });
+
+  it("etiqueta Prueba en la lista y en la cabecera del proyecto", async () => {
+    const el = await montar(
+      React.createElement(ListaVista, {
+        proyectos: [
+          proyecto(),
+          proyecto({ id: "p2", nombre: "prueba-chat", prueba: true }),
+        ],
+        maquinas: MAQUINAS,
+      }),
+    );
+    const filas = [...el.querySelectorAll("li")];
+    expect(texto(filas[0])).not.toContain("Prueba");
+    expect(texto(filas[1])).toContain("Prueba");
+    document.body.innerHTML = "";
+
+    const ver = await montar(
+      React.createElement(ProyectoVista, {
+        proyecto: proyecto({ prueba: true }),
+        seccion: "donde",
+        accion: async () => {},
+      }),
+    );
+    expect(texto(ver.querySelector("header")!)).toContain("Prueba");
+    const normal = await montar(
+      React.createElement(ProyectoVista, {
+        proyecto: proyecto(),
+        seccion: "donde",
+        accion: async () => {},
+      }),
+    );
+    expect(texto(normal.querySelector("header")!)).not.toContain("Prueba");
+  });
+
+  it("Equipo: el interruptor Proyecto de prueba manda el valor contrario", async () => {
+    const valores: boolean[] = [];
+    const el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto({ prueba: false }),
+        accion: async () => {},
+        cambiarPrueba: async (v: boolean) => {
+          valores.push(v);
+        },
+      }),
+    );
+    const sw = [
+      ...el.querySelectorAll<HTMLButtonElement>('[role="switch"]'),
+    ].find(
+      (b) =>
+        document.getElementById(b.getAttribute("aria-labelledby") ?? "")
+          ?.textContent === "Proyecto de prueba",
+    )!;
+    expect(sw).toBeDefined();
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+    expect(texto(el)).toContain(
+      "No avisa ni entra en Decisiones, y se detiene solo tras 30 min sin actividad.",
+    );
+    await React.act(async () => sw.click());
+    expect(valores).toEqual([true]);
+  });
+
+  it("Equipo: si el interruptor de prueba falla muestra el detail", async () => {
+    const el = await montar(
+      React.createElement(EquipoVista, {
+        proyecto: proyecto({ prueba: true }),
+        accion: async () => {},
+        cambiarPrueba: async () => {
+          throw new Error("El proyecto no existe.");
+        },
+      }),
+    );
+    const sw = [
+      ...el.querySelectorAll<HTMLButtonElement>('[role="switch"]'),
+    ][1];
+    expect(sw.getAttribute("aria-checked")).toBe("true");
+    await React.act(async () => sw.click());
+    expect(el.querySelector('[role="alert"]')?.textContent).toBe(
+      "El proyecto no existe.",
+    );
+    expect(sw.getAttribute("aria-checked")).toBe("true");
   });
 });

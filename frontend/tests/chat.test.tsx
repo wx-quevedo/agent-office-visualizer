@@ -652,3 +652,114 @@ describe("bloque de Decisiones", () => {
     expect(texto(el)).toContain("Orden 1 para agente aprobada.");
   });
 });
+
+describe("aviso abierto desde Responder (Prompt 43)", () => {
+  const chat = {
+    mensajes: [
+      mensaje({ id: "1", texto: "Arma la tienda" }),
+      mensaje({
+        id: "2",
+        autor: "orquestador" as const,
+        texto: "¿Uso Stripe o Mercado Pago?",
+        creado: "2026-10-11T15:05:00Z",
+      }),
+      mensaje({ id: "3", texto: "Otra cosa", creado: "2026-10-11T15:20:00Z" }),
+    ],
+    ordenes: [orden({ creado: "2026-10-11T15:06:00Z" })],
+  };
+
+  it("mensaje: lo resalta un momento y pone el foco en el campo de texto", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const el = await montar(
+        React.createElement(ChatVista, {
+          proyecto: { id: "p1", estado: "activo" },
+          chat,
+          ahora: AHORA,
+          aviso: "mensaje:2",
+        }),
+      );
+      const marcados = el.querySelectorAll("[data-resaltado]");
+      expect(marcados).toHaveLength(1);
+      expect(marcados[0].getAttribute("data-item")).toBe("m-2");
+      expect(texto(marcados[0])).toContain("¿Uso Stripe o Mercado Pago?");
+      expect(document.activeElement?.id).toBe("chat-mensaje");
+      await React.act(async () => {
+        vi.advanceTimersByTime(4000);
+      });
+      expect(el.querySelectorAll("[data-resaltado]")).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("orden: resalta su tarjeta, con Aprobar, Editar y Rechazar", async () => {
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    const el = await montar(
+      React.createElement(ChatVista, {
+        proyecto: { id: "p1", estado: "activo" },
+        chat,
+        ahora: AHORA,
+        aviso: "orden:o1",
+      }),
+    );
+    const marcado = el.querySelector("[data-resaltado]")!;
+    expect(marcado.getAttribute("data-item")).toBe("o-o1");
+    expect(boton(marcado, "Aprobar")).toBeDefined();
+    expect(boton(marcado, "Editar")).toBeDefined();
+    expect(boton(marcado, "Rechazar con motivo")).toBeDefined();
+    expect(document.activeElement?.id).not.toBe("chat-mensaje");
+  });
+
+  it("espera a que el mensaje llegue y no resalta nada con un aviso que no está", async () => {
+    const el = await montar(
+      React.createElement(ChatVista, {
+        proyecto: { id: "p1", estado: "activo" },
+        chat: null,
+        ahora: AHORA,
+        aviso: "mensaje:2",
+      }),
+    );
+    expect(el.querySelector("[data-resaltado]")).toBeNull();
+    const el2 = await montar(
+      React.createElement(ChatVista, {
+        proyecto: { id: "p1", estado: "activo" },
+        chat,
+        ahora: AHORA,
+        aviso: "mensaje:99",
+      }),
+    );
+    expect(el2.querySelector("[data-resaltado]")).toBeNull();
+  });
+});
+
+describe("Decisiones deja fuera los proyectos de prueba (Prompt 43)", () => {
+  it("no muestra las órdenes con proyecto_prueba", async () => {
+    const el = await montar(
+      React.createElement(DecisionesVista, {
+        ordenes: [
+          orden({ id: "a", proyecto: "tienda-web" }),
+          orden({
+            id: "b",
+            numero: 2,
+            proyecto: "prueba-chat",
+            proyecto_prueba: true,
+          }),
+        ],
+        ahora: AHORA,
+      }),
+    );
+    expect(texto(el)).toContain(
+      "Una orden del orquestador espera tu aprobación.",
+    );
+    expect(texto(el)).toContain("tienda-web");
+    expect(texto(el)).not.toContain("prueba-chat");
+    const sola = await montar(
+      React.createElement(DecisionesVista, {
+        ordenes: [orden({ proyecto_prueba: true })],
+        ahora: AHORA,
+      }),
+    );
+    expect(sola.querySelector("section")).toBeNull();
+  });
+});

@@ -7,8 +7,12 @@
  * Scrolls to the end on new items only when the reader was already there.
  * Prompt 41: the orchestrator's text is shown as markdown (Markdown.tsx);
  * Washington's stays plain text.
+ * Prompt 43: `aviso` (from "Responder" of an orchestrator alert) scrolls to
+ * that message or order and marks it for a moment; for a message the text
+ * field gets the focus, ready to answer.
  */
 
+import { objetivoAviso } from "@/components/avisos/logicaOrquestador";
 import {
   useLayoutEffect,
   useRef,
@@ -36,6 +40,16 @@ import s from "./proyectos.module.css";
 /** Distance to the end (px) that still counts as "at the end". */
 const CERCA = 48;
 
+/** How long the message or order of the alert stays marked. */
+export const RESALTADO_MS = 4000;
+
+/** Id of the chat item that `aviso` ("mensaje:<id>" or "orden:<id>") points to. */
+export function itemDeAviso(aviso: string | null | undefined): string | null {
+  const o = objetivoAviso(aviso);
+  if (!o) return null;
+  return `${o.tipo === "orden" ? "o" : "m"}-${o.id}`;
+}
+
 export interface PropsChat {
   proyecto: Pick<Proyecto, "id" | "estado">;
   chat: Chat | null;
@@ -45,6 +59,8 @@ export interface PropsChat {
   cambioOrden?: (o: Orden) => void;
   /** Local answers of decided orders, kept by the page. */
   ordenesLocales?: Record<string, Orden>;
+  /** Alert opened with "Responder": "mensaje:<id>" or "orden:<id>". */
+  aviso?: string | null;
 }
 
 export function ChatVista({
@@ -54,6 +70,7 @@ export function ChatVista({
   ahora,
   cambioOrden,
   ordenesLocales,
+  aviso = null,
 }: PropsChat) {
   const [enviados, setEnviados] = useState<Mensaje[]>([]);
   const [pendientes, setPendientes] = useState<Mensaje[]>([]);
@@ -64,6 +81,9 @@ export function ChatVista({
   const lista = useRef<HTMLOListElement>(null);
   const abajo = useRef(true);
   const contador = useRef(0);
+  const campo = useRef<HTMLTextAreaElement>(null);
+  const avisoHecho = useRef<string | null>(null);
+  const [avisoVisto, setAvisoVisto] = useState<string | null>(null);
 
   const locales = { ...propias, ...ordenesLocales };
   const items = chat
@@ -78,6 +98,30 @@ export function ChatVista({
     const el = lista.current;
     if (el && abajo.current) el.scrollTop = el.scrollHeight;
   }, [items.length, ultimo]);
+
+  // The alert's message or order: scroll the list to it once it is there.
+  const idAviso = itemDeAviso(aviso);
+  const hayAviso = idAviso !== null && items.some((x) => x.id === idAviso);
+  const resaltado = hayAviso && avisoVisto !== aviso ? idAviso : null;
+  useLayoutEffect(() => {
+    if (!aviso || !idAviso || !hayAviso || avisoHecho.current === aviso) return;
+    avisoHecho.current = aviso;
+    const el = lista.current;
+    const destino = el
+      ? [...el.querySelectorAll<HTMLElement>("[data-item]")].find(
+          (x) => x.dataset.item === idAviso,
+        )
+      : undefined;
+    if (el && destino) {
+      abajo.current = false;
+      el.scrollTop +=
+        destino.getBoundingClientRect().top -
+        el.getBoundingClientRect().top -
+        12;
+    }
+    if (idAviso.startsWith("m-")) campo.current?.focus();
+    setTimeout(() => setAvisoVisto(aviso), RESALTADO_MS);
+  }, [aviso, idAviso, hayAviso]);
 
   const alDesplazar = () => {
     const el = lista.current;
@@ -171,7 +215,16 @@ export function ChatVista({
           {items.map((x) => {
             if (x.tipo === "orden")
               return (
-                <li key={x.id} className={s.chatOrden}>
+                <li
+                  key={x.id}
+                  data-item={x.id}
+                  data-resaltado={x.id === resaltado || undefined}
+                  className={
+                    x.id === resaltado
+                      ? `${s.chatOrden} ${s.resaltadoOrden}`
+                      : s.chatOrden
+                  }
+                >
                   <TarjetaOrden orden={x.orden} ahora={ahora} cambio={cambio} />
                 </li>
               );
@@ -181,7 +234,15 @@ export function ChatVista({
             return (
               <li
                 key={x.id}
-                className={mio ? s.burbujaMia : s.burbujaOrq}
+                data-item={x.id}
+                data-resaltado={x.id === resaltado || undefined}
+                className={
+                  x.id === resaltado
+                    ? `${mio ? s.burbujaMia : s.burbujaOrq} ${s.resaltado}`
+                    : mio
+                      ? s.burbujaMia
+                      : s.burbujaOrq
+                }
                 aria-busy={pendiente || undefined}
               >
                 <span className={s.burbujaAutor}>
@@ -214,6 +275,7 @@ export function ChatVista({
           Mensaje para el orquestador
         </label>
         <textarea
+          ref={campo}
           id="chat-mensaje"
           className={`${s.control} ${s.area}`}
           rows={3}

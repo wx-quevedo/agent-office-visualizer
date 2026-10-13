@@ -5,6 +5,7 @@
  * orchestrators that waits for approval, in purple, with Aprobar, Rechazar
  * (asks for a reason) and a link to the chat of its project. Hidden when
  * nothing waits. The iOS app has its own inbox; this is the web one.
+ * Prompt 43: orders of test projects are left out.
  */
 
 import Link from "next/link";
@@ -13,6 +14,7 @@ import { haceTiempo } from "@/components/ficha/logica";
 import { DecidirOrden } from "./TarjetaOrden";
 import {
   enlaceProyecto,
+  ordenesParaDecidir,
   textoCorto,
   tituloOrden,
   unirOrdenes,
@@ -64,9 +66,7 @@ export interface PropsDecisiones {
 export function DecisionesVista({ ordenes, ahora }: PropsDecisiones) {
   const [locales, setLocales] = useState<Record<string, Orden>>({});
   const [anuncio, setAnuncio] = useState("");
-  const pendientes = unirOrdenes(ordenes ?? [], locales).filter(
-    (o) => o.estado === "por_aprobar",
-  );
+  const pendientes = ordenesParaDecidir(unirOrdenes(ordenes ?? [], locales));
   const cambio = (o: Orden) => {
     setLocales((v) => ({ ...v, [o.id]: o }));
     setAnuncio(

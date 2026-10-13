@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from "react";
 import BotonSalir from "@/components/acceso/BotonSalir";
+import AvisosOrquestador from "@/components/avisos/AvisosOrquestador";
 import PanelAvisos from "@/components/avisos/PanelAvisos";
 import { useVisitaOficina } from "@/components/donde/visita";
 import FichaAgente from "@/components/ficha/FichaAgente";
@@ -528,6 +529,8 @@ export default function Oficina() {
       {panelAvisos && (
         <PanelAvisos api={avisos} onCerrar={() => setPanelAvisos(false)} />
       )}
+      {/* Questions and orders of the orchestrators, with actions (Prompt 43). */}
+      <AvisosOrquestador irA={(url) => router.push(url)} />
       {panelPermisos && (
         <PanelConfigPermisos onCerrar={() => setPanelPermisos(false)} />
       )}

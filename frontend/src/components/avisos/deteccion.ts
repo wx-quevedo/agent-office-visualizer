@@ -9,7 +9,11 @@
  * - A change alerts only if the new state holds for `estabilidadMs` (3 s).
  * - Cooldown of `enfriamientoMs` (30 s) per agent and alert type.
  * - While an agent stays in 13 or 14, a reminder every N minutes.
- * - Sessions whose id starts with "prueba-" never alert.
+ * - Test sessions never alert: the id or the project folder starts with
+ *   "prueba-" (Prompt 43: the ids are UUIDs, so the folder is what matches).
+ * - Prompt 43: team sessions (`agente.proyecto_equipo`, launched by a
+ *   monitor) never alert here; AvisosOrquestador gives their alerts, with
+ *   actions.
  * - Stage 2.4: an agent that starts looking stuck alerts once per stuck
  *   episode, and every alert uses the one-sentence summary of the helper
  *   agent when it is ready (EsperaResumenes waits for it up to 8 s).
@@ -114,6 +118,13 @@ function resumenPendiente(a: Agente, tipo: TipoAviso): boolean {
 export const ESTABILIDAD_MS = 3000;
 export const ENFRIAMIENTO_MS = 30000;
 export const PREFIJO_PRUEBA = "prueba-";
+
+/** Whether the detector watches this agent (not a test nor a team session). */
+export function avisable(a: Agente): boolean {
+  if (a.agente.proyecto_equipo) return false;
+  if (a.agente.session_id.startsWith(PREFIJO_PRUEBA)) return false;
+  return !nombreProyecto(a).startsWith(PREFIJO_PRUEBA);
+}
 
 const CUENTAS: Record<string, string> = { personal: "personal", demo: "Demo Org" };
 
@@ -295,9 +306,7 @@ export class DetectorAvisos {
   }
 
   observar(agentes: Agente[], ahora: number, config: ConfigAvisos): Aviso[] {
-    const reales = agentes.filter(
-      (a) => !a.agente.session_id.startsWith(PREFIJO_PRUEBA),
-    );
+    const reales = agentes.filter(avisable);
     if (!this.iniciado) {
       // Page load: record the current states, alert nothing. Agents already
       // waiting get their first reminder one interval from now.

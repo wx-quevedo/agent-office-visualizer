@@ -5,7 +5,7 @@
  * Prompt 38 adds the chat with the orchestrator and its orders to the code
  * agents (mixing, state texts, who decided, the body of approve/reject).
  * Prompt 39 adds the texts of the auto-approve switch, the estimate and the
- * difficulty of an order.
+ * difficulty of an order. Prompt 43 adds the test projects (`prueba`).
  * No React, no fetch: tested in tests/proyectos.test.tsx, tests/chat.test.tsx
  * and tests/ajustes.test.tsx.
  */
@@ -61,6 +61,8 @@ export interface Proyecto {
   haciendo: string | null;
   ordenes_por_aprobar: number;
   equipo: Miembro[];
+  /** Test project (Prompt 43): no alerts, not in Decisiones, stops after 30 min idle. */
+  prueba?: boolean;
 }
 
 export interface Maquina {
@@ -88,6 +90,8 @@ export interface Borrador {
   orquestador: ConfigModelo;
   agentes: ConfigModelo[];
   auto_aprobar: boolean;
+  /** Test project (Prompt 43). */
+  prueba: boolean;
 }
 
 // -- names ----------------------------------------------------------------------------
@@ -316,6 +320,7 @@ export function borradorInicial(maquina = ""): Borrador {
     orquestador: { ...ORQUESTADOR_POR_DEFECTO },
     agentes: [{ ...AGENTE_POR_DEFECTO }],
     auto_aprobar: false,
+    prueba: false,
   };
 }
 
@@ -334,7 +339,39 @@ export function cuerpoCrear(b: Borrador): Borrador {
       .slice(0, MAX_AGENTES)
       .map((a) => ({ modelo: a.modelo, esfuerzo: a.esfuerzo })),
     auto_aprobar: b.auto_aprobar,
+    prueba: b.prueba,
   };
+}
+
+// -- test projects (Prompt 43) ---------------------------------------------------------
+
+export const PREFIJO_PRUEBA = "prueba-";
+
+/** What a test project means, under its checkbox and its switch. */
+export const TEXTO_PRUEBA =
+  "No avisa ni entra en Decisiones, y se detiene solo tras 30 min sin actividad.";
+
+/** A name that starts with "prueba-" marks the project as a test one. */
+export function esNombrePrueba(nombre: string): boolean {
+  return nombre.trim().startsWith(PREFIJO_PRUEBA);
+}
+
+/**
+ * The "Proyecto de prueba" checkbox: follows the name ("prueba-...") until the
+ * user touches it; after that it keeps the user's choice.
+ */
+export function pruebaEfectiva(
+  nombre: string,
+  elegida: boolean | null,
+): boolean {
+  return elegida ?? esNombrePrueba(nombre);
+}
+
+/** Orders for the Decisiones block: waiting for approval and not of a test project. */
+export function ordenesParaDecidir(ordenes: Orden[]): Orden[] {
+  return ordenes.filter(
+    (o) => o.estado === "por_aprobar" && !o.proyecto_prueba,
+  );
 }
 
 /** Whether "Crear proyecto" can be pressed. */
@@ -408,6 +445,8 @@ export interface Orden {
   resumen: string | null;
   creado: string;
   actualizado: string;
+  /** The order belongs to a test project (Prompt 43). */
+  proyecto_prueba?: boolean;
 }
 
 export interface Mensaje {

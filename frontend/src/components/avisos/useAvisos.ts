@@ -154,6 +154,57 @@ function hablarItem(item: ItemVoz, fin: () => void): void {
 
 const colaVoz = new ColaVoz<ItemVoz>(hablarItem);
 
+// -- alerts from outside the agent detector (Prompt 43) ----------------------------
+
+export interface AvisoExterno {
+  voz: string;
+  titulo: string;
+  cuerpo: string;
+  /** One notification per alert key. */
+  tag: string;
+  /** Click on the Windows notification. */
+  alHacerClic: () => void;
+}
+
+/**
+ * Voice and Windows notification of an alert that does not come from the
+ * agent detector (the orchestrators' questions and orders, AvisosOrquestador).
+ * Uses the saved settings of "Avisos": nothing while they are off, and the
+ * notification only with the permission granted. Works on pages without
+ * useAvisos (/proyectos): it reads the settings and voices itself.
+ */
+export function darAvisoExterno(aviso: AvisoExterno): void {
+  if (typeof window === "undefined") return;
+  const c = leerConfig();
+  if (!c.activos) return;
+  configVoz = c;
+  if (vocesActuales.length === 0) {
+    try {
+      vocesActuales = window.speechSynthesis?.getVoices() ?? [];
+    } catch {
+      vocesActuales = [];
+    }
+  }
+  colaVoz.encolar({ texto: aviso.voz, sonido: c.sonido });
+  if (permisoActual() !== "granted") return;
+  const conFoco = document.visibilityState === "visible" && document.hasFocus();
+  if (conFoco && !c.notificarConFoco) return;
+  try {
+    const opciones: NotificationOptions & { renotify?: boolean } = {
+      body: aviso.cuerpo,
+      tag: aviso.tag,
+    };
+    const n = new Notification(aviso.titulo, opciones);
+    n.onclick = () => {
+      window.focus();
+      aviso.alHacerClic();
+      n.close();
+    };
+  } catch {
+    // some browsers only allow notifications from a service worker
+  }
+}
+
 // -- hook ---------------------------------------------------------------------------
 
 export interface ApiAvisos {
