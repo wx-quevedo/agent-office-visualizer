@@ -88,6 +88,29 @@ struct MensajeChat: Codable, Equatable, Identifiable, Sendable {
     var autor: String // washington, orquestador
     var texto: String
     var creado: String
+    /// Solo en los de Washington (Prompt 45): enviado, leido o respondiendo.
+    var estado: String? = nil
+    /// Cuándo el monitor se lo entregó a la sesión del orquestador (ISO), o null.
+    var leido: String? = nil
+}
+
+/// La respuesta en curso del orquestador (Prompt 45). `respondiendo` con `parcial`
+/// vacío: trabajando (tres puntos); con texto: la respuesta que se va escribiendo.
+struct EnVivo: Codable, Equatable, Sendable {
+    var estado: String // libre, leido, respondiendo
+    var parcial: String?
+    var mensaje_id: String?
+    var desde: String?
+    var actualizado: String?
+
+    static let libre = EnVivo(estado: "libre", parcial: "", mensaje_id: nil, desde: nil, actualizado: nil)
+}
+
+/// `GET /chat/en-vivo` y cada evento `chat` de `/chat/eventos`.
+struct ChatEnVivo: Codable, Equatable, Sendable {
+    var version: String?
+    var en_vivo: EnVivo
+    var recientes: [MensajeChat]
 }
 
 struct Orden: Codable, Equatable, Identifiable, Sendable {
@@ -145,6 +168,7 @@ struct AvisosRespuesta: Codable, Equatable, Sendable {
 struct ChatRespuesta: Codable, Equatable, Sendable {
     var mensajes: [MensajeChat]
     var ordenes: [Orden]
+    var en_vivo: EnVivo? = nil
 }
 
 // MARK: - Reglas de la casa

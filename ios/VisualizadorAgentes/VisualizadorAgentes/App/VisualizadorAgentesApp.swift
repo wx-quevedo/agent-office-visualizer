@@ -3,6 +3,10 @@ import SwiftUI
 @main
 struct VisualizadorAgentesApp: App {
     @State private var modelo = ModeloApp()
+
+    init() {
+        Notificador.compartido.instalar()
+    }
     @Environment(\.scenePhase) private var fase
 
     var body: some Scene {
@@ -11,6 +15,9 @@ struct VisualizadorAgentesApp: App {
                 .environment(modelo)
                 .preferredColorScheme(.light)
                 .tint(.acento)
+                .onAppear {
+                    Notificador.compartido.alTocar = { [modelo] p, c in modelo.abrirDesdeNotificacion(proyecto: p, clave: c) }
+                }
                 .onChange(of: fase) { _, nueva in
                     switch nueva {
                     case .active: modelo.iniciar()
@@ -58,15 +65,12 @@ struct Pestanas: View {
                 IdeasVista()
             }
         }
-        // El aviso de un orquestador sale una sola vez por mensaje, sobre cualquier pestaña.
-        .overlay(alignment: .top) {
-            if let a = modelo.avisoNuevo {
-                BannerAviso(aviso: a)
-                    .padding(.top, 4)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
+        .alert("Avisos de los orquestadores", isPresented: Binding(get: { modelo.pedirPermisoNotificaciones }, set: { _ in })) {
+            Button("Activar") { Task { await modelo.responderPermisoNotificaciones(true) } }
+            Button("Ahora no", role: .cancel) { Task { await modelo.responderPermisoNotificaciones(false) } }
+        } message: {
+            Text("La app te avisa con una notificación cuando un orquestador te hace una pregunta o propone una orden. La quitas deslizándola hacia arriba, como cualquier notificación. Si no las activas, los avisos siguen en Decisiones.")
         }
-        .animation(.default, value: modelo.avisoNuevo?.clave)
     }
 }
 

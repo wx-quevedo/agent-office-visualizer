@@ -59,6 +59,10 @@ struct DecisionesVista: View {
                         }
                     }
                     resueltas(b.resueltas_hoy)
+                    Text(VersionApp.texto)
+                        .font(.system(size: 12)).foregroundStyle(Color.texto2)
+                        .frame(maxWidth: .infinity).padding(.top, 16)
+                        .accessibilityLabel(VersionApp.texto)
                 } else if let error {
                     Text(error).font(.system(size: 15)).foregroundStyle(Color.rojo)
                 } else {
@@ -389,34 +393,12 @@ struct BotonesAviso: View {
     }
 }
 
-/// El aviso nuevo, una sola vez por mensaje, arriba de cualquier pestaña.
-struct BannerAviso: View {
-    @Environment(ModeloApp.self) private var modelo
-    let aviso: AvisoOrquestador
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: aviso.tipo == "orden" ? "doc.text" : "questionmark.bubble")
-                .font(.system(size: 18, weight: .semibold)).foregroundStyle(Color.morado)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(LogicaAvisos.titulo(aviso)).font(.system(size: 14, weight: .semibold)).lineLimit(1)
-                Text(Logica.recortar(aviso.texto, 140)).font(.system(size: 13)).foregroundStyle(Color.texto3).lineLimit(2)
-                Button("Responder") { modelo.responder(aviso) }
-                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Color.acento)
-                    .padding(.top, 2)
-            }
-            Spacer(minLength: 0)
-            Button { modelo.avisoNuevo = nil } label: {
-                Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.texto2)
-                    .frame(width: 32, height: 32)
-            }
-            .accessibilityLabel("Cerrar el aviso")
-        }
-        .padding(12)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.bordeMorado))
-        .shadow(color: .black.opacity(0.12), radius: 14, y: 4)
-        .foregroundStyle(Color.texto)
-        .padding(.horizontal, 12)
+/// "Versión 0.1.0 (build 412)", al pie de Decisiones.
+enum VersionApp {
+    static var texto: String {
+        let info = Bundle.main.infoDictionary
+        let v = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = info?["CFBundleVersion"] as? String ?? "?"
+        return "Versión \(v) (build \(b))"
     }
 }

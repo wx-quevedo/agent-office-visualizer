@@ -29,7 +29,8 @@ final class ModeloApp {
     // Avisos de los orquestadores (Prompt 43): los que se pueden atender y el que se
     // anuncia ahora (cada clave una sola vez).
     private(set) var avisos: [AvisoOrquestador] = []
-    var avisoNuevo: AvisoOrquestador?
+    /// El proyecto cuyo chat está a la vista: sus avisos no se notifican.
+    var chatAbierto: String?
     @ObservationIgnored private var ultimaLecturaAvisos: Date = .distantPast
     @ObservationIgnored private var avisosLeidos = false
 
@@ -100,7 +101,6 @@ final class ModeloApp {
         rutaOficina = []
         rutaProyectos = []
         avisos = []
-        avisoNuevo = nil
         avisosLeidos = false
         proyectosEquipo = nil
         proyectosMonitor = nil
@@ -239,22 +239,53 @@ final class ModeloApp {
         let r = LogicaAvisos.revisar(lista.map(\.clave), avisadas: LogicaAvisos.leerAvisadas(), primera: !avisosLeidos)
         avisosLeidos = true
         LogicaAvisos.guardarAvisadas(r.avisadas)
-        if let primera = r.nuevas.first, let a = lista.first(where: { $0.clave == primera }) {
-            avisoNuevo = a
+        // Cada clave nueva, una sola notificación nativa (salvo que su chat esté a la vista).
+        let nuevos = r.nuevas.compactMap { c in lista.first { $0.clave == c } }
+            .filter { LogicaAvisos.debeNotificar($0, chatAbierto: chatAbierto) }
+        guard !nuevos.isEmpty else { return }
+        let n = Notificador.compartido
+        if await n.estado() == .notDetermined {
+            if n.yaPreguntado { return }
+            pendientesDeNotificar = nuevos
+            pedirPermisoNotificaciones = true
+            return
         }
-        if let n = avisoNuevo, !lista.contains(where: { $0.clave == n.clave }) { avisoNuevo = nil }
+        for a in nuevos { await n.mostrar(a) }
+    }
+
+    /// Avisos que esperan la respuesta al pedido de permiso de notificaciones.
+    @ObservationIgnored private var pendientesDeNotificar: [AvisoOrquestador] = []
+    /// La app explica para qué son las notificaciones antes del pedido del sistema.
+    var pedirPermisoNotificaciones = false
+
+    func responderPermisoNotificaciones(_ activar: Bool) async {
+        pedirPermisoNotificaciones = false
+        let pendientes = pendientesDeNotificar
+        pendientesDeNotificar = []
+        guard activar, await Notificador.compartido.pedirPermiso() else {
+            UserDefaults.standard.set(true, forKey: "notificacionesPreguntadas")
+            return
+        }
+        for a in pendientes where LogicaAvisos.debeNotificar(a, chatAbierto: chatAbierto) {
+            await Notificador.compartido.mostrar(a)
+        }
+    }
+
+    /// Al tocar una notificación: el chat de ese proyecto con la pregunta o la orden a la vista.
+    func abrirDesdeNotificacion(proyecto: String, clave: String) {
+        abrirProyecto(equipo: proyecto, seccion: .chat, aviso: clave)
     }
 
     /// Responder: el chat del proyecto con la pregunta (o la orden) a la vista.
     func responder(_ a: AvisoOrquestador) {
-        avisoNuevo = nil
+        Notificador.compartido.quitar(a.clave)
         abrirProyecto(equipo: a.proyecto_id, seccion: .chat, aviso: a.clave)
     }
 
     /// Ignorar o Esperar, guardado en el servidor.
     func atender(_ a: AvisoOrquestador, _ accion: AccionAviso) async throws {
         guard let api else { throw ErrorAPI.sinSesion }
-        if avisoNuevo?.clave == a.clave { avisoNuevo = nil }
+        Notificador.compartido.quitar(a.clave)
         try await api.accionAviso(a.clave, accion)
         avisos.removeAll { $0.clave == a.clave }
         await leerAvisos()

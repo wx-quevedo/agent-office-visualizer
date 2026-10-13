@@ -52,6 +52,16 @@ enum LogicaAvisos {
         }
     }
 
+    /// Título, cuerpo e identificador de la notificación nativa de un aviso.
+    static func contenido(_ a: AvisoOrquestador) -> (id: String, titulo: String, cuerpo: String) {
+        (a.clave, titulo(a), Logica.recortar(MarkdownLigero.sinHTML(a.texto), 240))
+    }
+
+    /// No se notifica el aviso de un proyecto cuyo chat ya está a la vista.
+    static func debeNotificar(_ a: AvisoOrquestador, chatAbierto: String?) -> Bool {
+        a.proyecto_id != chatAbierto
+    }
+
     /// "prueba-44" se marca solo como proyecto de prueba (misma regla que el servidor).
     static func esNombrePrueba(_ nombre: String) -> Bool {
         nombre.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("prueba-")

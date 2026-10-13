@@ -54,11 +54,23 @@ final class ClienteAPI: @unchecked Sendable {
     let servidor: URL
     let credencial: Credencial?
     private let sesion: URLSession
+    /// Para el canal SSE: sin límite corto entre datos (el servidor manda un pulso cada 15 s).
+    private let sesionSSE: URLSession
 
     init(servidor: URL, credencial: Credencial? = nil, sesion: URLSession? = nil) {
         self.servidor = servidor
         self.credencial = credencial
         self.sesion = sesion ?? ClienteAPI.sesionNueva()
+        if let sesion {
+            self.sesionSSE = sesion
+        } else {
+            let c = URLSessionConfiguration.ephemeral
+            c.httpCookieStorage = nil
+            c.httpShouldSetCookies = false
+            c.timeoutIntervalForRequest = 45
+            c.timeoutIntervalForResource = 400
+            self.sesionSSE = URLSession(configuration: c)
+        }
     }
 
     convenience init(credencial: Credencial) {
@@ -244,6 +256,41 @@ final class ClienteAPI: @unchecked Sendable {
 
     func chat(_ id: String) async throws -> ChatRespuesta {
         try await leer("/api/v1/proyectos-creados/\(Self.ruta(id))/chat")
+    }
+
+    /// Lo liviano para seguir una respuesta (respaldo del canal SSE).
+    func chatEnVivo(_ id: String) async throws -> ChatEnVivo {
+        try await leer("/api/v1/proyectos-creados/\(Self.ruta(id))/chat/en-vivo")
+    }
+
+    /// El canal SSE del chat: un `ChatEnVivo` al conectar y otro en cada cambio. Termina
+    /// cuando el servidor cierra (a los 5 min) y lanza si la conexión falla.
+    func eventosChat(_ id: String) -> AsyncThrowingStream<ChatEnVivo, Error> {
+        let destino = url("/api/v1/proyectos-creados/\(Self.ruta(id))/chat/eventos")
+        let galleta = credencial.map { "\($0.cookieNombre)=\($0.cookieValor)" }
+        let sesion = sesionSSE
+        return AsyncThrowingStream { continuacion in
+            let tarea = Task {
+                var p = URLRequest(url: destino)
+                p.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                p.cachePolicy = .reloadIgnoringLocalCacheData
+                if let galleta { p.setValue(galleta, forHTTPHeaderField: "Cookie") }
+                do {
+                    let (bytes, r) = try await sesion.bytes(for: p)
+                    guard let h = r as? HTTPURLResponse else { throw ErrorAPI.red }
+                    if h.statusCode == 401 { throw ErrorAPI.sinSesion }
+                    guard (200..<300).contains(h.statusCode) else { throw ErrorAPI.servidor(codigo: h.statusCode, mensaje: nil) }
+                    var lector = LectorSSE()
+                    for try await linea in bytes.lines {
+                        if let e = lector.linea(linea) { continuacion.yield(e) }
+                    }
+                    continuacion.finish()
+                } catch {
+                    continuacion.finish(throwing: error)
+                }
+            }
+            continuacion.onTermination = { _ in tarea.cancel() }
+        }
     }
 
     func escribir(_ id: String, texto: String) async throws -> MensajeChat {

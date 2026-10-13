@@ -178,16 +178,16 @@ struct ProyectoDetalle: View {
 // MARK: - Chat
 
 /// Chat con el orquestador (boceto Chat): burbujas con markdown, tarjetas de
-/// orden, campo de texto, dictado y enviar. Se lee cada 2 s.
+/// orden, Enviado y Leído, tres puntos mientras trabaja y la respuesta que se va
+/// escribiendo (canal SSE, Prompt 46), campo de texto, dictado y enviar.
 struct ChatProyecto: View {
     @Environment(ModeloApp.self) private var modelo
+    @Environment(\.scenePhase) private var fase
     let proyecto: ProyectoEquipo
     /// Clave del aviso que se responde: el mensaje o la orden quedan a la vista.
     var destacar: String? = nil
-    @State private var chat: ChatRespuesta?
+    @State private var vivo = ChatVivo()
     @State private var yaDestacado = false
-    @State private var locales: [String: Orden] = [:]
-    @State private var enviados: [MensajeChat] = []
     @State private var texto = ""
     @State private var enviando = false
     @State private var error: String?
@@ -205,13 +205,14 @@ struct ChatProyecto: View {
                                 .frame(maxWidth: .infinity, alignment: .center).multilineTextAlignment(.center)
                         }
                         if let items {
-                            if items.isEmpty {
+                            if items.isEmpty && vivo.burbuja == .ninguna {
                                 Text("Todavía no hay mensajes. Escríbele al orquestador para empezar.")
                                     .font(.system(size: 14)).foregroundStyle(Color.texto2)
                                     .frame(maxWidth: .infinity).padding(.top, 24)
                             }
                             ForEach(items) { item in fila(item).id(item.id) }
                                 .onAppear { mostrarAviso(lector) }
+                            burbujaVivo.id("vivo")
                         } else {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
                         }
@@ -219,32 +220,47 @@ struct ChatProyecto: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
+                    // Tocar fuera del campo baja el teclado.
+                    .contentShape(Rectangle())
+                    .onTapGesture { escribiendo = false }
                 }
-                .scrollDismissesKeyboard(.interactively)
+                // Desplazar el chat hacia abajo baja el teclado.
+                .scrollDismissesKeyboard(.immediately)
                 .defaultScrollAnchor(.bottom)
                 .onChange(of: items?.count) {
                     if yaDestacado || destacar == nil { lector.scrollTo("fin", anchor: .bottom) } else { mostrarAviso(lector) }
                 }
+                .onChange(of: vivo.enVivo) {
+                    if yaDestacado || destacar == nil { lector.scrollTo("fin", anchor: .bottom) }
+                }
             }
             barra
         }
-        .task(id: proyecto.id) { await sondear() }
+        .task(id: "\(proyecto.id)-\(fase == .active)") {
+            guard fase == .active, let api = modelo.api else {
+                vivo.detener()
+                return
+            }
+            modelo.chatAbierto = proyecto.id
+            vivo.iniciar(proyecto: proyecto.id, api: api) { [modelo] in modelo.sesionVencida() }
+        }
+        .onDisappear {
+            vivo.detener()
+            dictado.detener()
+            if modelo.chatAbierto == proyecto.id { modelo.chatAbierto = nil }
+        }
+        .onChange(of: fase) { _, nueva in
+            if nueva != .active, modelo.chatAbierto == proyecto.id { modelo.chatAbierto = nil }
+        }
         .onChange(of: dictado.texto) { _, nuevo in
             guard !nuevo.isEmpty else { return }
             texto = antesDeDictar.isEmpty ? nuevo : antesDeDictar + " " + nuevo
         }
-        .onDisappear { dictado.detener() }
     }
 
     private var items: [LogicaProyectos.ItemChat]? {
-        guard let chat else { return nil }
-        let ids = Set(chat.mensajes.map(\.id))
-        let mensajes = chat.mensajes + enviados.filter { !ids.contains($0.id) }
-        let ordenes = chat.ordenes.map { o in
-            if let l = locales[o.id], (FechaISO.leer(l.actualizado) ?? .distantPast) >= (FechaISO.leer(o.actualizado) ?? .distantPast) { return l }
-            return o
-        }
-        return LogicaProyectos.mezclar(mensajes, ordenes)
+        guard let mensajes = vivo.mensajes else { return nil }
+        return LogicaProyectos.mezclar(mensajes, vivo.ordenes)
     }
 
     /// Responder: lleva a la pregunta (o la orden) y deja el campo listo para escribir.
@@ -258,6 +274,11 @@ struct ChatProyecto: View {
         }
     }
 
+    private static func forma(_ mio: Bool) -> UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: mio ? 16 : 4,
+                               bottomTrailingRadius: mio ? 4 : 16, topTrailingRadius: 16)
+    }
+
     @ViewBuilder
     private func fila(_ item: LogicaProyectos.ItemChat) -> some View {
         let resaltada = LogicaAvisos.itemChat(destacar) == item.id
@@ -265,26 +286,64 @@ struct ChatProyecto: View {
         case .mensaje(let m):
             let mio = m.autor == "washington"
             VStack(alignment: mio ? .trailing : .leading, spacing: 2) {
-                TextoMarkdown(texto: m.texto, tamano: 15, color: mio ? .white : .texto)
-                    .padding(.horizontal, 12).padding(.vertical, 10)
-                    .background(mio ? Color.acento : Color.white,
-                                in: UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: mio ? 16 : 4,
-                                                           bottomTrailingRadius: mio ? 4 : 16, topTrailingRadius: 16))
-                    .overlay(UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: mio ? 16 : 4,
-                                                    bottomTrailingRadius: mio ? 4 : 16, topTrailingRadius: 16)
-                        .strokeBorder(mio ? Color.clear : (resaltada ? Color.morado : Color.borde), lineWidth: resaltada ? 2 : 1))
-                Text(Logica.horaMinuto(m.creado)).font(.system(size: 11)).foregroundStyle(Color.texto2)
+                Group {
+                    // Los de Washington van como texto plano; los del orquestador, con formato.
+                    if mio {
+                        Text(m.texto).font(.system(size: 15)).foregroundStyle(.white)
+                            .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                    } else {
+                        TextoMarkdown(texto: m.texto, tamano: 15, color: .texto)
+                    }
+                }
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .background(mio ? Color.acento : Color.white, in: Self.forma(mio))
+                .overlay(Self.forma(mio).strokeBorder(mio ? Color.clear : (resaltada ? Color.morado : Color.borde), lineWidth: resaltada ? 2 : 1))
+                HStack(spacing: 4) {
+                    Text(Logica.horaMinuto(m.creado))
+                    if let marca = LogicaChatVivo.marca(m) {
+                        Text("·")
+                        Text(marca).accessibilityLabel(marca)
+                    }
+                }
+                .font(.system(size: 11)).foregroundStyle(Color.texto2)
             }
             .frame(maxWidth: 330, alignment: mio ? .trailing : .leading)
             .frame(maxWidth: .infinity, alignment: mio ? .trailing : .leading)
         case .orden(let o):
-            TarjetaOrden(orden: o, resaltada: resaltada) { nueva in locales[nueva.id] = nueva }
+            TarjetaOrden(orden: o, resaltada: resaltada) { nueva in vivo.reemplazar(nueva) }
+        }
+    }
+
+    /// La respuesta en curso: tres puntos mientras trabaja sin texto y luego el texto
+    /// parcial con formato. El mensaje final la reemplaza en el mismo lugar.
+    @ViewBuilder
+    private var burbujaVivo: some View {
+        switch vivo.burbuja {
+        case .ninguna:
+            EmptyView()
+        case .puntos:
+            PuntosEscribiendo()
+                .padding(.horizontal, 14).padding(.vertical, 14)
+                .background(Color.white, in: Self.forma(false))
+                .overlay(Self.forma(false).strokeBorder(Color.borde))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("El orquestador está trabajando")
+        case .texto(let t):
+            VStack(alignment: .leading, spacing: 2) {
+                TextoMarkdown(texto: t, tamano: 15, color: .texto)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .background(Color.white, in: Self.forma(false))
+                    .overlay(Self.forma(false).strokeBorder(Color.borde))
+                Text("Escribiendo…").font(.system(size: 11)).foregroundStyle(Color.texto2)
+            }
+            .frame(maxWidth: 330, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private var barra: some View {
         VStack(spacing: 4) {
-            if let e = dictado.error ?? error {
+            if let e = dictado.error ?? error ?? vivo.error {
                 Text(e).font(.system(size: 12)).foregroundStyle(Color.rojo).frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(alignment: .bottom, spacing: 8) {
@@ -331,41 +390,43 @@ struct ChatProyecto: View {
         .overlay(alignment: .top) { Divider().overlay(Color.borde) }
     }
 
-    private func sondear() async {
-        while !Task.isCancelled {
-            await leer()
-            try? await Task.sleep(for: .seconds(2))
-        }
-    }
-
-    private func leer() async {
-        guard let api = modelo.api else { return }
-        do {
-            chat = try await api.chat(proyecto.id)
-            error = nil
-        } catch ErrorAPI.sinSesion {
-            modelo.sesionVencida()
-        } catch let e as ErrorAPI {
-            if chat == nil { error = e.mensaje }
-        } catch {}
-    }
-
     private func enviar() {
         let t = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, let api = modelo.api else { return }
         dictado.detener()
+        escribiendo = false // el teclado se baja al enviar
         enviando = true
         error = nil
         Task {
             defer { enviando = false }
             do {
                 let m = try await api.escribir(proyecto.id, texto: String(t.prefix(8000)))
-                enviados.append(m)
+                vivo.agregar(m)
                 texto = ""
-                await leer()
             } catch let e as ErrorAPI {
                 error = e.mensaje
             } catch {}
+        }
+    }
+}
+
+/// Tres puntos animados (quietos si el iPhone tiene activado reducir el movimiento).
+struct PuntosEscribiendo: View {
+    @Environment(\.accessibilityReduceMotion) private var reducir
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.15, paused: reducir)) { t in
+            let paso = Int(t.date.timeIntervalSinceReferenceDate / 0.3) % 3
+            HStack(spacing: 5) {
+                ForEach(0..<3) { i in
+                    Circle()
+                        .fill(Color.texto2)
+                        .frame(width: 8, height: 8)
+                        .opacity(reducir ? 0.6 : (i == paso ? 1 : 0.3))
+                        .offset(y: reducir || i != paso ? 0 : -2)
+                }
+            }
+            .animation(.easeInOut(duration: 0.15), value: paso)
         }
     }
 }
