@@ -1,5 +1,8 @@
 import Foundation
 import UserNotifications
+import os
+
+private let registro = Logger(subsystem: "com.inmersoft.visualizadoragentes", category: "notificaciones")
 
 /// Notificaciones nativas de iOS para los avisos de los orquestadores (Prompt 46).
 /// Son locales: salen mientras la app está abierta o recién en segundo plano. Con la
@@ -9,8 +12,22 @@ final class Notificador: NSObject, UNUserNotificationCenterDelegate {
     static let compartido = Notificador()
     private static let clavePreguntado = "notificacionesPreguntadas"
 
-    /// Al tocar una notificación: (proyecto_id, clave del aviso).
-    var alTocar: (String, String) -> Void = { _, _ in }
+    /// Al tocar una notificación: (proyecto_id, clave del aviso). Si la app todavía no
+    /// lo instaló (abrió desde la notificación), el toque queda guardado hasta entonces.
+    var alTocar: ((String, String) -> Void)? {
+        didSet {
+            if let alTocar, let p = pendiente {
+                pendiente = nil
+                alTocar(p.0, p.1)
+            }
+        }
+    }
+    private var pendiente: (String, String)?
+
+    func tocada(_ proyecto: String, _ clave: String) {
+        registro.notice("abrir chat \(proyecto, privacy: .public) en \(clave, privacy: .public)")
+        if let alTocar { alTocar(proyecto, clave) } else { pendiente = (proyecto, clave) }
+    }
 
     private var centro: UNUserNotificationCenter { .current() }
 
@@ -52,14 +69,22 @@ final class Notificador: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - UNUserNotificationCenterDelegate
 
     /// También con la app abierta: banner nativo, que se quita deslizando hacia arriba.
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification)
-        async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .list, .sound])
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
-        guard let proyecto = info["proyecto_id"] as? String, let clave = info["clave"] as? String else { return }
-        await MainActor.run { Notificador.compartido.alTocar(proyecto, clave) }
+        registro.notice("toque en notificación: \(response.actionIdentifier, privacy: .public)")
+        let proyecto = info["proyecto_id"] as? String
+        let clave = info["clave"] as? String
+        DispatchQueue.main.async {
+            if let proyecto, let clave {
+                MainActor.assumeIsolated { Notificador.compartido.tocada(proyecto, clave) }
+            }
+            completionHandler()
+        }
     }
 }
