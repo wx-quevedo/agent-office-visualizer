@@ -101,6 +101,10 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-12 | Las sesiones del equipo se lanzan con `--setting-sources project,local` (sin la configuración de usuario), también al retomarlas, y con `--settings <archivo>` que el monitor genera en cada arranque con solo los hooks de la oficina de su cuenta (copiados de su settings.json, con matcher y timeout) y, para el agente, `crossSessionInbound: refuse` | Así el equipo no hereda las 629 reglas de permiso ni los demás hooks de las sesiones normales de Washington, la oficina sigue viéndolas y la cuenta no cambia (CLAUDE_CONFIG_DIR elige la carpeta y sus credenciales, que no son una fuente de configuración). Los archivos `.claude/` del proyecto son rutas protegidas: aun con `acceptEdits`, el agente no puede darse permisos sin pedirlos |
 | 2026-10-12 | Los avisos de reglas a una sesión se juntan: esperan 8 s desde el último cambio y dicen qué se agregó y qué se quitó respecto de lo que la sesión conocía | Varios interruptores seguidos generaban un aviso por cambio y confundían al orquestador (prueba del Prompt 39) |
 | 2026-10-12 | El chat muestra el markdown del orquestador con un parser propio que arma elementos de React (nunca HTML crudo) y enlaces solo http, https y mailto | Sin dependencias nuevas y sin forma de inyectar HTML o scripts desde la respuesta de un modelo |
+| 2026-10-12 | Cada orden tiene un título corto: el orquestador lo escribe en el bloque (`titulo="..."`, obligatorio en su rol) y el backend lo guarda; si falta, se usa la primera línea del texto sin marcas, recortada a 80 caracteres (`titulo_propio` dice cuál de los dos es) | El boceto de la tarjeta lo muestra y la app no tenía con qué; el respaldo cubre las órdenes viejas y un orquestador que lo olvide |
+| 2026-10-12 | Cada entrada de "Dónde quedamos" (`GET /proyectos`) tiene un `id` estable (máquina y carpeta normalizada) y cada proyecto con equipo devuelve `donde_quedamos_id` con esa entrada, o null | La app los unía por carpeta o por nombre; ahora la unión la hace el servidor, igual que la comparación de carpetas del resto de la oficina |
+| 2026-10-12 | Las sesiones del equipo se lanzan con `--system-prompt-snapshot off` cuando Claude Code es 2.1.257 o posterior (el monitor lo comprueba con `claude --version`); el aviso de rol queda solo como respaldo para versiones anteriores | Probado con Claude real: una sesión retomada sin la opción respondió con su rol de nacimiento y con la opción, con el rol nuevo, sin ningún aviso |
+| 2026-10-12 | El rol del orquestador dice que Washington es la persona con quien habla y que nunca se presenta con su nombre; el saludo le pide presentarse como el orquestador del proyecto | Con Haiku se presentó dos veces como "Washington" (Prompt 41); con el texto nuevo, 6 de 6 saludos reales fueron correctos |
 | 2026-10-11 | App iOS: Face ID con el código del iPhone como respaldo; aprobar un comando de la lista "confirmar" de `/permisos/config` pide Face ID (si el iPhone no tiene bloqueo configurado, no hay con qué comprobar y se aprueba) | Misma regla de comandos peligrosos que la web |
 
 ## Ajustes heredados de la instalación diaria
@@ -192,6 +196,12 @@ Prueba real con Claude (Haiku, esfuerzo bajo) y un monitor de prueba con el cód
 - Con el backend y la web locales (3100 y 8100) y el mismo monitor de prueba: la plantilla Web dice que el proyecto Next.js lo crea la primera orden; el orquestador respondió con título, lista numerada, negritas, bloque de código y enlace, todo con formato; cuatro cambios de reglas seguidos llegaron como un solo aviso por sesión con "Se quitó" de las dos que quedaron apagadas.
 - No se tocó ningún proceso: los 81 de Claude Code y VS Code de antes siguieron vivos y las sesiones de prueba se cerraron.
 Capturas 41-chat-formato.png y 41-avisos.png en `docs/capturas/etapa-4/` |
+| 2026-10-12 | Etapa 4 (Prompt 42), API completa para la app y rol al retomar: backend con el título de las órdenes (esquema 4), el vínculo con "Dónde quedamos" y `GET /proyectos-creados/{id}/ordenes` (commit `81e84e5`); web con el título en la tarjeta y el historial (`71a3ca6`); monitor 0.7.1 con `--system-prompt-snapshot off`, el título en el bloque de orden y el rol que deja claro quién es Washington (`aebe06a`).
+Prueba real con Claude (Haiku, esfuerzo bajo) y un monitor de prueba con el código del repo:
+- Rol al retomar: un equipo nació con el rol "color ROJO", se pausó, el rol cambió a "AZUL" y se reanudó sin aviso de rol. Sin la opción respondió "Rojo"; con `--system-prompt-snapshot off`, "AZUL".
+- Presentación: 6 de 6 saludos reales dijeron "Hola, Washington. Soy el orquestador del proyecto …".
+- Web y backend locales: el orquestador propuso la primera orden con su título ("Fase 1 · Prompt 1: crear proyecto Next.js base", `titulo_propio: true`); `donde_quedamos_id` coincidió con el `id` de su entrada en `GET /proyectos`.
+Captura 42-orden-titulo.png en `docs/capturas/etapa-4/` |
 
 ## Cómo levantar
 
@@ -619,6 +629,19 @@ Arquitectura A (ver la investigación más abajo y `docs/etapa-4/investigacion.m
 **Aislamiento (Prompt 41, monitor 0.7.0):** cada sesión del equipo arranca con `--setting-sources project,local` y `--settings <carpeta del monitor>/ajustes-equipo/<proyecto>-<miembro>.json`. Ese archivo se reescribe en cada arranque con los hooks de la oficina del settings.json de la cuenta (así toma la ruta del monitor instalado en ese momento) y, para el agente, `crossSessionInbound: refuse`. Las reglas de permiso, el modelo, la barra de estado y los otros hooks de la configuración de usuario no llegan al equipo. Si la cuenta no tiene hooks de la oficina, la sesión arranca igual (sin que la oficina la vea) y el monitor lo deja en su registro.
 
 **Avisos de reglas:** un cambio de reglas no se escribe enseguida a la sesión: el aviso espera 8 s desde el último cambio, y si llega otro mientras tanto, se reemplaza por uno solo con todos los cambios respecto de lo que la sesión conocía ("Se agregó", "Se quitó") y la lista vigente.
+
+**Rol al retomar (Prompt 42, monitor 0.7.1):** con Claude Code 2.1.257 o posterior, las sesiones se lanzan con `--system-prompt-snapshot off`: el system prompt se arma de nuevo en cada pedido, también al retomar, así que una sesión retomada toma el `--append-system-prompt` vigente y el monitor solo pone al día la huella del rol. Con una versión anterior (o si no puede leer la versión), sigue mandando el aviso de rol del Prompt 38.
+
+**Datos nuevos para la app (Prompt 43, sin cambiar ios/ todavía):**
+- **Órdenes** (en `GET /proyectos-creados/{id}/chat`, `GET /proyectos-creados/{id}/ordenes`, `GET /ordenes` y el campo `orden` de `GET /decisiones`):
+  - `titulo`: título corto para la tarjeta, como en el boceto Chat;
+  - `titulo_propio`: `true` si lo escribió el orquestador, `false` si se sacó de la primera línea del texto.
+  - El `resumen` de Decisiones ahora usa el título: "Orden N para agente: <titulo>".
+- **`GET /proyectos-creados/{id}/ordenes`** (opcional `?estado=por_aprobar`): solo las órdenes del proyecto, las más nuevas primero, con `numero`, `titulo`, `agente`, `estado`, `estimado`, `dificultad`, `decidido_por`, `decidido`, `motivo`, `resumen`, `texto` y `editada`. Reemplaza leer las órdenes desde el chat en la sección Equipo.
+- **Vínculo con "Dónde quedamos":**
+  - `GET /proyectos` trae un `id` en cada entrada;
+  - `GET /proyectos-creados` y `GET /proyectos-creados/{id}` traen `donde_quedamos_id` (o `null` mientras el monitor no haya informado ese PROJECT.md).
+  - La app debe unir por ese id y dejar de comparar carpeta o nombre.
 
 **Markdown en el chat:** los mensajes del orquestador se muestran con formato (negritas, cursivas, código, listas, encabezados, citas y enlaces); los de Washington siguen como texto plano.
 
@@ -1056,6 +1079,8 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 | El orquestador de prueba-37 seguía diciendo que no podía dar órdenes después de actualizar el monitor | `--resume` conserva el rol de nacimiento: el monitor 0.5.1 le escribe el rol nuevo una vez al retomarlo |
 | El agente no pudo escribir hola.txt: permiso rechazado al instante | Una sesión `-p` no tiene diálogo; los permisos del equipo ahora siempre esperan la decisión en la web o la app (y los agentes editan su carpeta con `acceptEdits`) |
 | Las sesiones del equipo heredaban las 629 reglas de permiso de la configuración de usuario | Monitor 0.7.0: `--setting-sources project,local` y los hooks de la oficina por `--settings` |
+| Una carpeta de prueba llamada `con` no dejó crear `.git` ("Invalid argument") | En Windows `con`, `prn`, `aux`, `nul`, `com1` a `com9` y `lpt1` a `lpt9` son nombres reservados; el monitor ya los rechaza como nombre de proyecto, pero también hay que evitarlos en carpetas de prueba |
+| Un mensaje escrito en la web local apenas cargó la página no se envió | Se escribió antes de que React terminara de hidratar; esperar a que la página termine de cargar |
 | La web local en http://127.0.0.1:3100 se queda en "Cargando…" (React no hidrata) | Next en modo desarrollo solo sirve sus recursos al origen permitido: abrirla en http://localhost:3100 |
 | En Windows, la recarga del backend detiene el frontend | Pendiente: reiniciar `make dev` tras cambios de código del backend |
 | En Windows, la recarga automática del backend a veces se traba y sigue respondiendo el proceso viejo | Detener 3100/8100 y volver a `make dev-local` |
@@ -1149,12 +1174,11 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington despliega la web (`bash despliegue/desplegar.sh`) y actualiza el monitor a la 0.7.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`). Al arrancar, retoma prueba-37 y prueba-39 ya sin la configuración de usuario.
-2. Probar `--system-prompt-snapshot off` en las sesiones del equipo: según la documentación, hace que una sesión retomada tome el `--append-system-prompt` nuevo, lo que resolvería de raíz el aviso de rol del Prompt 38.
-3. El orquestador con Haiku a veces se presenta como "Washington" ("Soy Washington… no: soy el orquestador"): ajustar el texto del rol para que nombre a Washington solo como la persona con quien conversa.
+1. Washington despliega el backend y la web (`bash despliegue/desplegar.sh`) y actualiza el monitor a la 0.7.1 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`). Al arrancar, prueba-37 y prueba-39 se retoman con `--system-prompt-snapshot off` y el rol nuevo, sin aviso.
+2. Prompt 43 (app iOS, en la Mac): usar `titulo` en la tarjeta de orden, `GET /proyectos-creados/{id}/ordenes` en Equipo y `donde_quedamos_id` para unir los proyectos (ver "Datos nuevos para la app").
+3. Lo que sigue anotado del Prompt 40: una forma de marcar que un mensaje del orquestador espera respuesta (para destacarlo y contarlo en Decisiones).
 4. prueba-39 tiene la orden 3 (crear el proyecto Next.js) por aprobar: aprobarla o rechazarla.
-5. App iOS (otro agente, en la Mac): botones Aprobar y Rechazar para las órdenes en Decisiones, y el chat del proyecto.
-6. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
-7. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
-8. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
-9. Vigilar el disco del VPS (85 % usado).
+5. Etapa 3, Prompt 33, lo que falta en el iPhone: el dictado de ideas, una pregunta y un permiso reales de punta a punta, y las capturas 33-decisiones-pregunta.png y 33-ideas-dictado.png.
+6. Etapa 3, Prompts 32 y 34: push y lo que necesita la membresía de pago de Apple, cuando esté renovada.
+7. Sistema de prompts de Washington: reemplaza la vista de prompts de "Dónde quedamos".
+8. Vigilar el disco del VPS (85 % usado).
