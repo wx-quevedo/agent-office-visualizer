@@ -56,8 +56,14 @@ async def get_agents_state() -> dict[str, Any]:
     items = pendientes(agentes, bandejas.vistos(), ahora)
     bandejas.sincronizar(items, agentes)
     # Etapa 4: las órdenes por aprobar también esperan a Washington.
-    ordenes = sum(get_proyectos_equipo().por_aprobar().values())
-    return {**snap, "agentes": agentes, "decisiones_pendientes": len(items) + ordenes}
+    reg = get_proyectos_equipo()
+    ordenes = sum(reg.por_aprobar(con_pruebas=False).values())
+    pendientes_reales = reg.filtrar_decisiones(items)
+    return {
+        **snap,
+        "agentes": agentes,
+        "decisiones_pendientes": len(pendientes_reales) + ordenes,
+    }
 
 
 class Heartbeat(BaseModel):

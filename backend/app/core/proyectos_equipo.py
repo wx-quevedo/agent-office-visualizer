@@ -37,7 +37,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-ESQUEMA = 4
+ESQUEMA = 5
 # Nombre de un proyecto: la carpeta que se crea. Minúsculas, números y guiones,
 # sin empezar ni terminar con guion, sin puntos ni barras (nunca una ruta).
 NOMBRE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$")
@@ -48,6 +48,8 @@ CUENTAS = ("personal", "demo")
 PLANTILLAS = ("web", "unity", "expo", "vacia")
 ESFUERZOS = ("low", "medium", "high", "xhigh", "max")
 MAX_AGENTES = 4
+# Un proyecto cuyo nombre empieza así se marca como prueba al crearlo.
+PREFIJO_PRUEBA = "prueba-"
 # Encargo tomado por un monitor que no informó: se vuelve a entregar.
 REENTREGA = timedelta(minutes=3)
 # Máquina encendida: latido del monitor en los últimos 90 s (sale cada 30 s).
@@ -204,7 +206,19 @@ _MIGRACIONES: dict[int, list[str]] = {
     ],
     # Prompt 42: el título corto de cada orden (lo escribe el orquestador en el bloque).
     4: ["ALTER TABLE ordenes ADD COLUMN titulo TEXT"],
+    # Prompt 43: proyectos de prueba (sin avisos ni Decisiones; se detienen solos) y el
+    # estado de los avisos de los orquestadores (ignorado o en espera), para web y app.
+    5: [
+        "ALTER TABLE proyectos ADD COLUMN prueba INTEGER NOT NULL DEFAULT 0",
+        f"UPDATE proyectos SET prueba = 1 WHERE nombre LIKE '{PREFIJO_PRUEBA}%'",
+        """CREATE TABLE IF NOT EXISTS avisos_orquestador (
+            clave TEXT PRIMARY KEY, proyecto_id TEXT NOT NULL, estado TEXT NOT NULL,
+            hasta_mensaje TEXT, actualizado TEXT NOT NULL)""",
+    ],
 }
+
+# Un proyecto de prueba sin actividad del equipo se detiene solo.
+INACTIVIDAD_PRUEBA = timedelta(minutes=30)
 
 MAX_TITULO = 80
 
@@ -262,6 +276,32 @@ def version_tupla(v: str | None) -> tuple[int, ...]:
 
 def _iso(ts: datetime) -> str:
     return ts.astimezone(UTC).isoformat()
+
+
+def _fecha_utc(texto: str) -> datetime:
+    """Una fecha ISO del registro como datetime con zona (UTC si no trae)."""
+    try:
+        f = datetime.fromisoformat(texto)
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+    return f if f.tzinfo else f.replace(tzinfo=UTC)
+
+
+def es_pregunta(texto: str) -> bool:
+    """El orquestador espera una respuesta: su mensaje trae una pregunta (signo "?")
+    fuera de los bloques de código."""
+    sin_codigo = re.sub(r"```[\s\S]*?(```|$)", " ", texto)
+    return "?" in re.sub(r"`[^`]*`", " ", sin_codigo)
+
+
+def pregunta_de(texto: str, maximo: int = 240) -> str:
+    """La pregunta para mostrar en el aviso: la última línea con "?" (sin marcas), o el
+    comienzo del mensaje."""
+    lineas = [x.strip() for x in texto.splitlines() if x.strip()]
+    con = [x for x in lineas if "?" in x]
+    elegida = (con[-1] if con else (lineas[0] if lineas else "")).lstrip("-*0123456789.) ")
+    limpia = " ".join(re.sub(r"[*_`#>]", "", elegida).split())
+    return limpia if len(limpia) <= maximo else limpia[: maximo - 1].rstrip() + "…"
 
 
 class ProyectosEquipo:
@@ -366,6 +406,7 @@ class ProyectosEquipo:
                 return None
             p = dict(r)
             p["auto_aprobar"] = bool(p["auto_aprobar"])
+            p["prueba"] = bool(p.get("prueba"))
             p["equipo"] = self._miembros(db, id_)
             return p
 
@@ -384,8 +425,11 @@ class ProyectosEquipo:
         agentes: list[dict[str, str]],
         auto_aprobar: bool,
         ruta_base: str,
+        prueba: bool | None = None,
     ) -> dict[str, Any]:
         nombre = validar_nombre(nombre)
+        if prueba is None:
+            prueba = nombre.startswith(PREFIJO_PRUEBA)
         if cuenta not in CUENTAS:
             raise ProyectoError(422, "La cuenta tiene que ser personal o demo.")
         if plantilla not in PLANTILLAS:
@@ -411,7 +455,7 @@ class ProyectosEquipo:
                 raise ProyectoError(409, "Ya hay un proyecto con ese nombre en esa máquina.")
             db.execute(
                 """INSERT INTO proyectos (id, nombre, maquina, cuenta, ruta, plantilla, estado,
-                    auto_aprobar, creado, actualizado) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    auto_aprobar, creado, actualizado, prueba) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     id_,
                     nombre,
@@ -423,6 +467,7 @@ class ProyectosEquipo:
                     int(auto_aprobar),
                     ahora,
                     ahora,
+                    int(prueba),
                 ),
             )
             for orden, (rol, nombre_m, m) in enumerate(miembros):
@@ -785,10 +830,12 @@ class ProyectosEquipo:
         o["editada"] = o["texto_final"] is not None
         # El título que dio el orquestador o uno sacado de la primera línea del texto.
         o["titulo_propio"] = bool(o.get("titulo"))
+        o["proyecto_prueba"] = bool(o.get("proyecto_prueba"))
         o["titulo"] = titulo_de(o.get("titulo"), o["texto_propuesto"])
         return o
 
-    _SELECT_ORDEN = """SELECT o.*, p.nombre AS proyecto FROM ordenes o
+    _SELECT_ORDEN = """SELECT o.*, p.nombre AS proyecto, p.prueba AS proyecto_prueba
+        FROM ordenes o
         JOIN proyectos p ON p.id = o.proyecto_id"""
 
     def orden(self, id_: str) -> dict[str, Any] | None:
@@ -815,14 +862,17 @@ class ProyectosEquipo:
             ).fetchall()
         return [self._vista_orden(f) for f in filas]
 
-    def por_aprobar(self) -> dict[str, int]:
-        """proyecto_id -> cuántas órdenes esperan a Washington."""
+    def por_aprobar(self, con_pruebas: bool = True) -> dict[str, int]:
+        """proyecto_id -> cuántas órdenes esperan a Washington (sin los proyectos de
+        prueba si ``con_pruebas`` es False, como en Decisiones)."""
+        filtro = "" if con_pruebas else " AND p.prueba = 0"
         with self._db() as db:
             return {
                 r[0]: int(r[1])
                 for r in db.execute(
-                    "SELECT proyecto_id, COUNT(*) FROM ordenes "
-                    "WHERE estado = 'por_aprobar' GROUP BY proyecto_id"
+                    "SELECT o.proyecto_id, COUNT(*) FROM ordenes o "
+                    "JOIN proyectos p ON p.id = o.proyecto_id "
+                    f"WHERE o.estado = 'por_aprobar'{filtro} GROUP BY o.proyecto_id"
                 )
             }
 
@@ -994,7 +1044,7 @@ class ProyectosEquipo:
         """Las órdenes por aprobar como elementos de la bandeja de Decisiones."""
         with self._db() as db:
             filas = db.execute(
-                f"""{self._SELECT_ORDEN} WHERE o.estado = 'por_aprobar'
+                f"""{self._SELECT_ORDEN} WHERE o.estado = 'por_aprobar' AND p.prueba = 0
                 ORDER BY o.creado, o.numero"""
             ).fetchall()
             orquestadores = {
@@ -1278,6 +1328,193 @@ class ProyectosEquipo:
             if r["estado"] == "creando" or not self._algun_lanzado(db, r["id"]):
                 continue  # el encargo de crear ya lleva las reglas
             self._encargar(db, r["maquina"], r["id"], "reglas")
+
+    # -- proyectos de prueba y avisos de los orquestadores (Prompt 43) ------------------------
+
+    def marcar_prueba(self, id_: str, prueba: bool) -> dict[str, Any]:
+        with self._lock, self._db() as db:
+            self._fila_proyecto(db, id_)
+            db.execute(
+                "UPDATE proyectos SET prueba = ?, actualizado = ? WHERE id = ?",
+                (int(prueba), _iso(self.clock()), id_),
+            )
+        p = self.proyecto(id_)
+        assert p is not None
+        return p
+
+    def filtrar_decisiones(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Quita de la bandeja lo que no se puede atender desde ahí: todo lo de los proyectos
+        de prueba y las preguntas de las sesiones del equipo (se contestan en el chat)."""
+        prueba = self.sesiones_de_prueba()
+        equipo = set(self.sesiones_lanzadas())
+        return [
+            i
+            for i in items
+            if i.get("session_id") not in prueba
+            and not (i.get("tipo") == "pregunta" and i.get("session_id") in equipo)
+        ]
+
+    def ids_de_prueba(self) -> set[str]:
+        with self._db() as db:
+            return {r[0] for r in db.execute("SELECT id FROM proyectos WHERE prueba = 1")}
+
+    def sesiones_de_prueba(self) -> set[str]:
+        """Los session_id de los equipos de los proyectos de prueba."""
+        with self._db() as db:
+            return {
+                r[0]
+                for r in db.execute(
+                    "SELECT m.session_id FROM miembros m JOIN proyectos p ON p.id = m.proyecto_id "
+                    "WHERE p.prueba = 1 AND m.session_id IS NOT NULL"
+                )
+            }
+
+    def detener_pruebas_inactivas(self, ultimo_evento: dict[str, str]) -> list[str]:
+        """Detiene los proyectos de prueba activos sin actividad del equipo en los últimos
+        30 min. ``ultimo_evento``: session_id -> hora del último evento que vio la oficina.
+        La actividad es lo más nuevo entre eso, el chat, las órdenes y la creación."""
+        limite = self.clock() - INACTIVIDAD_PRUEBA
+        detenidos: list[str] = []
+        with self._db() as db:
+            filas = db.execute(
+                "SELECT id, creado FROM proyectos WHERE prueba = 1 AND estado = 'activo'"
+            ).fetchall()
+            for f in filas:
+                marcas = [str(f["creado"])]
+                marcas += [
+                    str(r[0])
+                    for r in db.execute(
+                        "SELECT MAX(creado) FROM mensajes WHERE proyecto_id = ? UNION ALL "
+                        "SELECT MAX(actualizado) FROM ordenes WHERE proyecto_id = ?",
+                        (f["id"], f["id"]),
+                    )
+                    if r[0]
+                ]
+                for m in self._miembros(db, f["id"]):
+                    if m.get("session_id") in ultimo_evento:
+                        marcas.append(ultimo_evento[m["session_id"]])
+                ultimo = max(_fecha_utc(x) for x in marcas)
+                if ultimo < limite:
+                    detenidos.append(f["id"])
+        for id_ in detenidos:
+            try:
+                self.detener(id_)
+            except ProyectoError:
+                continue
+        return detenidos
+
+    def avisos(self, ahora: datetime) -> list[dict[str, Any]]:
+        """Los avisos de los orquestadores que Washington puede atender: una orden por
+        aprobar o la última respuesta del orquestador cuando pregunta algo y nadie le
+        contestó. Nunca de proyectos de prueba ni de proyectos sin equipo lanzado. Los
+        ignorados no salen; los en espera, hasta que el orquestador escriba otra vez."""
+        salida: list[dict[str, Any]] = []
+        with self._db() as db:
+            estados = {r["clave"]: dict(r) for r in db.execute("SELECT * FROM avisos_orquestador")}
+            proyectos = db.execute(
+                "SELECT * FROM proyectos WHERE prueba = 0 AND estado NOT IN ('creando', 'error')"
+            ).fetchall()
+            for p in proyectos:
+                ultimo = db.execute(
+                    "SELECT id, autor, texto, creado FROM mensajes WHERE proyecto_id = ? "
+                    "ORDER BY creado DESC, rowid DESC LIMIT 1",
+                    (p["id"],),
+                ).fetchone()
+                ultimo_orq = db.execute(
+                    "SELECT id FROM mensajes WHERE proyecto_id = ? AND autor = 'orquestador' "
+                    "ORDER BY creado DESC, rowid DESC LIMIT 1",
+                    (p["id"],),
+                ).fetchone()
+                vigente = ultimo_orq["id"] if ultimo_orq else None
+                base = {
+                    "proyecto_id": p["id"],
+                    "proyecto": p["nombre"],
+                    "maquina": p["maquina"],
+                    "cuenta": p["cuenta"],
+                }
+                candidatos: list[dict[str, Any]] = []
+                for o in db.execute(
+                    f"{self._SELECT_ORDEN} WHERE o.proyecto_id = ? AND o.estado = 'por_aprobar' "
+                    "ORDER BY o.creado",
+                    (p["id"],),
+                ):
+                    v = self._vista_orden(o)
+                    candidatos.append(
+                        {
+                            **base,
+                            "clave": f"orden:{v['id']}",
+                            "tipo": "orden",
+                            "texto": f"Orden {v['numero']} para {v['agente']}: {v['titulo']}",
+                            "desde": v["creado"],
+                            "mensaje_id": None,
+                            "orden": v,
+                        }
+                    )
+                if (
+                    ultimo is not None
+                    and ultimo["autor"] == "orquestador"
+                    and es_pregunta(ultimo["texto"])
+                ):
+                    candidatos.append(
+                        {
+                            **base,
+                            "clave": f"mensaje:{ultimo['id']}",
+                            "tipo": "pregunta",
+                            "texto": pregunta_de(ultimo["texto"]),
+                            "desde": ultimo["creado"],
+                            "mensaje_id": ultimo["id"],
+                            "orden": None,
+                        }
+                    )
+                for c in candidatos:
+                    e = estados.get(c["clave"])
+                    if e and e["estado"] == "ignorado":
+                        continue
+                    if e and e["estado"] == "en_espera" and e["hasta_mensaje"] == vigente:
+                        continue
+                    c["hace_s"] = max(0, int((ahora - _fecha_utc(c["desde"])).total_seconds()))
+                    salida.append(c)
+        salida.sort(key=lambda a: a["desde"])
+        return salida
+
+    def _marcar_aviso(self, clave: str, estado: str) -> dict[str, Any]:
+        tipo, _, id_ = clave.partition(":")
+        with self._lock, self._db() as db:
+            if tipo == "orden":
+                f = db.execute("SELECT proyecto_id FROM ordenes WHERE id = ?", (id_,)).fetchone()
+            elif tipo == "mensaje":
+                f = db.execute("SELECT proyecto_id FROM mensajes WHERE id = ?", (id_,)).fetchone()
+            else:
+                f = None
+            if f is None:
+                raise ProyectoError(404, "No existe ese aviso.")
+            ultimo_orq = db.execute(
+                "SELECT id FROM mensajes WHERE proyecto_id = ? AND autor = 'orquestador' "
+                "ORDER BY creado DESC, rowid DESC LIMIT 1",
+                (f["proyecto_id"],),
+            ).fetchone()
+            db.execute(
+                """INSERT INTO avisos_orquestador (clave, proyecto_id, estado, hasta_mensaje,
+                    actualizado) VALUES (?,?,?,?,?)
+                ON CONFLICT(clave) DO UPDATE SET estado = excluded.estado,
+                    hasta_mensaje = excluded.hasta_mensaje, actualizado = excluded.actualizado""",
+                (
+                    clave,
+                    f["proyecto_id"],
+                    estado,
+                    ultimo_orq["id"] if ultimo_orq else None,
+                    _iso(self.clock()),
+                ),
+            )
+        return {"clave": clave, "estado": estado}
+
+    def ignorar_aviso(self, clave: str) -> dict[str, Any]:
+        """Descarta ese aviso para siempre (la orden sigue por aprobar en el chat)."""
+        return self._marcar_aviso(clave, "ignorado")
+
+    def esperar_aviso(self, clave: str) -> dict[str, Any]:
+        """Lo silencia hasta que el orquestador escriba un mensaje nuevo."""
+        return self._marcar_aviso(clave, "en_espera")
 
 
 # Estados de la oficina de una sesión que terminó (o se está yendo).

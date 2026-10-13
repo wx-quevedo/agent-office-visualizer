@@ -25,7 +25,9 @@ ACTIVOS = [
 
 
 def _activo(r: ProyectosEquipo, nombre: str = "prueba-38", maquina: str = "alienware") -> str:
-    p = r.crear(nombre, maquina, "personal", "vacia", ORQ, [AGENTE], False, "E:\\Agents")
+    p = r.crear(
+        nombre, maquina, "personal", "vacia", ORQ, [AGENTE], False, "E:\\Agents", prueba=False
+    )
     [enc] = r.encargos_pendientes(maquina)
     r.informar_encargo(maquina, enc["id"], True, None, None, ACTIVOS)
     return p["id"]
@@ -253,7 +255,7 @@ def test_migra_desde_la_version_1(tmp_path: Path) -> None:
     db.commit()
     db.close()
     r = ProyectosEquipo(tmp_path, clock=lambda: T0)
-    assert r.version() == 4
+    assert r.version() == 5
     assert r.proyecto("p1")["nombre"] == "viejo"  # type: ignore[index]
     assert r.ordenes("p1") == [] and r.mensajes("p1") == []
 

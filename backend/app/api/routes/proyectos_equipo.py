@@ -132,6 +132,9 @@ class NuevoProyecto(BaseModel):
     orquestador: Miembro
     agentes: list[Miembro] = Field(min_length=1, max_length=MAX_AGENTES)
     auto_aprobar: bool = False
+    # Proyecto de prueba (sin avisos ni Decisiones; se detiene solo tras 30 min sin
+    # actividad). Si no viene, se marca solo cuando el nombre empieza con "prueba-".
+    prueba: bool | None = None
 
 
 @router.post("/proyectos-creados", status_code=201)
@@ -153,6 +156,7 @@ async def crear(body: NuevoProyecto) -> dict[str, Any]:
             [a.model_dump() for a in body.agentes],
             body.auto_aprobar,
             maquina["ruta_base"],
+            body.prueba,
         )
     except ProyectoError as e:
         raise _error(e) from None
@@ -343,6 +347,47 @@ async def ajustar_comando(id_: str, comando_id: str, body: AjusteComando) -> dic
         raise _error(e) from None
 
 
+# -- proyectos de prueba y avisos de los orquestadores (Prompt 43) -------------------------
+
+
+class Prueba(BaseModel):
+    prueba: bool
+
+
+@router.post("/proyectos-creados/{id_}/prueba")
+async def marcar_prueba(id_: str, body: Prueba) -> dict[str, Any]:
+    try:
+        return con_estado(get_proyectos_equipo().marcar_prueba(id_, body.prueba))
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+@router.get("/avisos-orquestador")
+async def avisos_orquestador() -> dict[str, Any]:
+    """Los avisos de los orquestadores que se pueden atender (Responder, Ignorar, Esperar)."""
+    return {"avisos": get_proyectos_equipo().avisos(get_state_engine().clock())}
+
+
+class ClaveAviso(BaseModel):
+    clave: str = Field(min_length=3, max_length=80, pattern=r"^(orden|mensaje):[0-9a-f]{32}$")
+
+
+@router.post("/avisos-orquestador/ignorar")
+async def ignorar_aviso(body: ClaveAviso) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().ignorar_aviso(body.clave)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
+@router.post("/avisos-orquestador/esperar")
+async def esperar_aviso(body: ClaveAviso) -> dict[str, Any]:
+    try:
+        return get_proyectos_equipo().esperar_aviso(body.clave)
+    except ProyectoError as e:
+        raise _error(e) from None
+
+
 # -- chat y órdenes (Prompt 38) -----------------------------------------------------------
 
 
@@ -418,7 +463,21 @@ async def rechazar(id_: str, body: Rechazo) -> dict[str, Any]:
 
 @router.get("/maquinas/encargos")
 async def encargos(request: Request) -> dict[str, Any]:
-    return {"encargos": get_proyectos_equipo().encargos_pendientes(_maquina(request))}
+    reg = get_proyectos_equipo()
+    # Cada monitor pregunta por sus encargos cada pocos segundos: es el momento de detener
+    # los proyectos de prueba que llevan 30 min sin actividad del equipo.
+    reg.detener_pruebas_inactivas(ultimos_eventos())
+    return {"encargos": reg.encargos_pendientes(_maquina(request))}
+
+
+def ultimos_eventos() -> dict[str, str]:
+    """session_id -> hora del último evento que vio la oficina."""
+    salida: dict[str, str] = {}
+    for a in get_state_engine().snapshot()["agentes"]:
+        ultimo = cast(dict[str, Any], a.get("ultimo_evento") or {})
+        if ultimo.get("hora"):
+            salida[a["agente"]["session_id"]] = str(ultimo["hora"])
+    return salida
 
 
 class EstadoMiembro(BaseModel):

@@ -38,7 +38,8 @@ def bandeja_actual() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     ahora = get_state_engine().clock()
     items = pendientes(agentes, b.vistos(), ahora)
     b.sincronizar(items, agentes)
-    return agentes, get_proyectos_equipo().decisiones(ahora) + items
+    reg = get_proyectos_equipo()
+    return agentes, reg.decisiones(ahora) + reg.filtrar_decisiones(items)
 
 
 @router.get("/decisiones")

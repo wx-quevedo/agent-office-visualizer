@@ -36,7 +36,7 @@ def _activo(r: ProyectosEquipo, nombre: str = "prueba-39") -> str:
 
 def test_reglas_y_comandos_iniciales(tmp_path: Path) -> None:
     r = ProyectosEquipo(tmp_path, clock=lambda: T0)
-    assert r.version() == 4
+    assert r.version() == 5
     reglas = r.reglas()
     assert [x["id"] for x in reglas] == [i for i, *_ in REGLAS_INICIALES]
     assert reglas[0]["texto"].startswith("Escribir en español latino neutro")

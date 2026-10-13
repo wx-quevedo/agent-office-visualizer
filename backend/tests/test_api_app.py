@@ -23,7 +23,9 @@ ACTIVOS = [{"nombre": "orquestador", "estado": "activo"}, {"nombre": "agente", "
 
 
 def _activo(r: ProyectosEquipo, nombre: str = "prueba-42") -> str:
-    p = r.crear(nombre, "alienware", "personal", "web", HAIKU, [HAIKU], False, "E:\\Agents")
+    p = r.crear(
+        nombre, "alienware", "personal", "web", HAIKU, [HAIKU], False, "E:\\Agents", prueba=False
+    )
     [enc] = r.encargos_pendientes("alienware")
     r.informar_encargo("alienware", enc["id"], True, None, "E:\\Agents\\" + nombre, ACTIVOS)
     return p["id"]
@@ -100,7 +102,7 @@ def test_migracion_4_conserva_las_ordenes(tmp_path: Path) -> None:
     db.commit()
     db.close()
     r = ProyectosEquipo(tmp_path, clock=lambda: T0)
-    assert r.version() == 4
+    assert r.version() == 5
     [o] = r.ordenes("p1")
     assert o["titulo"] == "Hacer la portada" and o["titulo_propio"] is False
 
