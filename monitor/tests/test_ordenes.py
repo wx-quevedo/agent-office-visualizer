@@ -23,19 +23,33 @@ PID = "a" * 32
 def test_extraer_ordenes() -> None:
     texto = (
         "Te propongo dos pasos.\n\n"
-        '<orden agente="agente" estimado="2 min" dificultad="baja">\nCrea hola.txt\n</orden>\n\n'
+        '<orden agente="agente" titulo="Fase 1 · Prompt 1: base" estimado="2 min" '
+        'dificultad="baja">\nCrea hola.txt\n</orden>\n\n'
         "Y después:\n<ORDEN agente='x'>sin comillas dobles</ORDEN>\n"
         '<orden agente="agente-2">Otra\ncon dos líneas</orden>'
     )
     ordenes, limpio = extraer_ordenes(texto)
     assert ordenes == [
-        {"agente": "agente", "texto": "Crea hola.txt", "estimado": "2 min", "dificultad": "baja"},
-        {"agente": "", "texto": "sin comillas dobles", "estimado": None, "dificultad": None},
+        {
+            "agente": "agente",
+            "texto": "Crea hola.txt",
+            "estimado": "2 min",
+            "dificultad": "baja",
+            "titulo": "Fase 1 · Prompt 1: base",
+        },
+        {
+            "agente": "",
+            "texto": "sin comillas dobles",
+            "estimado": None,
+            "dificultad": None,
+            "titulo": None,
+        },
         {
             "agente": "agente-2",
             "texto": "Otra\ncon dos líneas",
             "estimado": None,
             "dificultad": None,
+            "titulo": None,
         },
     ]
     assert limpio == "Te propongo dos pasos.\n\nY después:"
@@ -117,13 +131,14 @@ def test_orden_propuesta_aprobada_editada_y_rechazada(tmp_path: Path) -> None:
         # Washington le escribe; el orquestador propone una orden.
         propuesta = (
             "di: Propongo crear el archivo.\n"
-            '<orden agente="agente" estimado="1 min" dificultad="baja">Crea hola.txt: Hola</orden>'
+            '<orden agente="agente" titulo="Crear hola.txt" estimado="1 min" dificultad="baja">'
+            "Crea hola.txt: Hola</orden>"
         )
         assert g.procesar(_mensaje(propuesta))["ok"]
         assert _girar(g, srv, lambda: srv.de("/api/v1/maquinas/ordenes"))
         [o] = srv.de("/api/v1/maquinas/ordenes")
         assert (o["proyecto_id"], o["agente"], o["texto"]) == (PID, "agente", "Crea hola.txt: Hola")
-        assert (o["estimado"], o["dificultad"]) == ("1 min", "baja")
+        assert (o["estimado"], o["dificultad"], o["titulo"]) == ("1 min", "baja", "Crear hola.txt")
         chat = [c["texto"] for c in srv.de("/api/v1/maquinas/chat")]
         assert chat[-1] == "Propongo crear el archivo." and "texto de un subagente" not in chat
         # Propuesta no es aprobada: el agente no recibió nada más que su saludo.
@@ -400,3 +415,66 @@ def test_rol_actualizado_al_retomar(tmp_path: Path) -> None:
         assert len(_mensajes(registro, orq)) == antes
     finally:
         g3.detener_todo()
+
+
+def test_rol_vigente_al_retomar_con_snapshot_off(tmp_path: Path) -> None:
+    """Con Claude Code que admite --system-prompt-snapshot off, la sesión retomada toma el
+    rol nuevo sola (probado con Claude real en el Prompt 42): va la opción y no hay aviso
+    de rol; la huella igual se pone al día."""
+    g, srv, registro, enc = _listo(tmp_path, snapshot_off=True)
+    orq, _ = _sids(enc)
+    inicio = next(e for e in _eventos(registro) if e["evento"] == "inicio")
+    assert inicio["args"][inicio["args"].index("--system-prompt-snapshot") + 1] == "off"
+    g.detener_todo()
+    datos = json.loads((tmp_path / "monitor" / "equipos.json").read_text(encoding="utf-8"))
+    for m in datos["proyectos"][PID]["miembros"]:
+        m["rol_huella"] = "vieja"
+    (tmp_path / "monitor" / "equipos.json").write_text(json.dumps(datos), encoding="utf-8")
+    g2 = _gestor(tmp_path, registro, snapshot_off=True)
+    try:
+        antes = len(_mensajes(registro, orq))
+        assert g2.retomar() == 1
+        time.sleep(0.5)
+        g2.atender()
+        time.sleep(0.3)
+        assert len(_mensajes(registro, orq)) == antes  # sin aviso de rol
+        a = [e for e in _eventos(registro) if e["evento"] == "inicio"][-1]["args"]
+        assert "--resume" in a and a[a.index("--system-prompt-snapshot") + 1] == "off"
+        nuevas = {m.nombre: m.rol_huella for m in g2.proyectos[PID].miembros}
+        assert all(h and h != "vieja" for h in nuevas.values())
+    finally:
+        g2.detener_todo()
+
+
+def test_version_de_claude_decide_la_opcion(tmp_path: Path) -> None:
+    import subprocess as sp
+
+    from visualizador_monitor import equipos as eq
+
+    def falso(salida: str):  # type: ignore[no-untyped-def]
+        return lambda *a, **k: sp.CompletedProcess(a, 0, stdout=salida, stderr="")
+
+    original = eq.subprocess.run
+    try:
+        eq.subprocess.run = falso("2.1.296 (Claude Code)\n")  # type: ignore[assignment]
+        assert eq.version_claude(["claude"]) == (2, 1, 296)
+        g = eq.Equipos(tmp_path / "m", tmp_path / "A", [], claude=["claude"])
+        assert g._usa_snapshot_off(["claude"]) is True  # pyright: ignore[reportPrivateUsage]
+        eq.subprocess.run = falso("2.1.200 (Claude Code)\n")  # type: ignore[assignment]
+        g = eq.Equipos(tmp_path / "m2", tmp_path / "A", [], claude=["claude"])
+        assert g._usa_snapshot_off(["claude"]) is False  # pyright: ignore[reportPrivateUsage]
+        eq.subprocess.run = falso("no es una versión")  # type: ignore[assignment]
+        assert eq.version_claude(["claude"]) is None
+    finally:
+        eq.subprocess.run = original  # type: ignore[assignment]
+
+
+def test_rol_del_orquestador_presentacion_y_titulo() -> None:
+    """Prompt 42: Washington es la persona con quien habla (Haiku llegó a presentarse
+    como "Washington") y cada orden lleva un título corto."""
+    from visualizador_monitor.equipos import ROL_ORQUESTADOR, SALUDO
+
+    assert "tú no eres Washington" in ROL_ORQUESTADOR
+    assert "nunca te presentes con el nombre de Washington" in ROL_ORQUESTADOR
+    assert "como el orquestador del proyecto" in SALUDO["orquestador"]
+    assert 'titulo="' in ROL_ORQUESTADOR and "titulo es obligatorio" in ROL_ORQUESTADOR

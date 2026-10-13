@@ -1,4 +1,9 @@
-"""Equipos de proyectos (etapa 4, Prompts 37 a 41).
+"""Equipos de proyectos (etapa 4, Prompts 37 a 42).
+
+Prompt 42: con Claude Code 2.1.257 o posterior, las sesiones se lanzan con
+``--system-prompt-snapshot off``: una sesión retomada toma el rol vigente sin aviso (el
+aviso de rol queda de respaldo para versiones anteriores). Cada orden lleva un título
+corto (``titulo``) y el rol deja claro que Washington es la persona con quien se habla.
 
 Prompt 41: las sesiones del equipo se lanzan sin la configuración de usuario
 (``--setting-sources project,local``), también al retomarlas, para que no hereden las
@@ -115,23 +120,28 @@ PLANTILLAS: dict[str, tuple[str, str | None]] = {
 }
 
 ROL_ORQUESTADOR = (
-    "Eres el orquestador del proyecto {nombre}. Diseñas y planificas con Washington: "
-    "conversas, propones y ordenas el trabajo en fases. Al crearse el proyecto abres tú la "
-    "conversación con una entrevista breve: pocas preguntas a la vez (objetivo, para quién, "
-    "alcance, plataformas, restricciones y fechas). Con las respuestas armas la "
-    "especificación y un plan por fases y prompts, y los escribes en PROJECT.md (puedes "
-    "editar los archivos de esta carpeta; no tienes terminal). Al terminar la entrevista, "
-    "propones la primera orden.\n"
+    "Eres el orquestador del proyecto {nombre}, un agente de IA que diseña, planifica y "
+    "reparte el trabajo en fases. La persona con quien conversas es Washington, el dueño del "
+    "proyecto: tú no eres Washington. Cuando te presentes, di que eres el orquestador del "
+    "proyecto {nombre}; nunca te presentes con el nombre de Washington ni con otro nombre "
+    "propio. Al crearse el proyecto abres tú la conversación con una entrevista breve: pocas "
+    "preguntas a la vez (objetivo, para quién, alcance, plataformas, restricciones y fechas). "
+    "Con las respuestas armas la especificación y un plan por fases y prompts, y los escribes "
+    "en PROJECT.md (puedes editar los archivos de esta carpeta; no tienes terminal). Al "
+    "terminar la entrevista, propones la primera orden.\n"
     "Los agentes de código de este proyecto son: {agentes}. Para darle una orden a uno de "
     "ellos, escribe en tu respuesta un bloque con este formato exacto, un bloque por orden:\n"
-    '<orden agente="NOMBRE" estimado="45 min" dificultad="3">\n'
+    '<orden agente="NOMBRE" titulo="Fase 1 · Prompt 1: base del sitio" estimado="45 min" '
+    'dificultad="3">\n'
     "La instrucción completa, clara y autocontenida.\n"
     "</orden>\n"
-    'En cada orden, estimado es el tiempo en minutos ("45 min") o en horas y minutos si '
-    'pasa de 60 ("1 h 30 min"), y dificultad es un número del 1 al 10. Washington '
-    "aprueba, edita o rechaza cada orden antes de que llegue al agente; después recibirás el "
-    "resultado o el motivo del rechazo. No tienes otra forma de escribirles a otras sesiones. "
-    "Sigue las reglas de la casa de CLAUDE.md. Responde en español latino neutro."
+    "En cada orden, titulo es obligatorio: un título corto (hasta 80 caracteres) que diga qué "
+    "hace la orden y, si corresponde, su fase y su prompt; estimado es el tiempo en minutos "
+    '("45 min") o en horas y minutos si pasa de 60 ("1 h 30 min"), y dificultad es un número '
+    "del 1 al 10. Washington aprueba, edita o rechaza cada orden antes de que llegue al "
+    "agente; después recibirás el resultado o el motivo del rechazo. No tienes otra forma de "
+    "escribirles a otras sesiones. Sigue las reglas de la casa de CLAUDE.md. Responde en "
+    "español latino neutro."
 )
 ROL_AGENTE = (
     "Eres {miembro}, agente de código del proyecto {nombre}. Recibes órdenes del "
@@ -142,8 +152,8 @@ ROL_AGENTE = (
 SALUDO = {
     "orquestador": (
         "Se creó el proyecto {nombre} con la plantilla {plantilla}. Empieza la entrevista "
-        "inicial con Washington: preséntate en una frase y haz tus primeras preguntas, pocas "
-        "a la vez."
+        "inicial: saluda a Washington, preséntate en una frase como el orquestador del proyecto "
+        "y haz tus primeras preguntas, pocas a la vez."
     ),
     "agente": "Se creó el proyecto {nombre}. Responde solo: listo, esperando órdenes.",
 }
@@ -388,6 +398,7 @@ def extraer_ordenes(texto: str) -> tuple[list[dict[str, str | None]], str]:
                 "texto": cuerpo if cuerpo.strip(". \u2026") else "",
                 "estimado": attrs.get("estimado") or None,
                 "dificultad": attrs.get("dificultad") or None,
+                "titulo": attrs.get("titulo") or None,
             }
         )
         partes.append(texto[previo : bloque.start()])
@@ -495,6 +506,30 @@ def huella(texto: str) -> str:
 # La cuenta no cambia: CLAUDE_CONFIG_DIR sigue eligiendo la carpeta y sus credenciales,
 # que no son una fuente de configuración.
 FUENTES_DE_AJUSTES = "project,local"
+# Desde Claude Code 2.1.257, --system-prompt-snapshot off rearma el system prompt en cada
+# pedido, también al retomar: una sesión retomada toma el --append-system-prompt nuevo.
+# Sin la opción, la sesión conserva el rol con el que nació (Prompt 38) y el monitor se lo
+# cuenta con un aviso (ROL_ACTUALIZADO), que queda como respaldo.
+VERSION_SNAPSHOT = (2, 1, 257)
+
+
+def version_claude(claude: list[str]) -> tuple[int, ...] | None:
+    """La versión de Claude Code (por ejemplo (2, 1, 296)), o None si no se pudo saber."""
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    try:
+        r = subprocess.run(
+            [*claude, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            stdin=subprocess.DEVNULL,
+            creationflags=flags,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    m = re.match(r"\s*(\d+)\.(\d+)\.(\d+)", r.stdout or "")
+    return tuple(int(x) for x in m.groups()) if m else None
 
 
 def ajustes_sesion(m: Miembro, hooks: dict[str, Any]) -> dict[str, Any]:
@@ -523,6 +558,7 @@ def comando_sesion(
     m: Miembro,
     reanudar: bool,
     ajustes: str | None = None,
+    snapshot_off: bool = False,
 ) -> list[str]:
     """``ajustes``: la ruta del archivo de configuración propio de la sesión (o el JSON
     en línea). Sin él, la sesión va sin hooks de la oficina."""
@@ -550,6 +586,9 @@ def comando_sesion(
         rol,
     ]
     cmd += ["--resume", m.session_id] if reanudar else ["--session-id", m.session_id]
+    if snapshot_off:
+        # El rol vigente también al retomar (probado con Claude real en el Prompt 42).
+        cmd += ["--system-prompt-snapshot", "off"]
     # Sin la configuración de usuario, también al retomar (se aplica en cada arranque).
     cmd += ["--setting-sources", FUENTES_DE_AJUSTES]
     cmd += ["--settings", ajustes or json.dumps(ajustes_sesion(m, {}))]
@@ -741,6 +780,7 @@ class Equipos:
         arranque: float = ARRANQUE,
         espera_cierre: float = ESPERA_CIERRE,
         demora_reglas: float = DEMORA_REGLAS,
+        snapshot_off: bool | None = None,
     ) -> None:
         self.archivo = base / "equipos.json"
         self.ruta_proyectos = ruta_proyectos
@@ -752,6 +792,8 @@ class Equipos:
         self.arranque = arranque
         self.espera_cierre = espera_cierre
         self.demora_reglas = demora_reglas
+        # None: se decide por la versión de Claude Code la primera vez que se lanza algo.
+        self._snapshot_off = snapshot_off
         self.proyectos: dict[str, Proyecto] = {}
         self.sesiones: dict[str, Sesion] = {}  # session_id -> proceso lanzado aquí
         # Lo que falta mandar al servidor (respuestas, órdenes propuestas, avances).
@@ -1204,6 +1246,7 @@ class Equipos:
                     "texto": str(o["texto"])[:MAX_CHAT],
                     "estimado": (o["estimado"] or None) and str(o["estimado"])[:60],
                     "dificultad": (o["dificultad"] or None) and str(o["dificultad"])[:60],
+                    "titulo": (o.get("titulo") or None) and str(o["titulo"])[:200],
                 },
                 p,
             )
@@ -1305,6 +1348,19 @@ class Equipos:
             raise EquipoError("No se encontró claude.exe en esta máquina.")
         return [c]
 
+    def _usa_snapshot_off(self, claude: list[str]) -> bool:
+        if self._snapshot_off is None:
+            v = version_claude(claude)
+            self._snapshot_off = v is not None and v >= VERSION_SNAPSHOT
+            logger.info(
+                "Claude Code %s: %s",
+                ".".join(map(str, v)) if v else "versión desconocida",
+                "rol vigente al retomar (--system-prompt-snapshot off)"
+                if self._snapshot_off
+                else "rol por aviso al retomar",
+            )
+        return self._snapshot_off
+
     def _escribir_ajustes(self, p: Proyecto, m: Miembro, hooks: dict[str, Any]) -> str:
         """El archivo de configuración propio de una sesión (se reescribe en cada
         arranque: así toma la ruta del monitor instalado en ese momento)."""
@@ -1324,6 +1380,7 @@ class Equipos:
             raise EquipoError(f"Esta máquina no tiene configurada la cuenta {p.cuenta}.")
         env = entorno_sesion(cuenta_dir, self.entorno_base, self.home)
         claude = self._claude_cmd()
+        snapshot_off = self._usa_snapshot_off(claude)
         hooks = hooks_de_cuenta(cuenta_dir, self.home)
         if not hooks:
             logger.warning("%s: la cuenta %s no tiene hooks de la oficina", p.nombre, p.cuenta)
@@ -1334,7 +1391,11 @@ class Equipos:
             # Una sesión que nunca arrancó se lanza de nuevo con su id, no se retoma.
             retomar = reanudar and m.lanzado
             ajustes = self._escribir_ajustes(p, m, hooks)
-            s = Sesion(comando_sesion(claude, p, m, retomar, ajustes), Path(p.carpeta), env)
+            s = Sesion(
+                comando_sesion(claude, p, m, retomar, ajustes, snapshot_off),
+                Path(p.carpeta),
+                env,
+            )
             self.sesiones[m.session_id] = s
             m.lanzado = True
             m.pid = s.pid
@@ -1343,10 +1404,13 @@ class Equipos:
             if not retomar:
                 m.rol_huella = huella(rol)
             elif m.rol_huella != huella(rol):
-                # Retomada con su rol de nacimiento: se le cuenta el nuevo antes que nada.
-                p.colas.setdefault(m.nombre, []).insert(
-                    0, {"tipo": "aviso", "texto": ROL_ACTUALIZADO.format(rol=rol), "clase": "rol"}
-                )
+                if not snapshot_off:
+                    # Respaldo: sin la opción, la sesión retomada conserva el rol con el que
+                    # nació; se le cuenta el nuevo antes que nada.
+                    p.colas.setdefault(m.nombre, []).insert(
+                        0,
+                        {"tipo": "aviso", "texto": ROL_ACTUALIZADO.format(rol=rol), "clase": "rol"},
+                    )
                 m.rol_huella = huella(rol)
             reglas_h = huella("\n".join(p.reglas))
             if not retomar:

@@ -1,6 +1,6 @@
 [project]
 name = "visualizador-monitor"
-version = "0.7.0"
+version = "0.7.1"
 description = "Monitor de máquina de la oficina de agentes: recibe los hooks, lee transcripciones y procesos, y envía todo al servidor con su token"
 requires-python = ">=3.13"
 dependencies = [
