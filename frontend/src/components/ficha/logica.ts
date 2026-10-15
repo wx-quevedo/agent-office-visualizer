@@ -178,7 +178,7 @@ export function nombreCarpeta(ruta: string | null | undefined): string {
   return partes[partes.length - 1] ?? ruta;
 }
 
-/** "SkyNest" → "SK", "vive-demo" → "VB", "visualizador-agentes" → "VA". */
+/** "SkyNest" → "SK", "vive-demo" → "VD", "visualizador-agentes" → "VA". */
 export function iniciales(nombre: string): string {
   const palabras = nombre
     .replace(/([a-z])([A-Z])/g, "$1 $2")

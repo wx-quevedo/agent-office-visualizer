@@ -25,7 +25,7 @@ describe("textos de la ficha", () => {
 
   it("iniciales, modelo y fechas", () => {
     expect(iniciales("SkyNest")).toBe("SN");
-    expect(iniciales("vive-demo")).toBe("VB");
+    expect(iniciales("vive-demo")).toBe("VD");
     expect(iniciales("buscapez")).toBe("BU");
     expect(nombreModelo("claude-opus-5-5[1m]")).toBe("Opus 5.5");
     expect(nombreModelo("claude-sonnet-4-5-20250929")).toBe("Sonnet 4.5");
