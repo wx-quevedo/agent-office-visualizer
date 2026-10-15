@@ -1,56 +1,128 @@
-# Oficina de agentes
+# Agent Office Visualizer
 
-Una oficina en vivo para ver qué hacen los agentes de Claude Code de Washington en todas sus máquinas: quién trabaja, quién espera un permiso o una respuesta, en qué tarea larga está cada uno, cuánto consume y dónde quedó cada proyecto. Se usa en https://agents.example.com, desde la PC y el celular.
+A live office, on the web, in 3D and on iPhone, that shows what every Claude Code agent is doing on every machine and lets you answer, approve and direct them from one place.
 
-El plan por etapas, las decisiones, el registro de cambios y los detalles de cada parte están en [PROJECT.md](PROJECT.md).
+> This project extends [claude-office](https://github.com/paulrobello/claude-office) by Paul Robello and contributors (MIT). The first 232 commits of this repository are the upstream history, kept intact. This fork adds a 21-state agent engine, a per-machine monitor, a 3D office, permission approval, project teams led by an orchestrator agent, an iOS app and a self-hosted deployment.
 
-## Arquitectura
+## What it does
 
+Working with several AI coding agents in parallel, across projects and machines, makes it hard to know who is working, who is blocked and who is waiting on you. This tool turns hook events into a clear status for each agent and adds controls to act on it.
+
+**From upstream (claude-office)**
+
+- Claude Code hooks package (`hooks/`) that reports session, prompt, tool and subagent events to a local backend.
+- FastAPI backend skeleton, event models, path and process utilities, event simulation scripts.
+- OpenCode plugin (`opencode-plugin/`) and the Makefile-based tooling.
+- The original pixel-art PixiJS web was removed in this fork (commit `e819f50`); it is still available upstream.
+
+**Added in this fork**
+
+- **State engine** (`backend/app/core/agent_state_engine.py`): a catalog of 21 states (`docs/proyecto/catalogo-estados.md`), including who the agent is waiting for: you (permission or an explicit question), a long-running program, a network transfer or its own subagents. It keeps its own SQLite event log, detects closed sessions by process check and flags stalled agents.
+- **Office views**: a 3D office (`/oficina/3d`) with switchable environments, a layout editor and color themes; a box view by urgency and by project (`/oficina`); an agent profile with turn history and token usage; a "Where we left off" view; and a raw data page.
+- **Alerts**: voice and desktop notifications, with each alert summarized in one sentence by an isolated helper agent.
+- **Permission approval** from the web or the phone. Dangerous commands (recursive deletes, `git push --force`, `DROP TABLE`, ...) always require approval.
+- **Machine monitor** (`monitor/`): one background process per machine, Python standard library only, with an offline SQLite queue, transcript and process readers, and a Windows installer. It is the only component that holds the machine token.
+- **Project teams**: the monitor launches an orchestrator session plus coding-agent sessions (`claude -p` with stream-json). You chat with the orchestrator; any work order it proposes waits for your approval (as written, edited or rejected with a reason) before it reaches a coding agent. Replies stream live over SSE with sent, read and typing indicators. Per-project house rules and a safe-command list are written into each team.
+- **Decisions and Ideas inboxes** that collect everything waiting on you.
+- **iOS app** (`ios/`, SwiftUI): projects, orchestrator chat, order approval, inboxes, native notifications, and the 3D office embedded in an app mode (`?app=ios`).
+- **Login, machine tokens and deployment** (`despliegue/`): argon2 password login, per-machine tokens, nginx and systemd templates, HTTPS, daily backups and restore scripts.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Machine["Each machine"]
+    CC["Claude Code sessions"] -- hook events --> H["hooks package"]
+    H -- "127.0.0.1" --> M["monitor<br/>offline SQLite queue<br/>transcripts, processes"]
+    M -- "launches and feeds" --> T["project team<br/>orchestrator + coding agents"]
+  end
+  M -- "HTTPS + machine token" --> B["FastAPI backend<br/>state engine, permissions,<br/>projects, chat, orders"]
+  B --- DB[("SQLite<br/>event log and data")]
+  B -- "REST, SSE" --> W["Next.js static export<br/>3D office, views, chat"]
+  B -- "REST" --> I["iOS app<br/>SwiftUI"]
+  I -. "embeds 3D office" .-> W
 ```
-Claude Code (cada cuenta)                 Máquina (Windows)                         VPS (the VPS provider)
-  hooks ─────────────────────────────▶  monitor  127.0.0.1:8765 ──https + token──▶  nginx  agents.example.com
-  barra de estado (límites) ─────────▶   · cola SQLite sin conexión                  ├─ /      web estática (Next.js)
-                                         · transcripciones y procesos                └─ /api   backend (FastAPI, systemd)
-                                         · PROJECT.md de cada proyecto                         · motor de estados
-                                                                                                · permisos, acceso, máquinas
-navegador (PC, iPhone) ──https + sesión────────────────────────────────────────▶            · datos y respaldos diarios
-```
 
-- **Monitor** (`monitor/`): un proceso por máquina, sin ventana, que arranca solo al iniciar sesión. Recibe los hooks de Claude Code en 127.0.0.1 y guarda cada evento en una cola que sobrevive a cortes y reinicios. Lee las transcripciones, los procesos y el PROJECT.md de cada proyecto, toma los límites de 5 h y semanal de la barra de estado y lo envía todo al servidor. Es el único que conoce el token de la máquina. También resume cada aviso en una frase con un agente auxiliar aislado (`claude -p` con Haiku y la cuenta del agente; ver la etapa 2.4 en PROJECT.md).
-- **Backend** (`backend/`): FastAPI en el VPS, detrás de nginx. Arma el estado de cada agente con su registro propio de eventos: esperas específicas, detector de atascos, historial por turno, tokens y tiempo. También atiende los permisos (aprobar o rechazar desde la oficina), el inicio de sesión y las máquinas.
-- **Web** (`frontend/`): export estático de Next.js. Páginas: `/oficina/3d` (la oficina en 3D, también en la raíz), `/oficina` (vista de cajas), `/datos` (datos en bruto) y `/entrar`.
-- **Hook** (`hooks/`): el paquete que Claude Code ejecuta en cada evento. Las máquinas con monitor lo llaman a través de él. Los comandos peligrosos (borrados recursivos, `git push --force`, `DROP TABLE`...) siempre piden aprobación, también en modo Auto.
+1. Claude Code runs the hooks package on every event. On a machine with the monitor installed, events go to the monitor on loopback, which queues them in SQLite so nothing is lost if the server or network is down.
+2. The monitor enriches events with transcript and process data, forwards them over HTTPS with its machine token, and polls the server for jobs: permission decisions, chat messages, approved orders, new projects.
+3. The backend rebuilds the state of every agent each second from its own event log and serves the web and the iOS app. Chat replies stream through Server-Sent Events.
+4. In production, nginx serves the static web at `/` and proxies `/api` to the backend, which runs under systemd. For local development the hooks can post directly to the backend.
 
-## Desplegar al VPS
+## Tech stack
 
-Desde `E:\visualizador-agentes`, en Git Bash, con el trabajo en un commit:
+- **Backend**: Python 3.13, FastAPI, Pydantic, SQLite, argon2-cffi, uv, pytest, ruff, pyright.
+- **Frontend**: Next.js 16 (static export), React 19, TypeScript, three.js with React Three Fiber and drei, Zustand, Tailwind CSS 4, Vitest.
+- **Monitor and hooks**: Python (the monitor uses only the standard library), packaged as a Windows installer.
+- **iOS**: Swift, SwiftUI, XcodeGen (`project.yml`), WKWebView for the 3D office.
+- **Deployment**: nginx, systemd, Let's Encrypt, Bash scripts.
+
+## Results
+
+Test suites in this repository, run on a clean clone:
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Frontend | `npx vitest run` | 320 / 320 passing |
+| Frontend types | `npm run typecheck` | OK |
+| Frontend build | `npm run build` | OK |
+| Backend | `uv run pytest` | 477 tests; 474 pass on Windows (3 tests in `tests/test_path_utils.py` assume POSIX home paths, as in upstream) |
+| Monitor | `uv run pytest` | 206 passing |
+| Hooks | `uv run pytest` | 170 passing |
+
+## Running locally
+
+**Requirements**: [uv](https://docs.astral.sh/uv/) (Python 3.13 is installed by uv), Node.js or bun, `make`, and Claude Code for real events. For the iOS app: a Mac with Xcode and XcodeGen.
 
 ```bash
-bash despliegue/desplegar.sh   # construye la web, sube el commit y reinicia el backend (sin sudo)
-bash despliegue/estado.sh      # versión, servicio, respaldos, certificado y respuestas públicas
+# Dependencies (does not install hooks into Claude Code)
+make install
+
+# Local configuration (not versioned)
+cp backend/.env.example backend/.env           # VISUALIZADOR_AUTH=desactivado: login off locally
+cp frontend/.env.example frontend/.env.local   # NEXT_PUBLIC_BACKEND_PORT=8100
+
+# Backend on :8100 and web on :3100
+make dev-local
 ```
 
-La instalación del sistema (una sola vez, con sudo), los respaldos y la restauración están en PROJECT.md, sección "VPS y despliegue".
-
-## Instalar o actualizar el monitor
-
-1. Crea el token de la máquina en el VPS (una vez por máquina):
-   `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/acceso.sh token-crear --maquina <id>"`
-2. Arma el instalador: `cd monitor; uv run python empaquetar.py` → `monitor/dist/instalar-visualizador-monitor.exe`.
-3. Instalar: doble clic en ese archivo (pide la dirección del servidor y el token).
-4. Actualizar sin pedir nada (conserva servidor, token y configuración): `& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`.
-5. Desinstalar y dejar todo como estaba: el mismo archivo con `--desinstalar`.
-
-## Desarrollo
+Then, in another terminal:
 
 ```bash
-make dev-local      # backend :8100 y web :3100 (sin tocar el uso diario)
-cd backend && uv run pytest -q --timeout=300
-cd hooks && uv run pytest -q
-cd monitor && uv run pytest -q
-cd frontend && npx tsc --noEmit && npx eslint . && npx vitest run
+curl http://127.0.0.1:8100/health
+
+# Simulated agents, no Claude Code needed
+CLAUDE_OFFICE_API_URL=http://127.0.0.1:8100/api/v1/events uv run python scripts/simulate_events.py complex
 ```
 
-## Origen
+Open http://localhost:3100. The raw state engine output is at `/datos` or `GET /api/v1/agents/state`.
 
-Empezó como una copia de Claude Office Visualizer (Paul Robello, licencia MIT, ver `LICENSE` y `THIRD_PARTY_NOTICES.md`). De aquel proyecto quedan el hook base y partes del backend; la web original se quitó en la etapa 1.4.
+- `make hooks-install` registers the hooks in your Claude Code settings. Use it only when you want real sessions to report to the local backend.
+- Edit `BACKEND_CORS_ORIGINS` in `backend/.env` to match the origins you actually use.
+- The monitor installer is built with `cd monitor && uv run python empaquetar.py`; it asks for the server address and a machine token.
+- Production settings are described in `backend/.env.produccion.example` and the scripts in `despliegue/`, which use the placeholders `<VPS_IP>`, `<VPS_USER>` and `agents.example.com`.
+
+Tests:
+
+```bash
+cd backend  && uv run pytest -q
+cd hooks    && uv run pytest -q
+cd monitor  && uv run pytest -q
+cd frontend && npm run typecheck && npx vitest run
+```
+
+The interface, `PROJECT.md` (decision log and stage plan) and the original README ([docs/README.es.md](docs/README.es.md)) are in Spanish.
+
+## What I learned / key technical decisions
+
+- **I separated state from rendering.** Before drawing anything new, I wrote a 21-state catalog and a state engine with its own event log, validated against raw data on a debug page. The inherited database dropped events in bursts, so the engine could not depend on it. With reliable states, the 2D, 3D and iOS views became thin clients.
+- **"Waiting on you" has to be explicit.** An agent that finished its turn is not necessarily waiting. I count it as waiting only on a pending `AskUserQuestion` or `ExitPlanMode`, or a question in the last paragraph of its message, and a closed session never waits. This removed most false alerts.
+- **One component holds the secret and absorbs failures.** The per-machine monitor is the only process with the machine token and keeps an offline queue, so hooks stay fast and a server restart or network drop loses nothing. On the server side, the deployment scripts include a backup-and-restore check and a `kill -9` crash test to confirm systemd brings the backend back.
+- **Human approval sits between orchestrator and coders.** The orchestrator can only propose orders inside `<orden>` blocks; the server holds them until I approve, edit or reject them, and the machine can only report progress, never approve. Testing showed that `--resume` keeps the original system prompt, so role changes are delivered as a message instead.
+- **Streaming without flicker.** Partial replies are batched every 400 ms over SSE with a polling fallback, and order blocks are stripped from partial text, so the final message replaces the partial one in the same bubble.
+
+## Author
+
+**Washington Quevedo**, AI Engineer and XR developer.
+[LinkedIn](https://www.linkedin.com/in/wxquevedo) | [GitHub](https://github.com/wx-quevedo)
+
+**Credits**: [claude-office](https://github.com/paulrobello/claude-office) by Paul Robello and contributors (MIT), the base of this project. The 3D office scene is adapted from [Agent Office 3D](https://github.com/SaidislomSaidazimovv/agent-office) (MIT); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

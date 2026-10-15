@@ -49,7 +49,7 @@ Fecha: 2026-10-12. App en `ios/VisualizadorAgentes` (SwiftUI, iOS 26, XcodeGen).
 - **Permisos de otras sesiones:** el permiso de visualizador-agentes que apareció en Decisiones durante la prueba no se tocó.
 - **iPhone (Washington X., iPhone 16 Pro Max con iOS 27.0.1):** la app se compiló con Xcode 27 y el Personal Team (KVU83MD66W) y quedó instalada (`devicectl device install app`). No se abrió sola porque el teléfono estaba bloqueado.
 
-Capturas en `docs/capturas/etapa-4/`: 40-proyectos, 40-nuevo, 40-chat, 40-orden, 40-equipo, 40-reglas, 40-decisiones.
+Capturas no incluidas en el repositorio público.
 
 ## Problemas y soluciones
 
