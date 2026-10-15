@@ -45,7 +45,7 @@ La sesión de la app seguía activa; no se pidió iniciar sesión.
    - Llegó la Orden 1 con título propio "Fase 0 · Prompt 0: crear README con una línea" (`titulo_propio: true`). La tarjeta lo mostró en negrita (captura 44-orden-titulo) y la insignia no la contó.
    - Se rechazó con "prueba de la app", que quedó en minúscula, con `decidido_por: app`.
 2. **avisos-44** (mismos ajustes, sin marcar como prueba; el servidor lo guardó con `prueba: false`):
-   - La pregunta inicial salió una vez como aviso arriba y apareció en Decisiones con los tres botones (captura 44-avisos). La insignia pasó a 2: esta pregunta y una de server-monitor, que es real y no se tocó.
+   - La pregunta inicial salió una vez como aviso arriba y apareció en Decisiones con los tres botones (captura 44-avisos). La insignia pasó a 2: esta pregunta y una de mi-proyecto, que es real y no se tocó.
    - **Responder:** abrió el chat con la pregunta resaltada y el campo listo (captura 44-responder). La respuesta enviada desde la app llegó al orquestador, que contestó a los 9 s.
    - **Esperar:** la nueva pregunta salió una vez como aviso y se puso en espera. `GET /avisos-orquestador` dejó de devolverla y la insignia bajó a 1. Con el siguiente mensaje del orquestador (después de otra respuesta desde la app) el aviso volvió, una sola vez.
    - **Ignorar:** sobre ese último aviso. El servidor dejó de devolverlo y la pila de avisos de la web no muestra nada de avisos-44, igual que la app.

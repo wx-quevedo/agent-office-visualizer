@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["<TAILSCALE_IP>"],
+  // Extra dev hosts (for example a Tailscale IP), comma separated in ALLOWED_DEV_ORIGINS.
+  allowedDevOrigins: (process.env.ALLOWED_DEV_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   // Enable static export for production builds
   output: "export",
   // Disable image optimization (not supported in static export)

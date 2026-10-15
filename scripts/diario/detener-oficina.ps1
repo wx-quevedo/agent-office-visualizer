@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   Termina únicamente los procesos cuya línea de comandos contiene la ruta de la
-  copia diaria (E:\visualizador-agentes-diario). Nunca toca la copia de
+  copia diaria (VISUALIZADOR_DIARIO_RAIZ). Nunca toca la copia de
   desarrollo, VS Code ni Claude Code.
 #>
 $ErrorActionPreference = 'Stop'

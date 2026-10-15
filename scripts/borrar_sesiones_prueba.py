@@ -8,7 +8,7 @@ prefijo "prueba-" y al terminar los borra con este script:
 
 Borra del registro propio del motor (backend/agent_events.db) y de la base de
 la vista clásica de desarrollo (backend/visualizer.db). Nunca toca la oficina
-diaria (<project path>). Ejecutar con el backend de desarrollo detenido (o
+diaria (la copia original de claude-office). Ejecutar con el backend de desarrollo detenido (o
 reiniciarlo después): el motor conserva en memoria lo que ya cargó.
 """
 

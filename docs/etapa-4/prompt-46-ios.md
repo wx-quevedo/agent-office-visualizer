@@ -46,7 +46,7 @@ La sesión de la app seguía activa. Hubo que volver a registrar Face ID en el s
 - Más tarde, con la app en Oficina, llegó otra pregunta como banner nativo, una sola vez.
 - **Toque de notificación: se verifica en el iPhone.** En el simulador, los toques automáticos de la herramienta no llegan a los banners ni al Centro de notificaciones del sistema (en el registro de SpringBoard no aparece ninguna acción del usuario). Además, el sistema tarda unos 11 s en publicar cada notificación. Washington lo prueba en el iPhone real.
 - **Con el chat de avisos-46 abierto**, se le pidió una pregunta de sí o no. El servidor creó el aviso ("¿Quieres que el botón sea de color azul?") y la app no publicó ninguna notificación: el registro de SpringBoard no tiene "Posting notification" de la app en ese tramo, y la pregunta se vio solo en el chat.
-- Durante la prueba aparecieron un permiso real de vive-demo y una pregunta real de server-monitor; no se tocaron.
+- Durante la prueba aparecieron un permiso real de vive-demo y una pregunta real de mi-proyecto; no se tocaron.
 
 **Al terminar**, prueba-46 y avisos-46 quedaron detenidos y no se aprobó ninguna orden.
 

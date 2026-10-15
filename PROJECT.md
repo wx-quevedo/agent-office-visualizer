@@ -9,8 +9,8 @@ Visualizador para personas que trabajan con varios agentes de IA a la par, en va
 - **Base:** claude-office de Paul Robello (licencia MIT), versión 0.24.1, commit `3522c16`. Repositorio original: https://github.com/paulrobello/claude-office
 - **Stack heredado:** backend FastAPI (Python 3.13, uv), frontend Next.js + PixiJS + Zustand, hooks de Claude Code en Python.
 - **Repositorio propio:** `wx-quevedo/visualizador-agentes` (privado). Remoto `upstream` = claude-office original.
-- **Carpeta de desarrollo:** `E:\visualizador-agentes`.
-- **Versión de uso diario (no se toca):** `<project path>`, puertos 3000 (frontend) y 8000 (backend), con hooks instalados en las dos cuentas de Claude Code.
+- **Carpeta de desarrollo:** `<project path>`.
+- **Versión de uso diario (no se toca):** `<claude-office path>`, puertos 3000 (frontend) y 8000 (backend), con hooks instalados en las dos cuentas de Claude Code.
 - **Gestión:** ClickUp, espacio VR Things, carpeta "Visualizador de Agentes" (listas Roadmap, Problemas y errores, Investigación).
 - **Documentos de diseño:** `docs/proyecto/catalogo-estados.md` y `docs/proyecto/investigacion-herramientas.md`.
 
@@ -21,7 +21,7 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 ## Entorno
 
 - Windows, PowerShell y Git Bash. `make` instalado (ezwinports). Node 24, uv 0.11, Python 3.13 vía uv.
-- Dos cuentas de Claude Code: personal en `C:\Users\<user>\.claude` (extensión de VS Code) y Demo Org en `C:\Users\<user>\.claude-demo` (CLI en la terminal de VS Code del proyecto vive-demo).
+- Dos cuentas de Claude Code: personal en `%USERPROFILE%\.claude` (extensión de VS Code) y Demo Org en `%USERPROFILE%\.claude-demo` (CLI en la terminal de VS Code del proyecto vive-demo).
 - Acceso desde el iPhone por Tailscale: IP de la PC `<TAILSCALE_IP>`.
 
 ## Decisiones
@@ -30,7 +30,7 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | --- | --- | --- |
 | 2026-10-09 | Partir de claude-office | Ya funciona con las dos cuentas y el iPhone; su Command Center junta todas las sesiones en una oficina |
 | 2026-10-09 | Repositorio privado propio, no fork | GitHub no permite forks privados de repos públicos; se conserva el remoto `upstream` para traer cambios a mano |
-| 2026-10-09 | Desarrollar en `E:\visualizador-agentes`, separado de `<project path>` | Si algo se rompe en desarrollo, la oficina diaria sigue funcionando |
+| 2026-10-09 | Desarrollar en `<project path>`, separado de `<claude-office path>` | Si algo se rompe en desarrollo, la oficina diaria sigue funcionando |
 | 2026-10-09 | Pixel art durante el desarrollo; cambio de estilo al final | Con la base pixel se avanza más rápido; los estados se definen por lo que pasa, no por el dibujo |
 | 2026-10-09 | El agente es el protagonista (gráfico más grande); subagentes discretos | La forma de trabajo prioriza al agente principal; no todas las tareas usan subagentes |
 | 2026-10-09 | Todo en una oficina, con opción en configuración para separar por proyecto | Evita cambiar de pestaña entre proyectos |
@@ -50,7 +50,7 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-10 | Descanso: 10 min desde la última señal del usuario; un reinicio del backend lo atrasa | Se acepta la interpretación del motor |
 | 2026-10-10 | Un subagente sin actividad por 30 min se da por terminado (`STATE_SUBAGENT_EXPIRY_SECONDS`) | Evita subagentes eternos en sesiones cerradas a la fuerza |
 | 2026-10-10 | El hook envía cada evento a la oficina diaria (8000) y a la de desarrollo (8100) | La copia de desarrollo ve la actividad real sin instalar otro hook |
-| 2026-10-10 | Todo cambio al hook debe ser compatible con la oficina diaria (`<project path>`), que usa el mismo `claude-office-hook` | Un solo comando instalado sirve a las dos oficinas |
+| 2026-10-10 | Todo cambio al hook debe ser compatible con la oficina diaria (`<claude-office path>`), que usa el mismo `claude-office-hook` | Un solo comando instalado sirve a las dos oficinas |
 | 2026-10-10 | Un agente cuya sesión de Claude Code se cerró no está activo: pasa a 21 "Cerrado" aunque tenga una pregunta pendiente, que se guarda como dato | Una sesión cerrada no puede esperar a nadie |
 | 2026-10-10 | Al reabrir una sesión cerrada vuelve al trabajo (20) y, si su pregunta seguía sin respuesta, pasa a 14 | La pregunta sigue vigente al volver |
 | 2026-10-10 | La espera de los destinos extra del hook baja de 0,1 s a 0,08 s | Más margen para el tiempo del hook |
@@ -67,16 +67,16 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 | 2026-10-10 | La distribución de la oficina se guarda en el repo (`frontend/public/oficina3d/distribucion.json`) | Versionada y igual en PC y celular; el editor de muebles se portará después |
 | 2026-10-10 | Etiquetas 3D: solo dicen lo que la postura no muestra (caminando = libre, sentado = trabajando); sin "Inactivo" ni similares. Libre: solo el proyecto; trabajando: proyecto y actividad corta; te espera: "Te pide permiso" o "Te preguntó" con borde oscuro; "Con errores" si hay errores seguidos | Menos texto en la escena; la postura ya comunica si trabaja |
 | 2026-10-10 | Cuentas: la personal no lleva marca; la de Demo Org lleva el isotipo (`frontend/public/logos/isotipo-demo-org.svg`, ~16 px) en la etiqueta 3D y en los escritorios de `/oficina`, y el logo completo (`logo-demo-org.svg`) solo donde hay espacio (detalle). "Demo Org" como texto solo en tooltips y `alt` | Se distingue la cuenta sin texto extra |
-| 2026-10-10 | La oficina pasa a uso diario en E:\visualizador-agentes-diario (3000/8000); claude-office queda de respaldo | Washington aprobó la oficina; dos copias independientes: la diaria estable y la de desarrollo para cambios |
+| 2026-10-10 | La oficina pasa a uso diario en `<daily copy path>` (3000/8000); claude-office queda de respaldo | Washington aprobó la oficina; dos copias independientes: la diaria estable y la de desarrollo para cambios |
 | 2026-10-10 | La copia diaria se sirve compilada: backend con uvicorn sin `--reload` y el export estático del frontend con un servidor Starlette propio (`app.servidor_frontend`) en 3000 | Usa el mismo entorno del backend (nada extra que instalar), resuelve las URL limpias del export (`/oficina` → `oficina.html`), fija los tipos MIME (en Windows el registro puede dar `text/plain` a `.js`) y aplica la misma regla de acceso (solo localhost y Tailscale) |
-| 2026-10-10 | La copia diaria se clona desde la copia de desarrollo local (`E:\visualizador-agentes`, rama main) | Así `actualizar-oficina.ps1` trae los commits aprobados aunque todavía no estén en GitHub; se puede cambiar el origen a GitHub con `git remote set-url` |
+| 2026-10-10 | La copia diaria se clona desde la copia de desarrollo local (`<project path>`, rama main) | Así `actualizar-oficina.ps1` trae los commits aprobados aunque todavía no estén en GitHub; se puede cambiar el origen a GitHub con `git remote set-url` |
 | 2026-10-10 | Cada copia guarda su propia distribución de la oficina 3D (muebles y tema) en su carpeta de datos, a través del backend; la del repo es solo la base. Se pasa de una copia a otra con Exportar/Importar JSON | Washington arma su oficina en la diaria sin que desarrollo la pise |
 | 2026-10-10 | El editor no deja guardar mientras un mueble tape un camino de los agentes o un escritorio de trabajo | Los agentes caminan por un grafo fijo; un mueble encima los dejaría atascados |
 | 2026-10-10 | Cuatro entornos para elegir viéndolos en 3D: Puente de mando, Cabinas por proyecto, Sala de control con mostrador y Estudio con jardín; el Original se conserva | El escritorio del agente es lo central y cada entorno resuelve de forma distinta el momento en que un agente te espera (13 y 14) |
 | 2026-10-10 | Cabinas: máximo 6 cabinas de proyecto más la Cabina general fija; Estudio: isla propia desde 2 agentes del proyecto, los de un solo agente comparten la Isla general, y se guardan 3 islas libres para ella | Así siempre hay lugar para quien llega y nadie se cambia de puesto mientras su proyecto tenga agentes |
 | 2026-10-10 | La diaria corre con el bucle Selector de asyncio (`--loop asyncio:SelectorEventLoop`) y se arranca a través de su tarea programada | En Windows el bucle Proactor cierra el puerto que escucha cuando un `accept` falla con WinError 64; el Selector solo registra el error y sigue |
 | 2026-10-10 | Permisos desde la oficina con la política "solo_en_el_celular" por defecto (corrige la decisión anterior, "solo_fuera_de_la_pc"): la oficina espera tu decisión solo si hay un latido de celular vigente (75 s, como la presencia) y ninguno de la PC; sin ningún dispositivo conectado, o con la PC conectada, el hook devuelve de inmediato y responde VS Code (la solicitud se ve igual en la oficina); si el celular se desconecta mientras espera, deja de esperar. "siempre" y "nunca" se eligen en el panel Permisos; espera por defecto 90 s (10 a 540) | Con "solo_fuera_de_la_pc", si estabas en la PC con la pestaña cerrada, cada permiso esperaba hasta el límite sin que nadie pudiera responder. Claude Code espera al hook antes de seguir: solo vale la pena esperar cuando alguien puede responder desde el celular |
-| 2026-10-10 | Plan por etapas (sección "Plan por etapas"): sin Tailscale; un monitor por máquina envía todo al VPS de the VPS provider y la web y la app iOS lo consumen en https://agents.example.com | Decisión de Washington: ver y manejar los agentes desde cualquier lugar sin depender de la red privada |
+| 2026-10-10 | Plan por etapas (sección "Plan por etapas"): sin Tailscale; un monitor por máquina envía todo al VPS y la web y la app iOS lo consumen en https://agents.example.com | Decisión de Washington: ver y manejar los agentes desde cualquier lugar sin depender de la red privada |
 | 2026-10-10 | Inicio de sesión de un solo usuario con contraseña fijada por consola (hash argon2) y tokens guardados como HMAC-SHA256; desactivado por defecto en local y activado en el VPS | La diaria y el iPhone por Tailscale siguen igual hasta la etapa 1.4; en internet nada queda abierto |
 | 2026-10-10 | Un token de máquina solo puede enviar datos (eventos, registro y espera de permisos, latido) y una máquina solo ve sus propias solicitudes de permiso | Si un monitor se ve comprometido, no lee el estado ni decide permisos de otras máquinas |
 | 2026-10-10 | Voces: Washington usará las voces de Google en Chrome (no Edge) | En Edge y en Playwright solo aparecen voces de Microsoft de España; pendiente buscar mejores voces o un sistema de lectura |
@@ -117,12 +117,12 @@ No es otro chat. Es una organización viva, lista para recibir un proyecto, que 
 
 ## Ajustes heredados de la instalación diaria
 
-Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el commit inicial:
+Hechos en `<claude-office path>` el 2026-10-09 y trasladados a este repositorio en el commit inicial:
 
 - `backend/app/core/path_utils.py`: aceptar transcripciones en `~/.claude-demo` además de `~/.claude`.
 - `hooks/src/claude_office_hooks/main.py`: leer el stdin del hook en UTF-8 (tildes correctas en Windows).
 - `backend/app/api/middleware.py` y `backend/app/api/websocket.py`: aceptar clientes y orígenes de Tailscale (`100.64.0.0/10`).
-- `frontend/next.config.ts`: `allowedDevOrigins` con `<TAILSCALE_IP>`.
+- `frontend/next.config.ts`: `allowedDevOrigins` desde la variable `ALLOWED_DEV_ORIGINS` (IP de Tailscale de la PC).
 - `frontend/src/utils/api.ts` y `frontend/src/hooks/useFloorConfig.ts`: el backend se busca en el mismo host desde el que se abre la página.
 
 ## Registro
@@ -140,13 +140,13 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Espera explícita (14 solo con pregunta), tokens leídos de la cola de la transcripción (sin límite de tamaño), expiración de subagentes a los 30 min, errores seguidos con `PostToolUseFailure` y herramientas atribuidas al subagente. Hook: `PostToolUseFailure`, `tool_agent_id`, `notification_type`, `last_assistant_message`, envío en paralelo a 8000 y 8100 (`CLAUDE_OFFICE_EXTRA_API_URLS`) y `127.0.0.1` en lugar de `localhost`. Hook reinstalado y registrado en las dos cuentas. Commit `d81492e` |
 | 2026-10-10 | Estado 21 "Cerrado" (por `SessionEnd`, por proceso de Claude Code terminado o sin PID tras 24 h), pregunta pendiente guardada, reapertura (20 y luego 14), sesiones cerradas fuera de la presencia. Hook: PID y hora de creación del proceso de Claude Code en cada evento, espera extra de 0,08 s. Probado con un proceso de prueba: 21 a los 14 s del cierre. Commit `64802c5` |
 | 2026-10-10 | Registro propio de eventos del motor (SQLite en WAL, solo agregado, un único escritor en orden de llegada), arranque desde ese registro, importación inicial única desde la base heredada, retención de 7 días y cierre sin PID a 1 h. Ráfaga de 2 000 eventos: 2 000 en el registro propio frente a 520 en la base heredada; tras reiniciar, estados, esperas y preguntas coinciden. Commit `a2793fd` |
-| 2026-10-10 | Prueba en vivo de Washington con `/datos` (sesión 8f5f7ede en `E:\Test\prueba-visualizador`, cuenta personal, y 5f41c31c de vive-demo, cuenta demo): funcionaron aparición de sesiones, Write, ping de 46 s, error en Read (errores seguidos 1 y luego 0), cierre de ventana (21 `proceso_terminado` en ~15 s), retomar la conversación (PID nuevo, cierre borrado) y la cuenta demo. Correcciones: AskUserQuestion/ExitPlanMode como 14, pregunta en el último párrafo, texto del encargo sin bloques inyectados, conciliación con la transcripción, subagentes sin límite de tiempo, PID con el ejecutable renombrado por la actualización (hook; Washington lo reinstaló el 2026-10-10 a las 11:06), sesiones de prueba borradas y script `scripts/borrar_sesiones_prueba.py`, tokens totales acumulados. Commit `ad1b144` |
+| 2026-10-10 | Prueba en vivo de Washington con `/datos` (sesión 8f5f7ede en `<carpeta de prueba>`, cuenta personal, y 5f41c31c de vive-demo, cuenta demo): funcionaron aparición de sesiones, Write, ping de 46 s, error en Read (errores seguidos 1 y luego 0), cierre de ventana (21 `proceso_terminado` en ~15 s), retomar la conversación (PID nuevo, cierre borrado) y la cuenta demo. Correcciones: AskUserQuestion/ExitPlanMode como 14, pregunta en el último párrafo, texto del encargo sin bloques inyectados, conciliación con la transcripción, subagentes sin límite de tiempo, PID con el ejecutable renombrado por la actualización (hook; Washington lo reinstaló el 2026-10-10 a las 11:06), sesiones de prueba borradas y script `scripts/borrar_sesiones_prueba.py`, tokens totales acumulados. Commit `ad1b144` |
 | 2026-10-10 | Página `/oficina` v1 en cajas (blanco, grises y negro, IBM Plex Sans y Mono): vista por urgencia (te esperan, trabajando, inactivos y descanso, cerrados), vista por proyecto (una sala por carpeta), detalle por agente (`/oficina?agente=<session_id>`) y celular (< 700 px, una columna). Latido de presencia `POST /api/v1/agents/presence` cada 30 s (PC o celular); "Tokens totales" pasa a ser tokens de salida desde que la sesión llegó al motor (la sesión de Demo Org 5f41c31c bajó de 97,5 M a ~0,38 M). Capturas no incluidas en el repositorio público. Commit `3ce9936` |
-| 2026-10-10 | Estudio de Agent Office 3D (thomasarisu.agent-office, MIT) en `E:\referencias\agent-office`, fuera del repositorio; plan de port en 3 prompts aprobado por Washington. Sin commit |
+| 2026-10-10 | Estudio de Agent Office 3D (thomasarisu.agent-office, MIT) en una carpeta local, fuera del repositorio; plan de port en 3 prompts aprobado por Washington. Sin commit |
 | 2026-10-10 | Avisos con voz y notificaciones de Windows desde `/oficina` (`frontend/src/components/avisos/`): te pide permiso (13), te hizo una pregunta (14), terminó (11), recordatorio cada 2, 5 o 10 min mientras espera, cerrado con pregunta (21, apagado por defecto); panel con interruptores, voz en español, velocidad, volumen, sonido y pruebas. Capturas no incluidas en el repositorio público. Commit `cd06200` |
 | 2026-10-10 | Prompt 1 del port de Agent Office 3D: escena 3D en `/oficina/3d` (`frontend/src/components/oficina3d/`, código MIT adaptado) con los agentes reales del motor, puestos estables por sesión, etiquetas con proyecto, cuenta y estado, más datos al pasar el mouse, clic al detalle de `/oficina`, barra propia en tema claro con contadores, "Vista de cajas" y Avisos (mismo `useAvisos`), latido de presencia, distribución desde `frontend/public/oficina3d/distribucion.json`, modo celular (calidad baja, sin sombras, cámara a lo largo). three 0.185.1, @react-three/fiber 9.8.1 y @react-three/drei 10.7.8 solo en el chunk de `/oficina/3d`. Capturas no incluidas en el repositorio público. Commit `543ec55` |
 | 2026-10-10 | Prompt 2 del port de Agent Office 3D: capa de comportamiento (`oficina3d/comportamiento.ts`) separada del estado; 13 alza un brazo, 14 globo con la pregunta y mira a la cámara, 19 va a la sala de descanso y se sienta en el sofá (4 lugares; los demás de pie cerca), 1 y los agentes nuevos entran por la puerta oeste, 12 y los que se cierran salen por ella, 15 reloj de arena y 16 barra de progreso dibujados sobre el monitor, 21 con pregunta deja una nota en su escritorio (sin pregunta, el escritorio queda reservado una hora). Etiquetas simples (libre = solo el proyecto, trabajando = actividad corta, te espera = borde oscuro, con errores). Isotipo y logo de Demo Org (`frontend/public/logos/`) en la escena 3D y en `/oficina`; sin texto "personal". Capturas no incluidas en el repositorio público. Commit `5b91296` (subido a GitHub por Washington) |
-| 2026-10-10 | Uso diario: copia `E:\visualizador-agentes-diario` en 3000/8000 (compilada, sin recarga, datos en `C:\Users\<user>\.visualizador-agentes\datos-diario`), servidor del frontend compilado (`backend/app/servidor_frontend.py`), scripts `scripts/diario/` (preparar, iniciar, detener, estado, actualizar, instalar y quitar arranque automático) y opción `CLAUDE_OFFICE_PRINCIPAL=visualizador` del hook. `<project path>` queda de respaldo, detenido. Capturas no incluidas en el repositorio público. Commit `2b60341` (Washington aprobó el hook con `CLAUDE_OFFICE_PRINCIPAL=visualizador`, lo reinstaló e instaló el arranque automático) |
+| 2026-10-10 | Uso diario: copia `<daily copy path>` en 3000/8000 (compilada, sin recarga, datos en `%USERPROFILE%\.visualizador-agentes\datos-diario`), servidor del frontend compilado (`backend/app/servidor_frontend.py`), scripts `scripts/diario/` (preparar, iniciar, detener, estado, actualizar, instalar y quitar arranque automático) y opción `CLAUDE_OFFICE_PRINCIPAL=visualizador` del hook. `<claude-office path>` queda de respaldo, detenido. Capturas no incluidas en el repositorio público. Commit `2b60341` (Washington aprobó el hook con `CLAUDE_OFFICE_PRINCIPAL=visualizador`, lo reinstaló e instaló el arranque automático) |
 | 2026-10-10 | Editor de la oficina 3D (catálogo, agregar, arrastrar en cuadrícula de 0,5 m, rotar, borrar, deshacer y rehacer, guardar y cancelar, exportar e importar JSON) con aviso de muebles que tapan caminos o escritorios; 9 temas de piso y pared más el claro actual; distribución por copia en `GET/PUT /api/v1/oficina3d/distribucion`. Correcciones: el cierre de un proceso muerto conserva su hora tras reiniciar el backend; `/datos` ya no da el error #418 por Tailscale. Capturas no incluidas en el repositorio público. Commit `8cbc808` |
 | 2026-10-10 | Entornos intercambiables (selector "Entorno" en `/oficina/3d`, guardado por copia junto con la distribución de cada entorno): Original sin cambios, Puente de mando y Sala de control con mostrador. Tu puesto en todos los entornos (letrero "Tú", sentado si estás conectado). Capturas no incluidas en el repositorio público. Commit `5fa222d` |
 | 2026-10-10 | Entornos Cabinas por proyecto y Estudio abierto con jardín (asignación de puestos por proyecto, Cabina general e Isla general), más decoración en Puente de mando y Sala de control. La diaria arranca a través de su tarea programada y con el bucle Selector de asyncio (su backend dejaba de aceptar conexiones). Capturas no incluidas en el repositorio público. Commit `6a8f82b` |
@@ -156,7 +156,7 @@ Hechos en `<project path>` el 2026-10-09 y trasladados a este repositorio en el 
 | 2026-10-10 | Etapa 0 (cierre): en `/oficina/3d` el clic en un agente abre su panel sobre la escena, sin salir de ella (el mismo panel que abre `?agente=<id>`); al volver de `/oficina` ya no se abre el panel de otro agente. Los scripts de la diaria muestran los acentos de git en Windows PowerShell 5.1. Plan por etapas registrado. Capturas no incluidas en el repositorio público. Commit `768cf83` |
 | 2026-10-10 | Etapa 1.1: máquinas (registro, `machine_id` en eventos, sesiones, agentes y permisos; migración con respaldo de los datos existentes a "Alienware"), tokens por máquina solo para la ingesta, inicio de sesión de un usuario (argon2, cookie httpOnly de 30 días, token de app de un año, límite de intentos, CSRF, WebSocket con sesión) y pantalla `/entrar`. Desactivado en local (`VISUALIZADOR_AUTH=desactivado`): la diaria funciona igual. Capturas no incluidas en el repositorio público. Commit `66de73f` |
 | 2026-10-10 | Etapa 1.2: monitor de máquina (`monitor/`) con API local en 127.0.0.1:8765, cola SQLite sin conexión (orden, reintentos progresivos, id de evento sin duplicados), permisos reenviados (sin servidor: sin decisión al instante), lecturas de transcripciones y procesos, latido, comandos `estado`, `registro` y `reiniciar`, e instalador `.exe` de Windows (respaldo y cambio solo de las entradas de `claude-office-hook`, arranque oculto con tarea programada, desinstalación que deja todo como estaba). Comandos peligrosos siempre con aprobación, también en modo Auto. El backend recibe las observaciones de cada monitor y, con `LECTURA_LOCAL=false`, no lee nada de la máquina. Probado de punta a punta contra el backend de desarrollo con acceso activado y una carpeta de usuario simulada. Commit `ac72de4` |
-| 2026-10-11 | Etapa 1.3: la oficina publicada en https://agents.example.com (VPS de the VPS provider): backend como servicio systemd con usuario sin privilegios en 127.0.0.1:8320 (acceso activado, `LECTURA_LOCAL=false`, secreto generado en el servidor), frontend estático servido por nginx, `/api` y `/ws` al backend, certificado de Let's Encrypt con renovación automática, respaldos diarios con 14 días y restauración probada, despliegue repetible desde la PC y script de estado. Los otros 12 sitios del VPS responden igual que antes. El WebSocket sin sesión ahora cierra con 4401 detrás de nginx (antes rechazaba con 403). Nuevos comandos peligrosos: `git checkout -- .`, `git restore .`, `git branch -D` y `TRUNCATE TABLE`. Instalador del monitor: dos instalaciones en el mismo segundo ya no pisan el respaldo original de `settings.json`. Commits `8ef06b5` y `67eed31` (prueba de caída con `kill -9` al proceso principal) |
+| 2026-10-11 | Etapa 1.3: la oficina publicada en https://agents.example.com (VPS): backend como servicio systemd con usuario sin privilegios en 127.0.0.1:8320 (acceso activado, `LECTURA_LOCAL=false`, secreto generado en el servidor), frontend estático servido por nginx, `/api` y `/ws` al backend, certificado de Let's Encrypt con renovación automática, respaldos diarios con 14 días y restauración probada, despliegue repetible desde la PC y script de estado. Los otros 12 sitios del VPS responden igual que antes. El WebSocket sin sesión ahora cierra con 4401 detrás de nginx (antes rechazaba con 403). Nuevos comandos peligrosos: `git checkout -- .`, `git restore .`, `git branch -D` y `TRUNCATE TABLE`. Instalador del monitor: dos instalaciones en el mismo segundo ya no pisan el respaldo original de `settings.json`. Commits `8ef06b5` y `67eed31` (prueba de caída con `kill -9` al proceso principal) |
 | 2026-10-11 | Etapa 1.3 cerrada en el VPS: Washington ejecutó la instalación del sistema, fijó la contraseña de la oficina y corrió el respaldo con restauración en una copia y la prueba de caída (`kill -9`): todo correcto (detalle en "Resultado de los comandos de Washington"). Commit `53c1976` |
 | 2026-10-11 | Etapa 1.4 cerrada: Washington creó el token de la Alienware e instaló el monitor el 2026-10-11 a las 08:30 (hora de Ecuador); primera conexión correcta con https://agents.example.com y cola en 0. Se quitó la web original de ClaudeOffice Visualizer (frontend, pipeline clásico del backend, dependencias y pruebas): `/` abre la oficina 3D y el sitio se llama "Oficina de agentes". CSP más estricta (sin wasm, workers ni WebSocket). La diaria local quedó detenida y sin arranque automático (carpeta y datos conservados como respaldo). El export copia las cargas RSC con el nombre plano que pide Next 16 (`frontend/scripts/rsc-planos.mjs`): sin 404 al precargar ni recarga completa con `router.replace`. Capturas no incluidas en el repositorio público (PC 1440 y celular 390, con y sin sesión). Commits `f2842d5`, `7dabd9b` y `1d686fb` (en GitHub) |
 | 2026-10-11 | Etapa 2.1 (Prompt 26), datos para ver bien: esperas específicas con tabla editable, historial por turno (endpoint paginado), tokens y tiempo por turno, sesión y día (por cuenta y modelo, con trabajo continuo), límites de 5 h y semanal desde la barra de estado de Claude Code, detector de atascos y "Dónde quedamos" (el monitor lee el PROJECT.md de cada proyecto). Todo visible en `/datos` sin rediseño. Monitor 0.2.0 con `statusline` y `--actualizar` (conserva la versión anterior para las sesiones de Claude Code ya abiertas). README nuevo en español en lugar de la documentación heredada. Revisión independiente de las reglas de esperas y del detector, con correcciones. Commit `ac740e2` |
@@ -225,7 +225,7 @@ Hallazgo: pyright 1.1.414 marca cientos de errores en archivos que no se tocaron
 
 ## Cómo levantar
 
-Copia de desarrollo en 3100 (frontend) y 8100 (backend), en paralelo a la copia diaria (`E:\visualizador-agentes-diario`, 3000/8000; ver "Uso diario"). Comandos para Git Bash:
+Copia de desarrollo en 3100 (frontend) y 8100 (backend), en paralelo a la copia diaria (`<daily copy path>`, 3000/8000; ver "Uso diario"). Comandos para Git Bash:
 
 ```bash
 cd /e/visualizador-agentes
@@ -248,7 +248,7 @@ curl http://localhost:8100/health
 CLAUDE_OFFICE_API_URL=http://localhost:8100/api/v1/events uv run python scripts/simulate_events.py complex
 ```
 
-Abrir http://localhost:3100 (desde el iPhone: http://<TAILSCALE_IP>:3100).
+Abrir http://localhost:3100 (desde el iPhone: `http://<TAILSCALE_IP>:3100`).
 
 - No usar `make install-all`, `make hooks-install` ni `make opencode-install`: instalan hooks y plugins en las cuentas reales.
 - `make dev` en esta carpeta usa 3000/8000 y choca con la copia diaria; usar siempre `make dev-local`.
@@ -336,7 +336,7 @@ Basada en Agent Office 3D (thomasarisu.agent-office v0.1.6, https://github.com/S
 Botón "Editar oficina" en la barra de `/oficina/3d` (adaptado del editor de Agent Office 3D, MIT). Panel a la izquierda: catálogo (Planta, Escritorio, Sofá, Mesa de centro, Mesa de reuniones, Librero, Lámpara), mueble seleccionado (Rotar 45°, Borrar), Deshacer y Rehacer (50 pasos), tema de piso y pared, Guardar, Cancelar, Exportar JSON e Importar JSON. Atajos: R, Supr, Ctrl+Z, Ctrl+Y, Esc. Mientras se edita, los agentes siguen visibles pero no reaccionan y la cámara no se mueve al arrastrar.
 
 - Archivos: `oficina3d/editor.ts` (estado; edita la distribución en vivo y guarda una foto para Cancelar), `EditorPanel.tsx`, `escena/PlacedFurniture.tsx` (piso clicable, arrastre, anillo oscuro de selección y rojo de bloqueo), `muebles.ts` (tipos y tamaños, sin three.js), `temas.ts`, `caminos.ts`, `distribucion.ts`.
-- Guardado: `GET/PUT /api/v1/oficina3d/distribucion` (`backend/app/api/routes/oficina3d.py`) lee y escribe `distribucion.json` junto al registro del motor (la diaria: `C:\Users\<user>\.visualizador-agentes\datos-diario\distribucion.json`; desarrollo: `backend/distribucion.json`, ignorado por git; se puede fijar con `OFICINA3D_DISTRIBUCION_PATH`). Si no existe, devuelve la base del repo (`frontend/public/oficina3d/distribucion.json`). Valida tipos conocidos, límites (x ±22,5, z ±15,5), ids únicos, colores, máximo 200 muebles por entorno y 128 KB; escribe de forma atómica. Solo clientes que el middleware permite (localhost y Tailscale).
+- Guardado: `GET/PUT /api/v1/oficina3d/distribucion` (`backend/app/api/routes/oficina3d.py`) lee y escribe `distribucion.json` junto al registro del motor (la diaria: `%USERPROFILE%\.visualizador-agentes\datos-diario\distribucion.json`; desarrollo: `backend/distribucion.json`, ignorado por git; se puede fijar con `OFICINA3D_DISTRIBUCION_PATH`). Si no existe, devuelve la base del repo (`frontend/public/oficina3d/distribucion.json`). Valida tipos conocidos, límites (x ±22,5, z ±15,5), ids únicos, colores, máximo 200 muebles por entorno y 128 KB; escribe de forma atómica. Solo clientes que el middleware permite (localhost y Tailscale).
 - Caminos (`caminos.ts`): un mueble no puede tocar los escritorios de trabajo ni sus sillas, ni quedar a menos de 0,22 m de un camino protegido: aristas del grafo de navegación, tramo de cada silla a su nodo, entrada (puerta, interior y nodo) y sala de descanso (pasillo, asientos y lugares de pie). Si lo hace, se marca en rojo, se lista en el panel y Guardar queda desactivado.
 - Temas: Claro (actual, por defecto), Cálido, Fresco, Noche, Bosque, Rosa, Loft, Nórdico, Atardecer y Océano; se guardan en el mismo JSON (`tema`, `floorColor`, `wallColor`).
 
@@ -356,24 +356,24 @@ Selector "Entorno" en la barra de `/oficina/3d` (desactivado mientras se edita):
 - Decoración: Puente y Control suman alfombra bajo tu puesto, libreros, mesa de reuniones, pizarra, lámparas, plantas y cuadros (como datos, sin tapar caminos). El Original no cambia: ya tiene sus salas completas.
 - Pruebas: `frontend/tests/entornos.test.ts` (Original sin cambios; puestos sin superponerse ni tocar paredes, cabinas, mostrador o decoración, hasta 40 agentes o todos los fijos en Cabinas y Estudio; caminos conectados desde la entrada a cada puesto fijo, tu puesto, descanso, mostrador y puertas de cabina; orden de la fila; crecimiento; guardado por entorno) y `frontend/tests/entornos-grupos.test.ts` (cabina por proyecto y estable, máximo 6 y Cabina general, liberación de cabinas, 40 agentes sin repetir puesto, ida y vuelta a la puerta de la cabina; Isla general, islas que se agregan, quien espera en el Estudio se queda sentado).
 
-## Uso diario (`E:\visualizador-agentes-diario`, 3000/8000): retirada
+## Uso diario (`<daily copy path>`, 3000/8000): retirada
 
-**Retirada el 2026-10-11 (etapa 1.4).** El monitor de la Alienware envía todo al VPS, así que la diaria dejó de recibir eventos. Se detuvo con `detener-oficina.ps1` (7 procesos; puertos 3000 y 8000 libres) y se quitó su tarea programada "Oficina de agentes (diaria)" con `quitar-arranque.ps1`. Se conservan la carpeta `E:\visualizador-agentes-diario` (en el commit `66de73f`) y los datos de `C:\Users\<user>\.visualizador-agentes\datos-diario` como respaldo. Para volver a usarla de emergencia: `iniciar-oficina.ps1` (no recibirá eventos mientras el monitor apunte al VPS). Lo que sigue describe cómo funcionaba.
+**Retirada el 2026-10-11 (etapa 1.4).** El monitor de la Alienware envía todo al VPS, así que la diaria dejó de recibir eventos. Se detuvo con `detener-oficina.ps1` (7 procesos; puertos 3000 y 8000 libres) y se quitó su tarea programada "Oficina de agentes (diaria)" con `quitar-arranque.ps1`. Se conservan la carpeta `<daily copy path>` (en el commit `66de73f`) y los datos de `%USERPROFILE%\.visualizador-agentes\datos-diario` como respaldo. Para volver a usarla de emergencia: `iniciar-oficina.ps1` (no recibirá eventos mientras el monitor apunte al VPS). Lo que sigue describe cómo funcionaba.
 
-Dos copias independientes: la **diaria** (la que Washington usa todo el día en la PC y en el iPhone por Tailscale) y la de **desarrollo** (`E:\visualizador-agentes`, 3100/8100). En la diaria nunca se edita código: solo se actualiza con `actualizar-oficina.ps1`. `<project path>` queda de respaldo: no se borra, no se modifica y no se arranca.
+Dos copias independientes: la **diaria** (la que Washington usa todo el día en la PC y en el iPhone por Tailscale) y la de **desarrollo** (`<project path>`, 3100/8100). En la diaria nunca se edita código: solo se actualiza con `actualizar-oficina.ps1`. `<claude-office path>` queda de respaldo: no se borra, no se modifica y no se arranca.
 
-- URLs: PC http://localhost:3000/oficina (3D: /oficina/3d, datos: /datos); iPhone http://<TAILSCALE_IP>:3000/oficina. El frontend busca el backend en el puerto 8000 del mismo host.
+- URLs: PC http://localhost:3000/oficina (3D: /oficina/3d, datos: /datos); iPhone `http://<TAILSCALE_IP>:3000/oficina`. El frontend busca el backend en el puerto 8000 del mismo host.
 - Producción: backend `uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop asyncio:SelectorEventLoop` sin `--reload` (el middleware solo acepta localhost y la red de Tailscale 100.64.0.0/10); frontend compilado (`next build`, export estático en `frontend/out`) servido por `python -m app.servidor_frontend --dir ..\frontend\out --port 3000`. Procesos sin ventana y desacoplados de la consola (siguen vivos al cerrarla). Con la tarea programada instalada, `iniciar-oficina.ps1` (y por lo tanto `actualizar-oficina.ps1`) arranca siempre a través de ella (`Start-ScheduledTask`) y espera a que respondan; dentro de la tarea (estado `Running`) arranca los procesos él mismo.
 - Cierre del backend del 2026-10-10 (causa): a las 17:52:12, 20 s después de arrancar, `backend.log` registró `Accept failed on a socket` con `OSError [WinError 64] El nombre de red especificado ya no está disponible` (un cliente cortó la conexión mientras se aceptaba). En Windows el bucle Proactor de asyncio cierra el socket que escucha ante ese error: las conexiones abiertas (la PC y el iPhone) siguieron funcionando unos minutos y ninguna nueva pudo entrar, por eso `estado-oficina.ps1` vio el puerto 8000 libre con el proceso vivo. No fue por arrancar desde la sesión de Claude Code (los procesos se crean con WMI, fuera de la sesión). Solución: el backend y el servidor del frontend usan el bucle Selector (no cierra el puerto ante ese error); el portapapeles de la vista clásica pasa a un hilo porque ese bucle no tiene subprocesos en Windows.
-- Datos (fuera de los repositorios): `C:\Users\<user>\.visualizador-agentes\datos-diario\` con `visualizer.db`, `agent_events.db` (y sus `-wal`/`-shm`) y `logs\` (`backend.log`, `frontend.log`, `actualizar.log`, `preparar.log`). Se configuran en `E:\visualizador-agentes-diario\backend\.env` (`DATABASE_URL`, `STATE_EVENT_LOG_PATH`, CORS para localhost:3000, 127.0.0.1:3000 y <TAILSCALE_IP>:3000). Desarrollo sigue en `E:\visualizador-agentes\backend\*.db`: nunca escriben el mismo archivo. El `agent_events.db` de desarrollo se copió una vez al preparar la diaria (con desarrollo detenido) para no empezar sin historia.
-- Scripts (`scripts\diario\`, PowerShell; correr con `powershell -ExecutionPolicy Bypass -File <script>`): `preparar-copia-diaria.ps1` (primera vez: clona, crea datos y `.env`, instala y compila; `-CopiarHistoria` copia la historia de desarrollo), `iniciar-oficina.ps1` (no duplica procesos; si un puerto lo usa otro programa no lo toca), `detener-oficina.ps1` (solo procesos cuya línea de comandos contiene `E:\visualizador-agentes-diario`), `estado-oficina.ps1`, `actualizar-oficina.ps1` (detiene, `git pull --ff-only`, `uv sync --frozen`, `npm install`, `next build` y arranca; si algo falla vuelve al commit y al frontend compilado anteriores y los arranca), `instalar-arranque.ps1` y `quitar-arranque.ps1` (tarea programada del usuario al iniciar sesión, sin administrador; si Windows no la permite, acceso directo en Inicio). Variables opcionales: `VISUALIZADOR_DIARIO_RAIZ` y `VISUALIZADOR_DIARIO_DATOS`.
-- Hook: con `CLAUDE_OFFICE_PRINCIPAL=visualizador` en `C:\Users\<user>\.claude\claude-office-config.env`, el destino principal (8000) recibe también los tipos nuevos (`post_tool_use_failure`). Requiere reinstalar el hook (aprobación de Washington). Sin esa línea, el 8000 recibe todo menos `post_tool_use_failure` (los errores seguidos no se ven en la diaria).
+- Datos (fuera de los repositorios): `%USERPROFILE%\.visualizador-agentes\datos-diario\` con `visualizer.db`, `agent_events.db` (y sus `-wal`/`-shm`) y `logs\` (`backend.log`, `frontend.log`, `actualizar.log`, `preparar.log`). Se configuran en `<daily copy path>\backend\.env` (`DATABASE_URL`, `STATE_EVENT_LOG_PATH`, CORS para localhost:3000, 127.0.0.1:3000 y `<TAILSCALE_IP>:3000`). Desarrollo sigue en `<project path>\backend\*.db`: nunca escriben el mismo archivo. El `agent_events.db` de desarrollo se copió una vez al preparar la diaria (con desarrollo detenido) para no empezar sin historia.
+- Scripts (`scripts\diario\`, PowerShell; correr con `powershell -ExecutionPolicy Bypass -File <script>`): `preparar-copia-diaria.ps1` (primera vez: clona, crea datos y `.env`, instala y compila; `-CopiarHistoria` copia la historia de desarrollo), `iniciar-oficina.ps1` (no duplica procesos; si un puerto lo usa otro programa no lo toca), `detener-oficina.ps1` (solo procesos cuya línea de comandos contiene `<daily copy path>`), `estado-oficina.ps1`, `actualizar-oficina.ps1` (detiene, `git pull --ff-only`, `uv sync --frozen`, `npm install`, `next build` y arranca; si algo falla vuelve al commit y al frontend compilado anteriores y los arranca), `instalar-arranque.ps1` y `quitar-arranque.ps1` (tarea programada del usuario al iniciar sesión, sin administrador; si Windows no la permite, acceso directo en Inicio). Variables: `VISUALIZADOR_DIARIO_RAIZ` (ruta de la copia diaria, obligatoria), `VISUALIZADOR_DIARIO_DATOS` (opcional), `VISUALIZADOR_DESARROLLO` (origen de `preparar-copia-diaria.ps1`; por defecto la copia que contiene el script) y `VISUALIZADOR_TAILSCALE_IP` (opcional; sin ella no se muestra la URL del iPhone ni se agrega a CORS).
+- Hook: con `CLAUDE_OFFICE_PRINCIPAL=visualizador` en `%USERPROFILE%\.claude\claude-office-config.env`, el destino principal (8000) recibe también los tipos nuevos (`post_tool_use_failure`). Requiere reinstalar el hook (aprobación de Washington). Sin esa línea, el 8000 recibe todo menos `post_tool_use_failure` (los errores seguidos no se ven en la diaria).
 
 ### Volver a claude-office
 
-1. Detener la diaria: `powershell -ExecutionPolicy Bypass -File E:\visualizador-agentes-diario\scripts\diario\detener-oficina.ps1` (y `quitar-arranque.ps1` si se instaló el arranque automático).
+1. Detener la diaria: `powershell -ExecutionPolicy Bypass -File <daily copy path>\scripts\diario\detener-oficina.ps1` (y `quitar-arranque.ps1` si se instaló el arranque automático).
 2. Quitar `CLAUDE_OFFICE_PRINCIPAL=visualizador` de `claude-office-config.env` (o dejarlo vacío): claude-office rechaza `post_tool_use_failure` con 422; sin la línea, el hook no se lo envía.
-3. Arrancar `<project path>` como antes (`make dev` en esa carpeta). El hook sigue enviando al 8000 y al 8100.
+3. Arrancar `<claude-office path>` como antes (`make dev` en esa carpeta). El hook sigue enviando al 8000 y al 8100.
 
 ## Permisos desde la oficina (estado 13)
 
@@ -419,7 +419,7 @@ Nota de despliegue (etapa 1.3): nginx en el mismo servidor, con `proxy_set_heade
 **Comandos para Washington** (etapa 1.4; desde la carpeta `backend` de la copia donde corre el backend, que usa su `.env`). En la diaria actual, en PowerShell:
 
 ```powershell
-cd E:\visualizador-agentes-diario\backend
+cd <daily copy path>\backend
 uv run python -m app.acceso_cli contrasena                 # fija o cambia la contraseña (la pide dos veces, sin mostrarla)
 uv run python -m app.acceso_cli maquinas                   # lista las máquinas
 uv run python -m app.acceso_cli maquina-crear --id tower --nombre Tower --sistema windows --hostname TOWER
@@ -482,13 +482,13 @@ En PreToolUse de Bash o PowerShell, si el comando coincide con la lista, el hook
 
 ### Instalación en la Alienware (etapa 1.4, hecha el 2026-10-11)
 
-Washington creó el token y ejecutó el instalador el 2026-10-11 a las 08:30 (hora de Ecuador). Monitor en `C:\Users\<user>\AppData\Local\VisualizadorMonitor`, conectado a https://agents.example.com, cola en 0; la oficina publicada muestra sus agentes. Pasos, para otra máquina o para reinstalar:
+Washington creó el token y ejecutó el instalador el 2026-10-11 a las 08:30 (hora de Ecuador). Monitor en `%USERPROFILE%\AppData\Local\VisualizadorMonitor`, conectado a https://agents.example.com, cola en 0; la oficina publicada muestra sus agentes. Pasos, para otra máquina o para reinstalar:
 
 1. En PowerShell: `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/acceso.sh token-crear --maquina alienware"` (el token se muestra una sola vez; cópialo).
 2. Cierra las sesiones de Claude Code abiertas (los hooks nuevos valen para las sesiones que se abran después).
-3. En la Alienware, en el Explorador, doble clic en `E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe` (ventana normal, sin administrador). Escribe `https://agents.example.com`, pega el token (no se muestra) y confirma con `s`. Respalda y cambia los hooks de `.claude` y `.claude-demo`, registra el arranque y arranca el monitor.
+3. En la Alienware, en el Explorador, doble clic en `<project path>\monitor\dist\instalar-visualizador-monitor.exe` (ventana normal, sin administrador). Escribe `https://agents.example.com`, pega el token (no se muestra) y confirma con `s`. Respalda y cambia los hooks de `.claude` y `.claude-demo`, registra el arranque y arranca el monitor.
 4. Comprobar, en una ventana de PowerShell normal: `& (Get-ChildItem "$env:LOCALAPPDATA\VisualizadorMonitor\v*\visualizador-monitor.exe" | Select-Object -Last 1).FullName estado` (debe decir "corriendo" y "conectado"; el instalador muestra la ruta exacta al terminar).
-5. Desinstalar (deja todo como estaba; conserva los respaldos `settings.json.respaldo-visualizador-*`): en PowerShell, `& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --desinstalar`.
+5. Desinstalar (deja todo como estaba; conserva los respaldos `settings.json.respaldo-visualizador-*`): en PowerShell, `& "<project path>\monitor\dist\instalar-visualizador-monitor.exe" --desinstalar`.
 
 Ojo: con el monitor instalado los eventos van solo a su servidor (el VPS); la diaria en 8000 y el desarrollo en 8100 dejan de recibirlos. Por eso se instala recién en la etapa 1.4, cuando el uso diario pase al VPS.
 
@@ -836,7 +836,7 @@ Los avisos (voz, notificaciones de Windows y ficha) dicen una frase clara en lug
 **El auxiliar.**
 - **Cuándo:** solo para avisos, nunca para cada evento.
 - **Modelo y cuenta:** `claude -p` con Haiku y esfuerzo bajo, con la cuenta del agente que generó el aviso.
-  - Se elige por la carpeta de su transcripción. Demo Org usa `CLAUDE_CONFIG_DIR=C:\Users\<user>\.claude-demo`; la personal, la carpeta por defecto, sin la variable.
+  - Se elige por la carpeta de su transcripción. Demo Org usa `CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude-demo`; la personal, la carpeta por defecto, sin la variable.
   - Sin transcripción, se elige por la cuenta que informa el servidor. Una ruta de red o fuera de las cuentas no elige ninguna.
   - Un aviso de Demo Org nunca pasa por la cuenta personal ni al revés.
 - **Entrada:** proyecto, tipo de aviso y los datos del aviso (herramienta y comando, pregunta, pedido, motivo, último intento y último error).
@@ -869,7 +869,7 @@ Los avisos (voz, notificaciones de Windows y ficha) dicen una frase clara en lug
   - Con `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, `DISABLE_TELEMETRY=1`, `DISABLE_ERROR_REPORTING=1` y `ENABLE_CLAUDEAI_MCP_SERVERS=false`: sin telemetría ni conectores de claude.ai, y arranca más rápido.
   - Como refuerzo de `--safe-mode`: `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` y `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`.
   - Y `VISUALIZADOR_AUXILIAR=1`: si algún hook corriera igual, el hook del visualizador sale sin enviar nada (tercera barrera).
-- **Carpeta:** `C:\Users\<user>\.visualizador-monitor\auxiliar`, vacía; la crea el monitor.
+- **Carpeta:** `%USERPROFILE%\.visualizador-monitor\auxiliar`, vacía; la crea el monitor.
 - **Segunda barrera:** el monitor (`es_de_auxiliar`, con la ruta fija y con la carpeta real resuelta, por si `VISUALIZADOR_MONITOR_DIR` la mueve o aparece un nombre corto 8.3) y el backend (`accept` e `ingest` del motor) descartan cualquier evento cuya carpeta, directorio de trabajo o transcripción esté en esa carpeta. También las solicitudes de permiso, en el monitor y en `POST /permisos/solicitudes`.
 - `--effort low`: Haiku responde en 0,9 a 1,2 s con unos 50 tokens de salida (probado; sin la opción gastaba hasta 650).
 - **Procesos:** al detener el monitor se detienen los auxiliares que sigan corriendo.
@@ -890,7 +890,7 @@ Los avisos (voz, notificaciones de Windows y ficha) dicen una frase clara en lug
 - **Fuera de la oficina:** el auxiliar no apareció en la oficina, ni siquiera en el servidor anterior, que todavía no tenía el filtro.
 - **De punta a punta:** avisos reales del servidor, resumidos y guardados con la versión final, en 2,2 a 2,6 s en total. La ficha muestra la frase como texto principal (capturas no incluidas en el repositorio público).
   - **Permiso, Demo Org (vive-demo).** Antes: "El servidor de pruebas rechazó la contraseña de carga-editor@… (401, admin.invalid-credentials) en un solo intento…". Después: "vive-demo pide permiso para usar la contraseña del servidor de pruebas; la clave fue rechazada y conviene revisarla antes de probar otra."
-  - **Pregunta (server-monitor).** Antes: "¿Apruebas borrar estas 129 imágenes (las 4 filas de la tabla: versiones anteriores a las 2 últimas de vive-demo-migrations, …), conservando las 14 listadas?". Después: "server-monitor pregunta si puedes borrar 129 imágenes antiguas de cuatro proyectos, conservando las 14 más recientes; ninguna está en uso."
+  - **Pregunta (mi-proyecto).** Antes: "¿Apruebas borrar estas 129 imágenes (las 4 filas de la tabla: versiones anteriores a las 2 últimas de vive-demo-migrations, …), conservando las 14 listadas?". Después: "mi-proyecto pregunta si puedes borrar 129 imágenes antiguas de cuatro proyectos, conservando las 14 más recientes; ninguna está en uso."
   - **Tarea terminada (SkyNest).** Antes: "SkyNest terminó". Después: "SkyNest terminó la tarea y está listo para tu revisión o el siguiente paso."
 - **Prueba simulada, permiso (SkyNest).** Antes: `PowerShell: Remove-Item -Recurse Library\ScriptAssemblies`. Después: "SkyNest necesita tu permiso para borrar la carpeta de recursos compilados de Unity; ¿lo autorizas?"
 
@@ -1012,7 +1012,7 @@ Decisión de Washington (2026-10-11): la web original de ClaudeOffice Visualizer
 
 ### Reconocimiento del VPS (2026-10-11, solo lectura)
 
-- **Servidor**: the VPS provider, `<VPS_HOST>`, IP <VPS_IP>, Ubuntu 24.04.4 LTS (kernel 6.8), 8 GB de RAM y 2 GB de swap. Disco de 96 GB con 15 GB libres (85 % usado: vigilarlo).
+- **Servidor**: VPS, `<VPS_HOST>`, IP <VPS_IP>, Ubuntu 24.04.4 LTS (kernel 6.8), 8 GB de RAM y 2 GB de swap. Disco de 96 GB con 15 GB libres (85 % usado: vigilarlo).
 - **nginx 1.24**: un archivo por sitio en `sites-available`, enlazado en `sites-enabled`; cada sitio escucha en el 80 y certbot `--nginx` le agrega el bloque 443 y la redirección. El `nginx.conf` es el de Ubuntu (gzip solo de HTML, sin `server_tokens off`). Sitios: Localia, Buscapez (y design.), Projection, brainstorming.example.net, productividad, skynest y vivedemo (landing, admin y API).
 - **Puertos ocupados**: públicos 22, 80, 443, 3001 (node) y 8080 (php); locales 1521, 3306, 6379, 8000, 8081, 8090, 8182, 8183, 8211, 33060 y 65529. La oficina usa 127.0.0.1:8320.
 - **Otros servicios**: docker, mysql, redis, php8.3-fpm, supervisor, buscapez-inference, projection-api y projection-realtime, monarx-agent.
@@ -1068,7 +1068,7 @@ Los scripts corren desde `/` (el usuario del servicio no puede entrar a `/home/<
 - Instalación del sistema (hecha el 2026-10-11): `ssh -t <VPS_USER>@<VPS_IP> "sudo bash ~/visualizador-agentes-instalacion/despliegue/instalar-sistema.sh"`
 - Contraseña de la oficina (fijada el 2026-10-11), o cambiarla: `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/acceso.sh contrasena"`
 - Respaldo con restauración, prueba de caída y estado: `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/primer-arranque.sh --sin-contrasena"` (solo la caída y el estado: `--solo-caida`)
-- Actualizar el VPS (desde `E:\visualizador-agentes`, en Git Bash): `bash despliegue/desplegar.sh`; ver el estado: `bash despliegue/estado.sh`
+- Actualizar el VPS (desde `<project path>`, en Git Bash): `bash despliegue/desplegar.sh`; ver el estado: `bash despliegue/estado.sh`
 - Encabezados de seguridad (CSP) después de cambiarlos: `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/aplicar-encabezados.sh"`
 - Token de la Alienware (creado en la etapa 1.4): `ssh -t <VPS_USER>@<VPS_IP> "sudo bash /var/www/visualizador-agentes/actual/despliegue/acceso.sh token-crear --maquina alienware"`
 
@@ -1111,28 +1111,28 @@ No aplicaba: el aviso sobre IPv6 (los demás sitios ya escuchan en `[::]` y hay 
 
 ## Hook compartido (oficina diaria y desarrollo)
 
-El comando `claude-office-hook` se instala una sola vez desde `E:\visualizador-agentes\hooks` (`uv tool install --force -p 3.14 E:\visualizador-agentes\hooks`) y lo usan las dos cuentas (`~/.claude` y `~/.claude-demo`).
+El comando `claude-office-hook` se instala una sola vez desde `<project path>\hooks` (`uv tool install --force -p 3.14 <project path>\hooks`) y lo usan las dos cuentas (`~/.claude` y `~/.claude-demo`).
 
-- Destinos: `CLAUDE_OFFICE_API_URL` (por defecto la oficina diaria, `http://127.0.0.1:8000/api/v1/events`) y `CLAUDE_OFFICE_EXTRA_API_URLS` (lista separada por comas) en `C:\Users\<user>\.claude\claude-office-config.env`. Hoy: `http://127.0.0.1:8100/api/v1/events`.
+- Destinos: `CLAUDE_OFFICE_API_URL` (por defecto la oficina diaria, `http://127.0.0.1:8000/api/v1/events`) y `CLAUDE_OFFICE_EXTRA_API_URLS` (lista separada por comas) en `%USERPROFILE%\.claude\claude-office-config.env`. Hoy: `http://127.0.0.1:8100/api/v1/events`.
 - Envío en paralelo: espera hasta 0,25 s al destino principal y 0,08 s a los extra; un destino apagado se ignora sin error y el hook siempre termina con código 0.
 - Tipos nuevos (`post_tool_use_failure`) solo van a los destinos extra, salvo con `CLAUDE_OFFICE_PRINCIPAL=visualizador` (el principal es nuestro backend y también los recibe). claude-office los rechazaría con 422.
 - Campos nuevos (`tool_agent_id`, `tool_agent_type`, `error`, `is_interrupt`, `last_assistant_message`, `reports_tool_failures`, `claude_pid`, `claude_pid_created`): la oficina diaria los ignora (comprobado: guarda el evento sin esos campos).
 - Proceso de Claude Code (`hooks/src/claude_office_hooks/process_info.py`): el hook sube por sus ancestros con la API de Windows (`NtQueryInformationProcess` para el padre, `QueryFullProcessImageNameW` para el nombre, `GetProcessTimes` para la hora de creación) pasando por los intérpretes intermedios (`claude-office-hook.exe`, `bash`/`cmd`/`powershell`) hasta el primer `claude.exe` (instalación nativa) o `node.exe` (instalación por npm). Se detiene en `Code.exe`, `explorer.exe` o `WindowsTerminal.exe`, y si un padre es más nuevo que su hijo (PID reutilizado) devuelve `null`. Cuesta ~12 ms (importar ctypes) más ~0,5 ms.
-- Permisos desde la oficina (2026-10-10, requiere aprobación de Washington): reinstalar el hook y subir el `timeout` de `claude-office-hook permission_request` de 2 a 600 s en las dos cuentas (el instalador no cambia entradas que ya existen; `manage_hooks.py` ya registra 600 s en instalaciones nuevas). Comandos, desde `E:\visualizador-agentes` en PowerShell:
-  1. `uv tool install --force --reinstall -p 3.14 E:\visualizador-agentes\hooks`
-  2. `uv run --no-project python scripts\permisos\ajustar_timeout_permiso.py C:\Users\<user>\.claude\settings.json` (deja `settings.json.respaldo-AAAAMMDD-HHMMSS`; con `--probar` solo muestra el cambio)
-  3. `uv run --no-project python scripts\permisos\ajustar_timeout_permiso.py C:\Users\<user>\.claude-demo\settings.json`
+- Permisos desde la oficina (2026-10-10, requiere aprobación de Washington): reinstalar el hook y subir el `timeout` de `claude-office-hook permission_request` de 2 a 600 s en las dos cuentas (el instalador no cambia entradas que ya existen; `manage_hooks.py` ya registra 600 s en instalaciones nuevas). Comandos, desde `<project path>` en PowerShell:
+  1. `uv tool install --force --reinstall -p 3.14 <project path>\hooks`
+  2. `uv run --no-project python scripts\permisos\ajustar_timeout_permiso.py %USERPROFILE%\.claude\settings.json` (deja `settings.json.respaldo-AAAAMMDD-HHMMSS`; con `--probar` solo muestra el cambio)
+  3. `uv run --no-project python scripts\permisos\ajustar_timeout_permiso.py %USERPROFILE%\.claude-demo\settings.json`
   4. Reiniciar las sesiones de Claude Code. Para volver atrás: copiar el respaldo sobre `settings.json` y reinstalar el hook del commit anterior.
 
 ### Cómo volver atrás
 
-Respaldos del 2026-10-10 (junto a cada original): `settings.json.respaldo-2026-10-10-0737` en `C:\Users\<user>\.claude` y en `C:\Users\<user>\.claude-demo`, y `claude-office-config.env.respaldo-2026-10-10-0737` en `C:\Users\<user>\.claude`. En Git Bash:
+Respaldos del 2026-10-10 (junto a cada original): `settings.json.respaldo-2026-10-10-0737` en `%USERPROFILE%\.claude` y en `%USERPROFILE%\.claude-demo`, y `claude-office-config.env.respaldo-2026-10-10-0737` en `%USERPROFILE%\.claude`. En Git Bash:
 
 ```bash
-cp /c/Users/<user>/.claude/settings.json.respaldo-2026-10-10-0737 /c/Users/<user>/.claude/settings.json
-cp /c/Users/<user>/.claude-demo/settings.json.respaldo-2026-10-10-0737 /c/Users/<user>/.claude-demo/settings.json
-cp /c/Users/<user>/.claude/claude-office-config.env.respaldo-2026-10-10-0737 /c/Users/<user>/.claude/claude-office-config.env
-uv tool install --force -p 3.14 '<project path>\hooks'   # reinstala el hook original
+cp ~/.claude/settings.json.respaldo-2026-10-10-0737 ~/.claude/settings.json
+cp ~/.claude-demo/settings.json.respaldo-2026-10-10-0737 ~/.claude-demo/settings.json
+cp ~/.claude/claude-office-config.env.respaldo-2026-10-10-0737 ~/.claude/claude-office-config.env
+uv tool install --force -p 3.14 '<claude-office path>\hooks'   # reinstala el hook original
 ```
 
 Después, abrir sesiones nuevas de Claude Code para que tomen la configuración restaurada.
@@ -1172,7 +1172,7 @@ Después, abrir sesiones nuevas de Claude Code para que tomen la configuración 
 | Prueba en vivo: el encargo mostraba "<browser_instruction># Claude in Chrome browser..." | El hook recortaba a 50 caracteres antes de quitar el bloque inyectado. El motor limpia los bloques y recupera el texto de la transcripción; el hook del repositorio ya los quita antes de recortar (reinstalado el 2026-10-10 a las 11:06) |
 | Prueba en vivo: 01152d34 congelada en 15 desde las 9:23 (se perdió el `post_tool_use` con el backend apagado) | Conciliación con la cola de la transcripción |
 | Prueba en vivo: un subagente pasaba a terminado a los 30 min sin actividad | Sin límite de tiempo: termina con su `SubagentStop`, el `Stop` del agente principal o la muerte del proceso |
-| Prueba en vivo: la CLI de demo (5f41c31c) no enviaba PID y quedó 12 h como 21 `sin_pid_antiguo` estando abierta | La actualización automática de Claude Code renombra el ejecutable en uso (`claude.exe.old.1791575871902.47796`) y `process_info` buscaba el nombre exacto `claude.exe`. Corregido en el repositorio; Washington reinstaló el hook el 2026-10-10 a las 11:06 (`uv tool install --force -p 3.14 E:\visualizador-agentes\hooks`) |
+| Prueba en vivo: la CLI de demo (5f41c31c) no enviaba PID y quedó 12 h como 21 `sin_pid_antiguo` estando abierta | La actualización automática de Claude Code renombra el ejecutable en uso (`claude.exe.old.1791575871902.47796`) y `process_info` buscaba el nombre exacto `claude.exe`. Corregido en el repositorio; Washington reinstaló el hook el 2026-10-10 a las 11:06 (`uv tool install --force -p 3.14 <project path>\hooks`) |
 | Sesiones de prueba (rafaga-*, reinicio-*) en el listado | Borradas (13 del registro propio, 11 de la base clásica de desarrollo); desde ahora prefijo `prueba-` y `scripts/borrar_sesiones_prueba.py` |
 | "Tokens totales" igual a "Tokens en el contexto" | Ahora es el acumulado real de la transcripción (salida + entrada nueva) |
 | "Tokens totales" de 5f41c31c (Demo Org) en 97,5 M tras 164 min | Sumaba toda la historia de la conversación retomada (6 semanas) y la creación de caché (81 M, contexto reescrito tras cada vencimiento o compactación). Ahora: salida desde la llegada al motor (~0,38 M) |
@@ -1210,7 +1210,7 @@ El orden de trabajo lo marca el "Plan por etapas"; esta lista queda como referen
 
 Decisión de Washington (2026-10-10).
 
-- **Arquitectura**: sin Tailscale. Un monitor instalado en cada máquina (Windows y luego Mac) envía todo al VPS de the VPS provider (<VPS_IP>); la web y la app iOS consumen el VPS en https://agents.example.com, con inicio de sesión de un solo usuario y sesión de 30 días por dispositivo.
+- **Arquitectura**: sin Tailscale. Un monitor instalado en cada máquina (Windows y luego Mac) envía todo al VPS (<VPS_IP>); la web y la app iOS consumen el VPS en https://agents.example.com, con inicio de sesión de un solo usuario y sesión de 30 días por dispositivo.
 - **Etapa 0, cierre**: clic en un agente sin pantalla gris, acentos de los scripts, plan registrado (hecha el 2026-10-10).
 - **Etapa 1.1** (hecha el 2026-10-10): backend para varias máquinas con inicio de sesión (sección "Inicio de sesión y máquinas").
 - **Etapa 1.2** (hecha el 2026-10-10): monitor e instalador de Windows (sección "Monitor de máquina").
@@ -1245,7 +1245,7 @@ Investigado el 2026-10-10.
 
 ## Próximos pasos
 
-1. Washington despliega el backend y la web del Prompt 45 (`bash despliegue/desplegar.sh`; nginx no cambia) y actualiza el monitor a la 0.8.0 (`& "E:\visualizador-agentes\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`). En ese orden: un monitor 0.8.0 con el servidor anterior se calla la respuesta en vivo por 10 min y lo vuelve a intentar.
+1. Washington despliega el backend y la web del Prompt 45 (`bash despliegue/desplegar.sh`; nginx no cambia) y actualiza el monitor a la 0.8.0 (`& "<project path>\monitor\dist\instalar-visualizador-monitor.exe" --actualizar`). En ese orden: un monitor 0.8.0 con el servidor anterior se calla la respuesta en vivo por 10 min y lo vuelve a intentar.
 2. Comprobar en el VPS que `/chat/eventos` llega sin búfer detrás de nginx y https (la burbuja crece de a poco, no de golpe); si no, la web cae sola a la consulta cada segundo.
 3. Plan vivo, desde la Mac: correr `tiempos` con las sesiones de la Mac para los items trabajados allí (F3 · P31, la parte C de F3 · P33, F4 · P40, F4 · P44, F4 · U2 y F4 · P46), que hoy no tienen tramos del agente. P27 y P36 se hicieron fuera de Claude Code y no tendrán tramos.
 4. Prompt 46 (app iOS, en la Mac): Enviado y Leído, tres puntos y el texto parcial con `/chat/eventos` o `/chat/en-vivo` (ver "Datos nuevos para la app").

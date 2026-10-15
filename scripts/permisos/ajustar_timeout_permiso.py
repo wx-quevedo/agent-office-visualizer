@@ -11,8 +11,8 @@ instalación dejó en 2 s. Este script:
 
 Uso (lo ejecuta Washington; una vez por cuenta):
 
-    uv run --no-project python scripts/permisos/ajustar_timeout_permiso.py C:/Users/<user>/.claude/settings.json
-    uv run --no-project python scripts/permisos/ajustar_timeout_permiso.py C:/Users/<user>/.claude-demo/settings.json
+    uv run --no-project python scripts/permisos/ajustar_timeout_permiso.py %USERPROFILE%/.claude/settings.json
+    uv run --no-project python scripts/permisos/ajustar_timeout_permiso.py %USERPROFILE%/.claude-demo/settings.json
 
 Para volver atrás: copiar el respaldo sobre settings.json.
 """

@@ -50,7 +50,7 @@ def test_serves_pages_assets_and_404(tmp_path: Path) -> None:
 def test_only_loopback_and_tailscale_clients() -> None:
     assert cliente_permitido("127.0.0.1")
     assert cliente_permitido("::1")
-    assert cliente_permitido("<TAILSCALE_IP>")
+    assert cliente_permitido("100.64.0.10")
     assert not cliente_permitido("192.168.1.20")
     assert not cliente_permitido(None)
 

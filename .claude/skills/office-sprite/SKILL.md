@@ -35,7 +35,7 @@ Use mcpl to call Nano Banana with this prompt template:
 ```bash
 mcpl call nanobanana generate_image '{
   "prompt": "[OBJECT DESCRIPTION], front view with slight top-down angle, NOT isometric, pixel art style, retro 16-bit game sprite, isolated on solid magenta background #FF00FF, clean edges, no shadows on background, game sprite asset, centered composition, no text, no watermarks, simple design",
-  "output_path": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_raw.png"
+  "output_path": "<project path>/frontend/public/sprites/[NAME]_raw.png"
 }'
 ```
 
@@ -49,8 +49,8 @@ mcpl call nanobanana generate_image '{
 
 1. Copy the generated image to the raw location:
    ```bash
-   cp "/Users/probello/nanobanana-images/temp_images/[UUID].png" \
-      "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_raw.png"
+   cp "~/nanobanana-images/temp_images/[UUID].png" \
+      "<project path>/frontend/public/sprites/[NAME]_raw.png"
    ```
 
 2. View the image using the Read tool to verify:
@@ -73,9 +73,9 @@ Only after validation passes, remove the magenta background using the helper scr
 
 ```bash
 # Using the helper script (recommended)
-/Users/probello/Repos/claude-office/.claude/skills/office-sprite/scripts/process_sprite.sh \
-  /Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_raw.png \
-  /Users/probello/Repos/claude-office/frontend/public/sprites/[NAME].png
+<project path>/.claude/skills/office-sprite/scripts/process_sprite.sh \
+  <project path>/frontend/public/sprites/[NAME]_raw.png \
+  <project path>/frontend/public/sprites/[NAME].png
 ```
 
 The script uses a **multi-pass workflow** combining FFmpeg and ImageMagick:
@@ -92,8 +92,8 @@ process_sprite.sh input.png output.png --legacy
 **Manual multi-pass workflow** (if script unavailable):
 
 ```bash
-INPUT="/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_raw.png"
-OUTPUT="/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME].png"
+INPUT="<project path>/frontend/public/sprites/[NAME]_raw.png"
+OUTPUT="<project path>/frontend/public/sprites/[NAME].png"
 
 # Step 1: FFmpeg - remove purple hue pixels (R≈B, G low)
 ffmpeg -y -i "$INPUT" \
@@ -192,7 +192,7 @@ Additional elements from `OfficeGameV2.tsx`:
 
 ## Output Location
 
-All sprites go to: `/Users/probello/Repos/claude-office/frontend/public/sprites/`
+All sprites go to: `<project path>/frontend/public/sprites/`
 
 - `[name]_raw.png` - Original generated image (keep for reference)
 - `[name].png` - Processed sprite with transparency

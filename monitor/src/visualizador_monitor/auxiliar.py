@@ -82,7 +82,7 @@ Describe la acción en lenguaje sencillo (por ejemplo "borrar una carpeta de com
 Ejemplos:
 SkyNest quiere borrar una carpeta de compilación de Unity y necesita tu permiso.
 vive-demo te pregunta si publica la versión nueva; espera tu respuesta.
-server-monitor terminó de corregir el inicio de sesión y está listo para lo siguiente.
+mi-proyecto terminó de corregir el inicio de sesión y está listo para lo siguiente.
 buscapez parece atascado: repite el mismo error al compilar; revisa qué intentó."""
 
 # -- entrada ---------------------------------------------------------------------------
@@ -350,7 +350,7 @@ def limpiar_salida(texto: str | None, proyecto: str, entrada: str = "") -> str |
     if len(palabras) > MAX_PALABRAS:
         linea = _recortar_frase(palabras[:MAX_PALABRAS])
     if proyecto and linea.lower().startswith(proyecto.lower()):
-        linea = proyecto + linea[len(proyecto) :]  # el nombre tal cual ("server-monitor")
+        linea = proyecto + linea[len(proyecto) :]  # el nombre tal cual ("mi-proyecto")
     elif proyecto:
         # "El agente de SkyNest..." también empieza por el proyecto.
         inicio = linea.lower()[: len(proyecto) + 20]

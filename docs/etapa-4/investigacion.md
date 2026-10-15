@@ -70,7 +70,7 @@ Fecha: 2026-10-11. Claude Code 2.1.296 en la Alienware (Windows). Todas las fuen
 
 ### 1.4 Cuenta, modelo, esfuerzo y carpeta
 
-- **Cuenta:** `CLAUDE_CONFIG_DIR` (Demo Org: `C:\Users\<user>\.claude-demo`). La personal usa la carpeta por defecto, sin la variable ([env-vars](https://code.claude.com/docs/en/env-vars)).
+- **Cuenta:** `CLAUDE_CONFIG_DIR` (Demo Org: `%USERPROFILE%\.claude-demo`). La personal usa la carpeta por defecto, sin la variable ([env-vars](https://code.claude.com/docs/en/env-vars)).
 - **Modelo:** `--model` con un alias (`opus`, `sonnet`, `haiku`, `fable`, `opusplan`...) o un nombre completo como `claude-opus-5-5` ([model-config](https://code.claude.com/docs/en/model-config), "Model aliases").
 - **Esfuerzo:** `--effort low|medium|high|xhigh|max|ultracode`; los niveles dependen del modelo. `CLAUDE_CODE_EFFORT_LEVEL` tiene prioridad sobre la opción ([cli-reference](https://code.claude.com/docs/en/cli-reference); [env-vars](https://code.claude.com/docs/en/env-vars)).
 - **Carpeta:** el directorio de trabajo del proceso (y `--add-dir` para otras carpetas).
@@ -87,7 +87,7 @@ Fecha: 2026-10-11. Claude Code 2.1.296 en la Alienware (Windows). Todas las fuen
 
 ## 2. Pruebas reales
 
-Las dos se hicieron en carpetas temporales (`C:\Users\<user>\AppData\Local\Temp\prueba-*`) con la cuenta personal, Haiku, esfuerzo bajo y `--no-session-persistence`. El entorno no tenía las variables `CLAUDE*`, así que no eran sesiones hijas de esta, y no tenía historial de prompts. Los guiones imitan al monitor lanzando `claude.exe` con `subprocess`.
+Las dos se hicieron en carpetas temporales (`%USERPROFILE%\AppData\Local\Temp\prueba-*`) con la cuenta personal, Haiku, esfuerzo bajo y `--no-session-persistence`. El entorno no tenía las variables `CLAUDE*`, así que no eran sesiones hijas de esta, y no tenía historial de prompts. Los guiones imitan al monitor lanzando `claude.exe` con `subprocess`.
 
 ### Prueba 1: una sesión, dos mensajes, la oficina la ve
 
@@ -101,7 +101,7 @@ Comando: `claude -p --input-format stream-json --output-format stream-json --ver
 - **Sesión:** duró 13,4 s en total y el proceso cerró con código 0.
 - **Lo que reporta `system/init`:** modelo `claude-haiku-5-5`, `permissionMode: default` y `apiKeySource: none`, o sea que usa la sesión de la suscripción.
 - **Herramientas disponibles:** entre otras `ListAgents` y `SendMessage`, y las de los conectores de claude.ai.
-- **En la oficina** (servidor real, `GET /api/v1/agents/state`): la sesión apareció como proyecto `C:/Users/<user>/AppData/Local/Temp/prueba-orquestador`, cuenta personal, máquina alienware.
+- **En la oficina** (servidor real, `GET /api/v1/agents/state`): la sesión apareció como proyecto `%USERPROFILE%/AppData/Local/Temp/prueba-orquestador`, cuenta personal, máquina alienware.
   - Eventos, en orden: `session_start`, `user_prompt_submit` (mensaje 1), `pre_tool_use` y `post_tool_use` de Read, `stop`, `user_prompt_submit` (mensaje 2), `stop` y `session_end`.
   - El modelo salió vacío: en `-p` no corre la barra de estado, que es la que lo informa.
 - **Rastros fuera de la carpeta:**

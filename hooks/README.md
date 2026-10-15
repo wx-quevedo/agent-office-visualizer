@@ -104,7 +104,7 @@ Configuration is stored in `~/.claude/claude-office-config.env`:
 
 ```bash
 # Prefixes to strip from project names in the session browser
-CLAUDE_OFFICE_STRIP_PREFIXES="-Users-probello-Repos-,-Users-probello-"
+CLAUDE_OFFICE_STRIP_PREFIXES="-Users-yourname-Repos-,-Users-yourname-"
 
 # Set to 1 to enable debug logging
 CLAUDE_OFFICE_DEBUG=0
@@ -123,7 +123,7 @@ CLAUDE_OFFICE_DEBUG=0
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLAUDE_OFFICE_STRIP_PREFIXES` | `-Users-probello-Repos-,-Users-probello-` | Comma-separated path prefixes stripped from project names |
+| `CLAUDE_OFFICE_STRIP_PREFIXES` | `-Users-yourname-Repos-,-Users-yourname-` | Comma-separated path prefixes stripped from project names |
 | `CLAUDE_OFFICE_DEBUG` | `0` | Set to `1` to write debug logs to `~/.claude/claude-office-hooks.log` |
 | `CLAUDE_OFFICE_API_URL` | `http://localhost:8000/api/v1/events` | Backend event endpoint. Non-localhost values are reset to the default unless `CLAUDE_OFFICE_ALLOW_REMOTE=1`. |
 | `CLAUDE_OFFICE_ALLOW_REMOTE` | `0` | Set to `1` to permit a non-localhost backend (e.g. a remote/dedicated server). Off by default since event payloads carry tool I/O and file paths. |
@@ -135,8 +135,8 @@ Project names are derived from Claude's transcript path. By default, common path
 
 | Raw Project Name | After Stripping |
 |------------------|-----------------|
-| `-Users-probello-Repos-my-project` | `my-project` |
-| `-Users-probello-my-project` | `my-project` |
+| `-Users-yourname-Repos-my-project` | `my-project` |
+| `-Users-yourname-my-project` | `my-project` |
 
 Customize prefixes during installation:
 

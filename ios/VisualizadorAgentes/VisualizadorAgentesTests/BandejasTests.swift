@@ -25,13 +25,13 @@ final class BandejasTests: XCTestCase {
          "cuenta": "personal", "maquina": "alienware", "desde": "2026-10-12T10:17:20+00:00", "hace_s": 40,
          "resumen": "Quiere borrar la carpeta de compilación de Unity.", "detalle": "Remove-Item -Recurse Library",
          "permiso": {"id": "p-9", "herramienta": "PowerShell", "esperando": true, "segundos_restantes": 50, "estado": "pendiente"}},
-        {"tipo": "permiso", "id": "p-1", "session_id": "s-5", "proyecto": "server-monitor", "carpeta": null, "cuenta": "personal",
+        {"tipo": "permiso", "id": "p-1", "session_id": "s-5", "proyecto": "mi-proyecto", "carpeta": null, "cuenta": "personal",
          "maquina": null, "desde": "2026-10-12T09:00:00+00:00", "hace_s": 4800, "resumen": null, "detalle": "git push",
          "permiso": {"id": "p-1", "herramienta": "Bash", "esperando": false, "segundos_restantes": 0, "estado": "pendiente"}}
       ],
       "conteo": {"permiso": 2, "pregunta": 1, "atasco": 1, "total": 4},
       "resueltas_hoy": [
-        {"tipo": "permiso", "id": "p-0", "proyecto": "server-monitor", "cuenta": "personal", "maquina": "alienware",
+        {"tipo": "permiso", "id": "p-0", "proyecto": "mi-proyecto", "cuenta": "personal", "maquina": "alienware",
          "texto": "Bash: systemctl restart nginx", "como": "Aprobado", "motivo": null, "quien": "app iOS",
          "cuando": "2026-10-12T09:48:00+00:00"},
         {"tipo": "permiso", "id": "p-00", "proyecto": "Buscapez", "cuenta": "demo", "maquina": "alienware",
@@ -98,7 +98,7 @@ final class BandejasTests: XCTestCase {
         XCTAssertEqual(LogicaBandejas.tono(resuelta: r[0]), .verde)
         XCTAssertEqual(LogicaBandejas.tono(resuelta: r[1]), .rojo)
         XCTAssertEqual(LogicaBandejas.tono(resuelta: r[2]), .gris)
-        XCTAssertEqual(LogicaBandejas.texto(resuelta: r[0]), "server-monitor · Bash: systemctl restart nginx · desde app iOS")
+        XCTAssertEqual(LogicaBandejas.texto(resuelta: r[0]), "mi-proyecto · Bash: systemctl restart nginx · desde app iOS")
         XCTAssertEqual(LogicaBandejas.texto(resuelta: r[1]), "Buscapez · Bash: git push origin main · desde la PC")
     }
 

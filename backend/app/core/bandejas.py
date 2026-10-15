@@ -83,7 +83,7 @@ def nombre_proyecto(carpeta: str | None) -> str | None:
 
 def slug_carpeta(carpeta: str) -> str:
     """Cómo nombra Claude Code la carpeta de transcripciones de un proyecto:
-    "E:\\visualizador-agentes" -> "e--visualizador-agentes" (en minúsculas para comparar)."""
+    "E:\\mi-proyecto" -> "e--mi-proyecto" (en minúsculas para comparar)."""
     return re.sub(r"[^A-Za-z0-9]", "-", carpeta.rstrip("\\/")).lower()
 
 

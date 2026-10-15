@@ -105,7 +105,7 @@ Create a front-facing idle pose to establish the character's look:
 ```bash
 mcpl call nanobanana generate_image '{
   "prompt": "16-bit pixel art game sprite of a [CHARACTER DESCRIPTION], front view facing camera, [CLOTHING DESCRIPTION], simple friendly face, small character suitable for top-down office game, retro SNES/Genesis style pixel art, standing idle pose with arms at sides, isolated on solid magenta background #FF00FF, SHARP CRISP PIXEL EDGES WITH ABSOLUTELY NO ANTI-ALIASING NO SMOOTHING NO BLENDING, each pixel is a solid color with hard edges, centered composition, no text, no shadows on background, 64x80 pixels scale",
-  "output_path": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_front_idle_raw.png",
+  "output_path": "<project path>/frontend/public/sprites/[NAME]_front_idle_raw.png",
   "model_tier": "pro"
 }'
 ```
@@ -121,8 +121,8 @@ mcpl call nanobanana generate_image '{
 
 1. Copy the generated image:
    ```bash
-   cp "/Users/probello/nanobanana-images/[FILENAME].png" \
-      "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_front_idle_raw.png"
+   cp "~/nanobanana-images/[FILENAME].png" \
+      "<project path>/frontend/public/sprites/[NAME]_front_idle_raw.png"
    ```
 
 2. View the image using the Read tool and present to user
@@ -155,9 +155,9 @@ Use BOTH reference images for each generation:
 ```bash
 mcpl call nanobanana generate_image '{
   "prompt": "16-bit pixel art sprite sheet, EXACTLY 928x1152 pixels total, divided into 8 columns and 8 rows grid, each cell is EXACTLY 116x144 pixels with NO borders NO padding NO gaps between cells, character is [CHARACTER DESCRIPTION] (EXACTLY as shown in first reference image), 8 DIRECTIONS IN EXACT ORDER from top to bottom: ROW 0 south facing toward camera, ROW 1 south-west diagonal, ROW 2 west facing left profile, ROW 3 north-west diagonal, ROW 4 north facing away back view, ROW 5 north-east diagonal, ROW 6 east facing right profile, ROW 7 south-east diagonal, each row has 8 frames of subtle idle breathing animation, cells touch edge-to-edge with no visible grid lines, retro SNES Genesis 16-bit pixel art, SHARP CRISP PIXEL EDGES WITH ABSOLUTELY NO ANTI-ALIASING NO SMOOTHING NO BLENDING, each pixel is a solid color with hard edges, consistent character in every cell matching reference, solid magenta #FF00FF background fills all empty space in each cell, game sprite sheet asset, no text no watermarks",
-  "input_image_path_1": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_front_idle_raw.png",
-  "input_image_path_2": "/Users/probello/Repos/claude-office/frontend/public/sprites/agent1_idle_sheet.png",
-  "output_path": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_idle_sheet_raw.png",
+  "input_image_path_1": "<project path>/frontend/public/sprites/[NAME]_front_idle_raw.png",
+  "input_image_path_2": "<project path>/frontend/public/sprites/agent1_idle_sheet.png",
+  "output_path": "<project path>/frontend/public/sprites/[NAME]_idle_sheet_raw.png",
   "model_tier": "pro",
   "aspect_ratio": "4:5",
   "negative_prompt": "blurry, 3D, realistic, anti-aliasing, anti-aliased edges, smoothing, blending, soft edges, gradients, shadows on background, inconsistent character, different characters, text, watermark, grid lines, cell borders, padding between frames, gaps between cells"
@@ -175,9 +175,9 @@ mcpl call nanobanana generate_image '{
 ```bash
 mcpl call nanobanana generate_image '{
   "prompt": "16-bit pixel art sprite sheet for WALKING animation, EXACTLY 928x1152 pixels total, divided into 8 columns and 8 rows grid, each cell is EXACTLY 116x144 pixels with NO borders NO padding NO gaps between cells, character is [CHARACTER DESCRIPTION] (EXACTLY as shown in first reference image), 8 DIRECTIONS IN EXACT ORDER from top to bottom: ROW 0 walking south toward camera, ROW 1 walking south-west diagonal, ROW 2 walking west left profile, ROW 3 walking north-west diagonal, ROW 4 walking north away back view, ROW 5 walking north-east diagonal, ROW 6 walking east right profile, ROW 7 walking south-east diagonal, each row has 8 frames of walk cycle with alternating legs and natural arm swing, cells touch edge-to-edge with no visible grid lines, retro SNES Genesis 16-bit pixel art, SHARP CRISP PIXEL EDGES WITH ABSOLUTELY NO ANTI-ALIASING NO SMOOTHING NO BLENDING, each pixel is a solid color with hard edges, consistent character in every cell matching reference, solid magenta #FF00FF background fills all empty space in each cell, game sprite sheet asset, no text no watermarks",
-  "input_image_path_1": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_front_idle_raw.png",
-  "input_image_path_2": "/Users/probello/Repos/claude-office/frontend/public/sprites/agent1_walk_sheet.png",
-  "output_path": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_walk_sheet_raw.png",
+  "input_image_path_1": "<project path>/frontend/public/sprites/[NAME]_front_idle_raw.png",
+  "input_image_path_2": "<project path>/frontend/public/sprites/agent1_walk_sheet.png",
+  "output_path": "<project path>/frontend/public/sprites/[NAME]_walk_sheet_raw.png",
   "model_tier": "pro",
   "aspect_ratio": "4:5",
   "negative_prompt": "blurry, 3D, realistic, anti-aliasing, anti-aliased edges, smoothing, blending, soft edges, gradients, shadows on background, inconsistent character, different characters, text, watermark, standing still, static pose, grid lines, cell borders, padding between frames, gaps between cells"
@@ -196,9 +196,9 @@ mcpl call nanobanana generate_image '{
 ```bash
 mcpl call nanobanana generate_image '{
   "prompt": "16-bit pixel art sprite sheet for TYPING animation, EXACTLY 928x144 pixels total, horizontal strip with 8 equal cells of EXACTLY 116x144 pixels each with NO borders NO padding NO gaps between cells, character is [CHARACTER DESCRIPTION] (EXACTLY as shown in first reference image), character seen from behind (back view) in seated typing pose with arms extended forward making typing motions, CHARACTER ONLY no desk no chair no keyboard no furniture, 8 frame typing animation showing hands and arms making typing movements, frames show subtle arm position changes as if typing, cells touch edge-to-edge with no visible grid lines, retro SNES Genesis 16-bit pixel art, SHARP CRISP PIXEL EDGES WITH ABSOLUTELY NO ANTI-ALIASING NO SMOOTHING NO BLENDING, each pixel is a solid color with hard edges, consistent character across all 8 frames matching reference, solid magenta #FF00FF background fills all empty space in each cell, game sprite sheet asset, no text no watermarks",
-  "input_image_path_1": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_front_idle_raw.png",
-  "input_image_path_2": "/Users/probello/Repos/claude-office/frontend/public/sprites/agent1_typing_sheet.png",
-  "output_path": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_typing_sheet_raw.png",
+  "input_image_path_1": "<project path>/frontend/public/sprites/[NAME]_front_idle_raw.png",
+  "input_image_path_2": "<project path>/frontend/public/sprites/agent1_typing_sheet.png",
+  "output_path": "<project path>/frontend/public/sprites/[NAME]_typing_sheet_raw.png",
   "model_tier": "pro",
   "aspect_ratio": "21:9",
   "negative_prompt": "blurry, 3D, realistic, anti-aliasing, anti-aliased edges, smoothing, blending, soft edges, gradients, shadows on background, inconsistent character, different characters, text, watermark, front view, standing, grid lines, cell borders, padding between frames, gaps between cells, desk, chair, keyboard, furniture, computer, monitor"
@@ -217,9 +217,9 @@ mcpl call nanobanana generate_image '{
 ```bash
 mcpl call nanobanana generate_image '{
   "prompt": "16-bit pixel art sprite sheet for HANDING FOLDER animation, EXACTLY 928 pixels wide, horizontal strip with 4 equal cells of EXACTLY 232 pixels wide each with NO borders NO padding NO gaps between cells, character is [CHARACTER DESCRIPTION] (EXACTLY as shown in first reference image), character seen from side profile holding and handing over a manila folder document, 4 frame animation sequence: frame 1 holding folder at waist, frame 2 extending arm with folder, frame 3 arm fully extended offering folder, frame 4 releasing folder hand open, cells touch edge-to-edge with no visible grid lines, retro SNES Genesis 16-bit pixel art, SHARP CRISP PIXEL EDGES WITH ABSOLUTELY NO ANTI-ALIASING NO SMOOTHING NO BLENDING, each pixel is a solid color with hard edges, consistent character across all 4 frames matching reference, solid magenta #FF00FF background fills all empty space in each cell, game sprite sheet asset, no text no watermarks",
-  "input_image_path_1": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_front_idle_raw.png",
-  "input_image_path_2": "/Users/probello/Repos/claude-office/frontend/public/sprites/agent1_handoff_sheet.png",
-  "output_path": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_handoff_sheet_raw.png",
+  "input_image_path_1": "<project path>/frontend/public/sprites/[NAME]_front_idle_raw.png",
+  "input_image_path_2": "<project path>/frontend/public/sprites/agent1_handoff_sheet.png",
+  "output_path": "<project path>/frontend/public/sprites/[NAME]_handoff_sheet_raw.png",
   "model_tier": "pro",
   "aspect_ratio": "21:9",
   "negative_prompt": "blurry, 3D, realistic, anti-aliasing, anti-aliased edges, smoothing, blending, soft edges, gradients, shadows on background, inconsistent character, different characters, text, watermark, back view, grid lines, cell borders, padding between frames, gaps between cells"
@@ -238,9 +238,9 @@ mcpl call nanobanana generate_image '{
 ```bash
 mcpl call nanobanana generate_image '{
   "prompt": "16-bit pixel art sprite sheet for DRINKING COFFEE animation, EXACTLY 928 pixels wide, horizontal strip with 4 equal cells of EXACTLY 232 pixels wide each with NO borders NO padding NO gaps between cells, character is [CHARACTER DESCRIPTION] (EXACTLY as shown in first reference image), character seen from front holding and drinking from a coffee cup mug, 4 frame animation sequence: frame 1 holding coffee cup at chest, frame 2 raising cup toward face, frame 3 cup at lips drinking, frame 4 lowering cup with satisfied expression, cells touch edge-to-edge with no visible grid lines, retro SNES Genesis 16-bit pixel art, SHARP CRISP PIXEL EDGES WITH ABSOLUTELY NO ANTI-ALIASING NO SMOOTHING NO BLENDING, each pixel is a solid color with hard edges, consistent character across all 4 frames matching reference, solid magenta #FF00FF background fills all empty space in each cell, game sprite sheet asset, no text no watermarks",
-  "input_image_path_1": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_front_idle_raw.png",
-  "input_image_path_2": "/Users/probello/Repos/claude-office/frontend/public/sprites/agent1_coffee_sheet.png",
-  "output_path": "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_coffee_sheet_raw.png",
+  "input_image_path_1": "<project path>/frontend/public/sprites/[NAME]_front_idle_raw.png",
+  "input_image_path_2": "<project path>/frontend/public/sprites/agent1_coffee_sheet.png",
+  "output_path": "<project path>/frontend/public/sprites/[NAME]_coffee_sheet_raw.png",
   "model_tier": "pro",
   "aspect_ratio": "21:9",
   "negative_prompt": "blurry, 3D, realistic, anti-aliasing, anti-aliased edges, smoothing, blending, soft edges, gradients, shadows on background, inconsistent character, different characters, text, watermark, back view, sitting, grid lines, cell borders, padding between frames, gaps between cells"
@@ -253,13 +253,13 @@ mcpl call nanobanana generate_image '{
 
 1. Copy to sprites folder:
    ```bash
-   cp "/Users/probello/nanobanana-images/[FILENAME].png" \
-      "/Users/probello/Repos/claude-office/frontend/public/sprites/[NAME]_[TYPE]_sheet_raw.png"
+   cp "~/nanobanana-images/[FILENAME].png" \
+      "<project path>/frontend/public/sprites/[NAME]_[TYPE]_sheet_raw.png"
    ```
 
 2. Verify dimensions match specifications:
    ```bash
-   cd /Users/probello/Repos/claude-office/frontend/public/sprites
+   cd <project path>/frontend/public/sprites
 
    # Check sheet dimensions
    magick "[NAME]_[TYPE]_sheet_raw.png" -format "Size: %wx%h" info:
@@ -302,10 +302,10 @@ mcpl call nanobanana generate_image '{
 Remove magenta backgrounds from all sheets using the improved multi-pass workflow:
 
 ```bash
-cd /Users/probello/Repos/claude-office/frontend/public/sprites
+cd <project path>/frontend/public/sprites
 
 # Process all sheets using the shared script
-SCRIPT="/Users/probello/Repos/claude-office/.claude/skills/shared/scripts/remove_magenta.sh"
+SCRIPT="<project path>/.claude/skills/shared/scripts/remove_magenta.sh"
 
 for sheet in [NAME]_idle_sheet [NAME]_walk_sheet [NAME]_typing_sheet [NAME]_handoff_sheet [NAME]_coffee_sheet; do
   INPUT="${sheet}_raw.png"
@@ -369,7 +369,7 @@ The following Agent #1 sprite sheets serve as layout references:
 
 ## Output Location
 
-All sprites go to: `/Users/probello/Repos/claude-office/frontend/public/sprites/`
+All sprites go to: `<project path>/frontend/public/sprites/`
 
 - `[name]_front_idle_raw.png` - Original character design (keep as reference)
 - `[name]_front_idle.png` - Processed character design with transparency

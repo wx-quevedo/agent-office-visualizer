@@ -110,7 +110,7 @@ cd monitor  && uv run pytest -q
 cd frontend && npm run typecheck && npx vitest run
 ```
 
-The interface, `PROJECT.md` (decision log and stage plan) and the original README ([docs/README.es.md](docs/README.es.md)) are in Spanish.
+The interface and `PROJECT.md` (decision log and stage plan) are in Spanish.
 
 ## What I learned / key technical decisions
 

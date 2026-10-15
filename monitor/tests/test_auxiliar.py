@@ -124,7 +124,7 @@ def test_armado_de_la_entrada() -> None:
     termino = armar_entrada(
         {
             "tipo": "termino",
-            "proyecto": "server-monitor",
+            "proyecto": "mi-proyecto",
             "datos": {"pedido": "Corregir el login", "commits": 1},
         }
     )
@@ -361,8 +361,8 @@ def test_limpiar_salida() -> None:
         == "El agente de SkyNest terminó."
     )
     assert limpiar_salida("Terminó la tarea.", "SkyNest") == "SkyNest: terminó la tarea."
-    assert limpiar_salida("server-monitor te pregunta algo.", "server-monitor") == (
-        "server-monitor te pregunta algo."
+    assert limpiar_salida("Mi-proyecto te pregunta algo.", "mi-proyecto") == (
+        "mi-proyecto te pregunta algo."
     )
     largo = limpiar_salida("SkyNest " + "palabra " * 40, "SkyNest")
     assert largo is not None and len(largo.split()) <= aux.MAX_PALABRAS
@@ -554,10 +554,10 @@ def test_un_permiso_que_es_pregunta_llega_como_pregunta() -> None:
 
 def test_el_corte_de_25_palabras_cierra_bien() -> None:
     larga = (
-        "server-monitor necesita que pegues un comando en una ventana nueva de PowerShell "
+        "mi-proyecto necesita que pegues un comando en una ventana nueva de PowerShell "
         "para leer las capas de 143 imágenes; solo lee, no cambia nada, y tarda uno o dos minutos."
     )
-    corta = limpiar_salida(larga, "server-monitor")
+    corta = limpiar_salida(larga, "mi-proyecto")
     assert corta is not None and len(corta.split()) <= aux.MAX_PALABRAS
     assert not corta.endswith(" y.") and corta.endswith(".")
     sin_pausa = limpiar_salida("SkyNest " + "trabaja " * 23 + "en la escena del home", "SkyNest")

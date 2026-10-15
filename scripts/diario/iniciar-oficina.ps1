@@ -23,7 +23,9 @@ function Mostrar-Resultado([bool]$okBackend, [bool]$okFrontend) {
     Write-Host ""
     Write-Host "Lista. Abre:"
     Write-Host "  PC:      http://localhost:$PuertoFrontend/oficina    (3D: http://localhost:$PuertoFrontend/oficina/3d)"
-    Write-Host "  iPhone:  http://${IpTailscale}:$PuertoFrontend/oficina    (3D: http://${IpTailscale}:$PuertoFrontend/oficina/3d)"
+    if ($IpTailscale) {
+        Write-Host "  iPhone:  http://${IpTailscale}:$PuertoFrontend/oficina    (3D: http://${IpTailscale}:$PuertoFrontend/oficina/3d)"
+    }
     Write-Host "  Datos:   $Datos"
 }
 

@@ -33,7 +33,7 @@ Fecha: 2026-10-12. App en `ios/VisualizadorAgentes` (SwiftUI, iOS 26, XcodeGen).
 ## Prueba real (2026-10-12, servidor https://agents.example.com)
 
 - **Entorno:** simulador iPhone 17 Pro Max con iOS 26.5 y Xcode 26.6. La sesión de la app seguía activa, así que no hizo falta iniciar sesión.
-- **Proyectos:** la lista mostró "2 con orquestador · 17 sin orquestador" (prueba-39 y prueba-37 con equipo; SkyNest, vive-demo, server-monitor y otros sin él), cada uno con su estado y color. Nuevo mostró la Alienware encendida con su ruta base `E:\Agents`; se canceló sin crear nada.
+- **Proyectos:** la lista mostró "2 con orquestador · 17 sin orquestador" (prueba-39 y prueba-37 con equipo; SkyNest, vive-demo, mi-proyecto y otros sin él), cada uno con su estado y color. Nuevo mostró la Alienware encendida con su ruta base `E:\Agents`; se canceló sin crear nada.
 - **Chat de prueba-39:**
   - Las respuestas del orquestador se vieron con negritas, lista numerada y código, sin HTML.
   - Desde la app se envió "Propón una orden pequeña: agregar una línea al README" (18:10).

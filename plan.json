@@ -237,7 +237,7 @@
           ],
           "summary": "Solo estudio, fuera del repositorio; plan de 3 prompts aprobado",
           "steps": [],
-          "notes": "Sin commit: el estudio quedó en E:\\referencias\\agent-office. El prompt llegó sin número: se numeró por orden entre los pedidos de trabajo anteriores al Prompt 21."
+          "notes": "Sin commit: el estudio quedó en una carpeta local, fuera del repositorio. El prompt llegó sin número: se numeró por orden entre los pedidos de trabajo anteriores al Prompt 21."
         },
         {
           "id": "P12",
@@ -1304,7 +1304,7 @@
             "16 tramos del orquestador cargados a mano; tiempos aplicado y plan validado",
             "Tres fallos del kit anotados en PENDIENTES.md"
           ],
-          "notes": "Sesiones leídas: C:\\Users\\<user>\\.claude\\projects\\e--visualizador-agentes (la única de trabajo del proyecto; las de scratchpad y la de .claude-demo son de sesiones de prueba lanzadas por los monitores de prueba). P32 y P34 quedan en needs_you porque el esquema no tiene 'bloqueado'. Pendiente: correr tiempos desde la Mac para P31, P33 (parte C), P40, P44, U2 y P46.",
+          "notes": "Sesiones leídas: %USERPROFILE%\\.claude\\projects\\<project slug> (la única de trabajo del proyecto; las de scratchpad y la de .claude-demo son de sesiones de prueba lanzadas por los monitores de prueba). P32 y P34 quedan en needs_you porque el esquema no tiene 'bloqueado'. Pendiente: correr tiempos desde la Mac para P31, P33 (parte C), P40, P44, U2 y P46.",
           "files_changed": 4
         }
       ]

@@ -1,9 +1,15 @@
 ﻿# Configuración y funciones comunes de los scripts de la copia diaria.
 # Se carga con:  . "$PSScriptRoot\comun.ps1"
 #
-# Copia diaria: E:\visualizador-agentes-diario (puertos 3000 y 8000).
-# Copia de desarrollo: E:\visualizador-agentes (3100 y 8100). Estos scripts
-# nunca tocan procesos de la copia de desarrollo, VS Code ni Claude Code.
+# Copia diaria: la carpeta de VISUALIZADOR_DIARIO_RAIZ (puertos 3000 y 8000).
+# Copia de desarrollo: VISUALIZADOR_DESARROLLO o la carpeta de estos scripts
+# (3100 y 8100). Estos scripts nunca tocan procesos de la copia de desarrollo,
+# VS Code ni Claude Code.
+#
+# Variables de entorno:
+#   VISUALIZADOR_DIARIO_RAIZ    ruta de la copia diaria (obligatoria)
+#   VISUALIZADOR_DIARIO_DATOS   carpeta de datos (por defecto %USERPROFILE%\.visualizador-agentes\datos-diario)
+#   VISUALIZADOR_TAILSCALE_IP   IP de Tailscale de la PC (opcional; sin ella no se muestra la URL del iPhone)
 
 # Acentos: git, uv y npm escriben UTF-8, pero Windows PowerShell 5.1 lee la
 # salida de los programas con la página de códigos de la consola (850) y
@@ -12,12 +18,15 @@
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
 $OutputEncoding = New-Object System.Text.UTF8Encoding $false
 
-$Raiz = if ($env:VISUALIZADOR_DIARIO_RAIZ) { $env:VISUALIZADOR_DIARIO_RAIZ } else { 'E:\visualizador-agentes-diario' }
+if (-not $env:VISUALIZADOR_DIARIO_RAIZ) {
+    throw "Falta la variable de entorno VISUALIZADOR_DIARIO_RAIZ con la ruta de la copia diaria (por ejemplo: setx VISUALIZADOR_DIARIO_RAIZ '<ruta de la copia diaria>' y abrir una terminal nueva)."
+}
+$Raiz = $env:VISUALIZADOR_DIARIO_RAIZ
 $Datos = if ($env:VISUALIZADOR_DIARIO_DATOS) { $env:VISUALIZADOR_DIARIO_DATOS } else { Join-Path $env:USERPROFILE '.visualizador-agentes\datos-diario' }
 $Logs = Join-Path $Datos 'logs'
 $PuertoBackend = 8000
 $PuertoFrontend = 3000
-$IpTailscale = '<TAILSCALE_IP>'
+$IpTailscale = if ($env:VISUALIZADOR_TAILSCALE_IP) { $env:VISUALIZADOR_TAILSCALE_IP.Trim() } else { '' }
 $DirBackend = Join-Path $Raiz 'backend'
 $DirFrontend = Join-Path $Raiz 'frontend'
 $DirExport = Join-Path $DirFrontend 'out'

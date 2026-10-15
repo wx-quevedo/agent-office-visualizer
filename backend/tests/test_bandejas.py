@@ -231,7 +231,7 @@ def test_permisos_resueltos_de_hoy(tmp_path: Path) -> None:
         "Bash",
         {"command": "systemctl restart nginx"},
         "personal",
-        "server-monitor",
+        "mi-proyecto",
         "alienware",
     )
     reg.crear(
@@ -405,8 +405,8 @@ def test_proyecto_legible() -> None:
     # Sin datos: al menos sin el prefijo de la unidad.
     assert proyecto_legible("e--vive-demo", None, []) == "vive-demo"
     # Un nombre normal o una ruta quedan como el resto de la oficina.
-    assert proyecto_legible("server-monitor") == "server-monitor"
-    assert proyecto_legible("c:/xampp/htdocs/server-monitor") == "server-monitor"
+    assert proyecto_legible("mi-proyecto") == "mi-proyecto"
+    assert proyecto_legible("c:/xampp/htdocs/mi-proyecto") == "mi-proyecto"
     assert proyecto_legible(None) is None
 
 
