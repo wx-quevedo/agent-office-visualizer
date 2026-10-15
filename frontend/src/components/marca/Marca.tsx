@@ -6,8 +6,8 @@
 
 import Image from "next/image";
 
-const ISOTIPO = { src: "/logos/isotipo-demo.png", ancho: 131, alto: 119 };
-const LOGO = { src: "/logos/logo-demo.png", ancho: 377, alto: 132 };
+const ISOTIPO = { src: "/logos/isotipo-demo-org.svg", ancho: 131, alto: 119 };
+const LOGO = { src: "/logos/logo-demo-org.svg", ancho: 377, alto: 132 };
 
 export function Isotipo({ alto = 16 }: { alto?: number }) {
   return (
