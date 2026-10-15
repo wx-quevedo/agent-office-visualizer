@@ -122,7 +122,7 @@ The interface and `PROJECT.md` (decision log and stage plan) are in Spanish.
 
 ## Author
 
-**Washington Quevedo**, AI Engineer and XR developer.
+**Washington X. Quevedo**, AI Engineer and XR developer.
 [LinkedIn](https://www.linkedin.com/in/wxquevedo) | [GitHub](https://github.com/wx-quevedo)
 
 **Credits**: [claude-office](https://github.com/paulrobello/claude-office) by Paul Robello and contributors (MIT), the base of this project. The 3D office scene is adapted from [Agent Office 3D](https://github.com/SaidislomSaidazimovv/agent-office) (MIT); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
